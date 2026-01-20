@@ -1,0 +1,5 @@
+{
+  "name": "EngPlot KPI Tracker",
+  "description": "Engineering project management tool tracking execution time, blocked time, and design assertiveness.",
+  "requestFramePermissions": []
+}
