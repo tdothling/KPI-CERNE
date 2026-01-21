@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { ProjectFile, Discipline, Status, RevisionReason, DateFilterType, MaterialDoc } from './types';
+import { ProjectFile, Discipline, Status, RevisionReason, DateFilterType, MaterialDoc, PurchaseDoc } from './types';
 import { Dashboard } from './components/Dashboard';
 import { ProjectList } from './components/ProjectList';
 import { ProjectTimeline } from './components/ProjectTimeline';
@@ -8,8 +8,9 @@ import { BatchEditModal } from './components/BatchEditModal';
 import { HolidayManagerModal } from './components/HolidayManagerModal';
 import { DateRangeFilter } from './components/DateRangeFilter';
 import { MaterialList } from './components/MaterialList';
-import { LoginModal } from './components/LoginModal'; // Import Modal
-import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Package, FileSpreadsheet, Database, LogIn, LogOut, User as UserIcon } from 'lucide-react';
+import { PurchaseList } from './components/PurchaseList'; // Novo componente
+import { LoginModal } from './components/LoginModal'; 
+import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Package, FileSpreadsheet, Database, LogIn, LogOut, ShoppingCart } from 'lucide-react';
 import { 
   parseISO, 
   isValid,
@@ -37,6 +38,10 @@ import {
   addMaterial,
   updateMaterialInDb,
   deleteMaterialFromDb,
+  subscribeToPurchases, // Novo
+  addPurchase, // Novo
+  updatePurchaseInDb, // Novo
+  deletePurchaseFromDb, // Novo
   subscribeToHolidays,
   saveHolidaysToDb
 } from './services/db';
@@ -123,13 +128,14 @@ const calculateBusinessDaysWithHolidays = (start: Date, end: Date, holidays: str
     return Math.max(0, days - holidaysOnWeekdays);
 };
 
-type Tab = 'dashboard' | 'timeline' | 'projects' | 'materials';
+type Tab = 'dashboard' | 'timeline' | 'projects' | 'materials' | 'purchases';
 type ImportType = 'PROJECT' | 'MATERIAL_LIST';
 
 export default function App() {
   // Use Firebase Data (Empty initially, populated by useEffect)
   const [projects, setProjects] = useState<ProjectFile[]>([]);
   const [materials, setMaterials] = useState<MaterialDoc[]>([]);
+  const [purchases, setPurchases] = useState<PurchaseDoc[]>([]); // New State
   const [holidays, setHolidays] = useState<string[]>([]);
   
   const [dbConnected, setDbConnected] = useState(false);
@@ -149,12 +155,14 @@ export default function App() {
 
     const unsubProjects = subscribeToProjects(setProjects);
     const unsubMaterials = subscribeToMaterials(setMaterials);
+    const unsubPurchases = subscribeToPurchases(setPurchases); // New Subscription
     const unsubHolidays = subscribeToHolidays(setHolidays);
     const unsubAuth = subscribeToAuth(setCurrentUser);
 
     return () => {
         unsubProjects();
         unsubMaterials();
+        unsubPurchases();
         unsubHolidays();
         unsubAuth();
     };
@@ -441,6 +449,22 @@ export default function App() {
       });
   };
 
+  // --- Purchase Handlers ---
+  const handleAddPurchase = (purchase: Omit<PurchaseDoc, 'id'>) => {
+     addPurchase(purchase);
+  };
+
+  const handleUpdatePurchase = (updated: PurchaseDoc) => {
+     updatePurchaseInDb(updated);
+  };
+
+  const handleDeletePurchase = (id: string) => {
+      if(confirm("Tem certeza que deseja excluir esta solicitação?")) {
+          deletePurchaseFromDb(id);
+      }
+  };
+
+
   // Batch Update
   const handleBatchUpdate = (ids: string[], field: keyof ProjectFile, value: any) => {
     // Iterate and update each document individually
@@ -657,6 +681,9 @@ export default function App() {
               <button onClick={() => setActiveTab('materials')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${activeTab === 'materials' ? 'border-brand-600 text-brand-600 dark:text-brand-400' : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300'}`}>
                 <Package size={18} /> Lista de Materiais
               </button>
+              <button onClick={() => setActiveTab('purchases')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${activeTab === 'purchases' ? 'border-brand-600 text-brand-600 dark:text-brand-400' : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300'}`}>
+                <ShoppingCart size={18} /> Compras
+              </button>
             </nav>
           </div>
 
@@ -727,6 +754,18 @@ export default function App() {
                     onUpdate={updateMaterial} 
                     onDelete={deleteMaterial} 
                     onAddRevision={addMaterialRevision} 
+                />
+             </div>
+          )}
+
+          {activeTab === 'purchases' && (
+             <div className="animate-in fade-in zoom-in-95 duration-200">
+                <PurchaseList 
+                    purchases={purchases}
+                    onAdd={handleAddPurchase}
+                    onUpdate={handleUpdatePurchase}
+                    onDelete={handleDeletePurchase}
+                    currentUser={currentUser ? formatUsername(currentUser.email) : ''}
                 />
              </div>
           )}

@@ -1,5 +1,4 @@
 
-
 export enum Discipline {
   ARCHITECTURE = 'Arquitetura',
   STRUCTURE = 'Estrutura',
@@ -67,6 +66,29 @@ export interface MaterialDoc {
   endDate: string;
   status: MaterialStatus;
   revisions: { id: string; date: string; reason: string; comment: string }[];
+}
+
+// --- COMPRAS ---
+
+export enum PurchaseStatus {
+  PENDING = 'Pendente', // Solicitação feita
+  BOUGHT = 'Comprado', // Pedido realizado no fornecedor
+  DELIVERED = 'Entregue', // Material chegou na base
+  CANCELED = 'Cancelado'
+}
+
+export interface PurchaseDoc {
+  id: string;
+  description: string; // O que foi pedido (Resumo)
+  client: string; // Para qual cliente
+  base: string; // Para qual base/obra
+  application: string; // Qual a aplicação (Ex: Infraestrutura elétrica)
+  requester: string; // Quem pediu
+  requestDate: string; // Data do pedido
+  arrivalDate: string; // Data da chegada (vazio se não chegou)
+  status: PurchaseStatus;
+  link?: string; // Link de referência ou rastreio
+  observation?: string;
 }
 
 export interface KPISummary {

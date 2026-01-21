@@ -13,12 +13,13 @@ import {
   QuerySnapshot,
   DocumentData
 } from "firebase/firestore";
-import { ProjectFile, MaterialDoc } from "../types";
+import { ProjectFile, MaterialDoc, PurchaseDoc } from "../types";
 
 // Nomes das coleções no banco de dados
 const COLL_PROJECTS = "projects";
 const COLL_MATERIALS = "materials";
 const COLL_HOLIDAYS = "settings"; // Documento específico 'holidays' dentro de settings
+const COLL_PURCHASES = "purchases";
 
 // --- GENERIC HELPERS ---
 
@@ -133,6 +134,56 @@ export const deleteMaterialFromDb = async (id: string) => {
     await deleteDoc(doc(db, COLL_MATERIALS, id));
   } catch (e) {
     console.error("Erro ao excluir material:", e);
+  }
+};
+
+// --- PURCHASES ---
+
+export const subscribeToPurchases = (callback: (data: PurchaseDoc[]) => void) => {
+  if (!isDbActive()) return () => {};
+
+  const q = query(collection(db, COLL_PURCHASES));
+  
+  const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
+    const purchases: PurchaseDoc[] = [];
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      if ('id' in data) delete data.id;
+      purchases.push({ id: doc.id, ...data } as PurchaseDoc);
+    });
+    callback(purchases);
+  });
+
+  return unsubscribe;
+};
+
+export const addPurchase = async (purchase: Omit<PurchaseDoc, 'id'>) => {
+  if (!isDbActive()) return;
+  try {
+    const { id, ...cleanPurchase } = purchase as any;
+    await addDoc(collection(db, COLL_PURCHASES), cleanPurchase);
+  } catch (e) {
+    console.error("Erro ao adicionar compra:", e);
+  }
+};
+
+export const updatePurchaseInDb = async (purchase: PurchaseDoc) => {
+  if (!isDbActive()) return;
+  try {
+    const { id, ...data } = purchase;
+    const docRef = doc(db, COLL_PURCHASES, id);
+    await updateDoc(docRef, data);
+  } catch (e) {
+    console.error("Erro ao atualizar compra:", e);
+  }
+};
+
+export const deletePurchaseFromDb = async (id: string) => {
+  if (!isDbActive()) return;
+  try {
+    await deleteDoc(doc(db, COLL_PURCHASES, id));
+  } catch (e) {
+    console.error("Erro ao excluir compra:", e);
   }
 };
 
