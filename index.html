@@ -34,6 +34,16 @@
     <style>
       body {
         font-family: 'Inter', sans-serif;
+        overflow-x: hidden; /* Trava o enquadramento horizontal da página */
+      }
+      
+      /* Utilitário para esconder a barra de rolagem mas permitir o scroll (Estilo App Nativo) */
+      .no-scrollbar::-webkit-scrollbar {
+          display: none;
+      }
+      .no-scrollbar {
+          -ms-overflow-style: none;  /* IE and Edge */
+          scrollbar-width: none;  /* Firefox */
       }
     </style>
   <script type="importmap">

@@ -193,8 +193,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
   }, [data, holidays]);
 
   const materialStats = useMemo(() => {
-     const total = materials.length;
-     const done = materials.filter(m => m.status === 'DONE').length;
+     // 1. Group Materials by Base Name to calculate "Unique Lists"
+     const groups: Record<string, MaterialDoc[]> = {};
+     materials.forEach(m => {
+         const baseName = getProjectBaseName(m.filename);
+         if (!groups[baseName]) {
+             groups[baseName] = [];
+         }
+         groups[baseName].push(m);
+     });
+
+     // 2. Identify the LATEST version for each group
+     const latestFiles = Object.values(groups).map(group => {
+         // Sort descending by revision number, picking the first (latest)
+         return group.sort((a, b) => getRevisionNumber(b.filename) - getRevisionNumber(a.filename))[0];
+     });
+
+     // 3. Calculate Stats based ONLY on the latest active file for each list
+     const total = latestFiles.length;
+     const done = latestFiles.filter(m => m.status === 'DONE').length;
      const pending = total - done;
      const percentage = total > 0 ? Math.round((done / total) * 100) : 0;
      
@@ -381,7 +398,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
                              ))}
                          </Pie>
                          <Tooltip 
-                            formatter={(value: number) => [value, 'Listas']}
+                            formatter={(value: number) => [value, 'Listas Únicas']}
                             contentStyle={{ backgroundColor: tooltipBg, color: tooltipText, border: isDarkMode ? '1px solid #475569' : 'none' }}
                          />
                      </PieChart>
@@ -392,7 +409,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
                  </div>
                  <div className="mt-[-20px] text-center">
                      <p className="text-xs text-slate-400 dark:text-slate-500">
-                         {materialStats.done} concluídas de {materialStats.total} emitidas
+                         {materialStats.done} concluídas de {materialStats.total} ativas
                      </p>
                  </div>
              </div>
