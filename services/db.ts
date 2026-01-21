@@ -13,17 +13,17 @@ import {
   QuerySnapshot,
   DocumentData
 } from "firebase/firestore";
-import { ProjectFile, MaterialDoc, PurchaseDoc } from "../types";
+import { ProjectFile, MaterialDoc, PurchaseDoc, ClientDoc } from "../types";
 
 // Nomes das coleções no banco de dados
 const COLL_PROJECTS = "projects";
 const COLL_MATERIALS = "materials";
-const COLL_HOLIDAYS = "settings"; // Documento específico 'holidays' dentro de settings
+const COLL_HOLIDAYS = "settings"; 
 const COLL_PURCHASES = "purchases";
+const COLL_CLIENTS = "clients"; // Nova coleção
 
 // --- GENERIC HELPERS ---
 
-// Verificar se o DB está ativo
 const isDbActive = () => {
     if (!db) {
         console.warn("Operação cancelada: Banco de dados não configurado.");
@@ -39,11 +39,9 @@ export const subscribeToProjects = (callback: (data: ProjectFile[]) => void) => 
 
   const q = query(collection(db, COLL_PROJECTS));
   
-  // Real-time listener
   const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
     const projects: ProjectFile[] = [];
     snapshot.forEach((doc) => {
-      // FIX: Ensure we do not overwrite the real doc ID with an 'id' field from data
       const data = doc.data();
       if ('id' in data) delete data.id; 
       projects.push({ id: doc.id, ...data } as ProjectFile);
@@ -57,7 +55,6 @@ export const subscribeToProjects = (callback: (data: ProjectFile[]) => void) => 
 export const addProject = async (project: Omit<ProjectFile, 'id'>) => {
   if (!isDbActive()) return;
   try {
-    // Double check to ensure we don't save 'id' field
     const { id, ...cleanProject } = project as any;
     await addDoc(collection(db, COLL_PROJECTS), cleanProject);
   } catch (e) {
@@ -96,7 +93,6 @@ export const subscribeToMaterials = (callback: (data: MaterialDoc[]) => void) =>
   const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
     const materials: MaterialDoc[] = [];
     snapshot.forEach((doc) => {
-      // FIX: Ensure we do not overwrite the real doc ID with an 'id' field from data
       const data = doc.data();
       if ('id' in data) delete data.id;
       materials.push({ id: doc.id, ...data } as MaterialDoc);
@@ -187,8 +183,58 @@ export const deletePurchaseFromDb = async (id: string) => {
   }
 };
 
+// --- CLIENTS (REGISTRO DE OBRA) ---
+
+export const subscribeToClients = (callback: (data: ClientDoc[]) => void) => {
+  if (!isDbActive()) return () => {};
+
+  const q = query(collection(db, COLL_CLIENTS), orderBy("name"));
+  
+  const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
+    const clients: ClientDoc[] = [];
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      if ('id' in data) delete data.id;
+      clients.push({ id: doc.id, ...data } as ClientDoc);
+    });
+    callback(clients);
+  });
+
+  return unsubscribe;
+};
+
+export const addClient = async (client: Omit<ClientDoc, 'id'>) => {
+  if (!isDbActive()) return;
+  try {
+    const { id, ...cleanClient } = client as any;
+    await addDoc(collection(db, COLL_CLIENTS), cleanClient);
+  } catch (e) {
+    console.error("Erro ao adicionar cliente:", e);
+  }
+};
+
+export const updateClientInDb = async (client: ClientDoc) => {
+  if (!isDbActive()) return;
+  try {
+    const { id, ...data } = client;
+    const docRef = doc(db, COLL_CLIENTS, id);
+    await updateDoc(docRef, data);
+  } catch (e) {
+    console.error("Erro ao atualizar cliente:", e);
+  }
+};
+
+export const deleteClientFromDb = async (id: string) => {
+  if (!isDbActive()) return;
+  try {
+    await deleteDoc(doc(db, COLL_CLIENTS, id));
+  } catch (e) {
+    console.error("Erro ao excluir cliente:", e);
+  }
+};
+
 // --- HOLIDAYS ---
-// Feriados são armazenados em um único documento para facilitar
+
 export const subscribeToHolidays = (callback: (holidays: string[]) => void) => {
     if (!isDbActive()) return () => {};
 

@@ -91,6 +91,21 @@ export interface PurchaseDoc {
   observation?: string;
 }
 
+// --- CLIENTES / OBRAS ---
+
+export enum SiteType {
+  CONSTRUCTION_SITE = 'Canteiro de Obras',
+  OPERATIONAL_BASE = 'Bases Operacionais'
+}
+
+export interface ClientDoc {
+  id: string;
+  name: string; // Nome do Cliente
+  location: string; // Local da Obra
+  type: SiteType;
+  numberOfBases?: number; // Apenas se type for OPERATIONAL_BASE
+}
+
 export interface KPISummary {
   totalFiles: number;
   avgExecutionTime: number;

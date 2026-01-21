@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { Trash2, Edit2, Package, Search, Save, X, FileText, CheckCircle2, Clock, CheckSquare, GitBranch, CornerDownRight } from 'lucide-react';
 import { Discipline, RevisionReason, MaterialDoc, MaterialStatus } from '../types';
 import { format, parseISO, isValid } from 'date-fns';
+import { subscribeToClients } from '../services/db';
 
 interface MaterialListProps {
     materials: MaterialDoc[];
@@ -27,6 +28,18 @@ export const MaterialList: React.FC<MaterialListProps> = ({ materials, onUpdate,
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  
+  const [clientsList, setClientsList] = useState<{id: string, name: string}[]>([]);
+
+  // Fetch clients when modal opens
+  React.useEffect(() => {
+      if (isModalOpen) {
+          const unsub = subscribeToClients((data) => {
+              setClientsList(data.map(c => ({ id: c.id, name: c.name })));
+          });
+          return () => unsub();
+      }
+  }, [isModalOpen]);
 
   // Flow State
   const [pendingCompletion, setPendingCompletion] = useState<{ id: string, date: string } | null>(null);
@@ -92,13 +105,11 @@ export const MaterialList: React.FC<MaterialListProps> = ({ materials, onUpdate,
     }
 
     if (editingId) {
-       // Find original to make sure we keep revisions and ID intact if needed, though onUpdate replaces it.
        const original = materials.find(m => m.id === editingId);
        if(original) {
            onUpdate({ ...original, ...formData } as MaterialDoc);
        }
     } 
-    // Create Mode removed as per request (Button removed)
     setIsModalOpen(false);
   };
 
@@ -152,7 +163,6 @@ export const MaterialList: React.FC<MaterialListProps> = ({ materials, onUpdate,
            </h2>
            <p className="text-sm text-slate-500 dark:text-slate-400">Controle de Elaboração e Conclusão das listas de materiais.</p>
         </div>
-        {/* Button REMOVED as requested */}
       </div>
 
       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -180,7 +190,7 @@ export const MaterialList: React.FC<MaterialListProps> = ({ materials, onUpdate,
               <tr>
                 <th className="px-6 py-3">Arquivo</th>
                 <th className="px-6 py-3">Cliente</th>
-                <th className="px-6 py-3">Base</th> {/* Nova Coluna */}
+                <th className="px-6 py-3">Base</th>
                 <th className="px-6 py-3">Disciplina</th>
                 <th className="px-6 py-3">Início</th>
                 <th className="px-6 py-3">Fim</th>
@@ -232,114 +242,36 @@ export const MaterialList: React.FC<MaterialListProps> = ({ materials, onUpdate,
                       {doc.status === 'DONE' ? 'Concluído' : doc.status === 'REVISED' ? 'Revisado' : 'Em Elaboração'}
                     </span>
                   </td>
-                  
-                  {/* Workflow Actions */}
                   <td className="px-6 py-4 text-center">
                     <div className="flex items-center justify-center gap-2">
                       {doc.status === 'IN_PROGRESS' && (
-                        <button 
-                          onClick={() => setPendingCompletion({ id: doc.id, date: new Date().toISOString().split('T')[0] })}
-                          title="Concluir Lista"
-                          className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md transition-colors border border-emerald-200"
-                        >
-                          <CheckSquare size={16} />
-                        </button>
+                        <button onClick={() => setPendingCompletion({ id: doc.id, date: new Date().toISOString().split('T')[0] })} title="Concluir Lista" className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md transition-colors border border-emerald-200"><CheckSquare size={16} /></button>
                       )}
-                      
                       {doc.status !== 'REVISED' && (
-                        <button 
-                          onClick={() => handleOpenRevisionModal(doc)}
-                          title="Gerar Revisão"
-                          className="p-1.5 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-brand-600 rounded-md transition-colors border border-slate-200"
-                        >
-                          <GitBranch size={16} />
-                        </button>
+                        <button onClick={() => handleOpenRevisionModal(doc)} title="Gerar Revisão" className="p-1.5 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-brand-600 rounded-md transition-colors border border-slate-200"><GitBranch size={16} /></button>
                       )}
                     </div>
                   </td>
-
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end space-x-2">
-                      <button onClick={() => handleOpenEditModal(doc)} className="p-1.5 text-slate-400 hover:text-brand-600 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
-                        <Edit2 size={16} />
-                      </button>
-                      <button onClick={() => handleDelete(doc.id)} className="p-1.5 text-slate-400 hover:text-rose-600 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
-                        <Trash2 size={16} />
-                      </button>
+                      <button onClick={() => handleOpenEditModal(doc)} className="p-1.5 text-slate-400 hover:text-brand-600 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"><Edit2 size={16} /></button>
+                      <button onClick={() => handleDelete(doc.id)} className="p-1.5 text-slate-400 hover:text-rose-600 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"><Trash2 size={16} /></button>
                     </div>
                   </td>
                 </tr>
               );
               })}
-              {filteredDocs.length === 0 && (
-                <tr>
-                  <td colSpan={9} className="px-6 py-10 text-center text-slate-400 italic">
-                    Nenhum registro encontrado.
-                  </td>
-                </tr>
-              )}
+              {filteredDocs.length === 0 && (<tr><td colSpan={9} className="px-6 py-10 text-center text-slate-400 italic">Nenhum registro encontrado.</td></tr>)}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Completion Modal */}
-      {pendingCompletion && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-sm w-full p-6 border dark:border-slate-700">
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="bg-emerald-100 dark:bg-emerald-900/30 p-2 rounded-full text-emerald-600 dark:text-emerald-400">
-                <CheckSquare size={24} />
-              </div>
-              <h3 className="text-lg font-bold text-slate-800 dark:text-white">Concluir Lista</h3>
-            </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Confirme a data de conclusão da lista de materiais.</p>
-            <input 
-              type="date" 
-              value={pendingCompletion.date} 
-              onChange={(e) => setPendingCompletion(prev => prev ? { ...prev, date: e.target.value } : null)} 
-              className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 mb-6 dark:[color-scheme:dark]" 
-            />
-            <div className="flex justify-end space-x-3">
-              <button onClick={() => setPendingCompletion(null)} className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancelar</button>
-              <button onClick={handleConfirmCompletion} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-md font-medium">Concluir</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ... (Completion and Revision Modals same as before) ... */}
+      {pendingCompletion && ( <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-sm w-full p-6 border dark:border-slate-700"><div className="flex items-center space-x-3 mb-4"><div className="bg-emerald-100 dark:bg-emerald-900/30 p-2 rounded-full text-emerald-600 dark:text-emerald-400"><CheckSquare size={24} /></div><h3 className="text-lg font-bold text-slate-800 dark:text-white">Concluir Lista</h3></div><p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Confirme a data de conclusão da lista de materiais.</p><input type="date" value={pendingCompletion.date} onChange={(e) => setPendingCompletion(prev => prev ? { ...prev, date: e.target.value } : null)} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 mb-6 dark:[color-scheme:dark]" /><div className="flex justify-end space-x-3"><button onClick={() => setPendingCompletion(null)} className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancelar</button><button onClick={handleConfirmCompletion} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-md font-medium">Concluir</button></div></div></div> )}
+      {activeRevModal && ( <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-md w-full p-6 border dark:border-slate-700"><div className="flex items-center space-x-3 mb-4"><div className="bg-amber-100 dark:bg-amber-900/30 p-2 rounded-full text-amber-600 dark:text-amber-400"><GitBranch size={24} /></div><h3 className="text-lg font-bold text-slate-800 dark:text-white">Gerar Nova Versão</h3></div><p className="text-sm text-slate-500 dark:text-slate-400 mb-4 bg-slate-50 dark:bg-slate-900/50 text-slate-700 dark:text-slate-300 p-3 rounded-lg border border-slate-100 dark:border-slate-700">Isso criará um novo registro (Ex: [R1]) para correção, mantendo o histórico.</p><label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Motivo da Nova Versão</label><select value={revReason} onChange={(e) => setRevReason(e.target.value as RevisionReason)} className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 mb-4">{Object.values(RevisionReason).map(r => <option key={r} value={r}>{r}</option>)}</select><label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Comentários</label><textarea value={revComment} onChange={(e) => setRevComment(e.target.value)} className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 mb-6 h-24 resize-none" placeholder="O que será alterado?" /><div className="flex justify-end space-x-3"><button onClick={() => setActiveRevModal(null)} className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancelar</button><button onClick={handleConfirmRevision} className="px-4 py-2 bg-brand-700 text-white rounded-lg hover:bg-brand-800 shadow-md">Gerar Nova Versão</button></div></div></div> )}
 
-      {/* Revision Modal */}
-      {activeRevModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-md w-full p-6 border dark:border-slate-700">
-            <div className="flex items-center space-x-3 mb-4">
-                <div className="bg-amber-100 dark:bg-amber-900/30 p-2 rounded-full text-amber-600 dark:text-amber-400">
-                    <GitBranch size={24} />
-                </div>
-                <h3 className="text-lg font-bold text-slate-800 dark:text-white">Gerar Nova Versão</h3>
-            </div>
-            
-            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 bg-slate-50 dark:bg-slate-900/50 text-slate-700 dark:text-slate-300 p-3 rounded-lg border border-slate-100 dark:border-slate-700">
-              Isso criará um novo registro (Ex: [R1]) para correção, mantendo o histórico.
-            </p>
-            
-            <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Motivo da Nova Versão</label>
-            <select value={revReason} onChange={(e) => setRevReason(e.target.value as RevisionReason)} className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 mb-4">
-              {Object.values(RevisionReason).map(r => <option key={r} value={r}>{r}</option>)}
-            </select>
-
-            <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Comentários</label>
-            <textarea value={revComment} onChange={(e) => setRevComment(e.target.value)} className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 mb-6 h-24 resize-none" placeholder="O que será alterado?" />
-
-            <div className="flex justify-end space-x-3">
-              <button onClick={() => setActiveRevModal(null)} className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancelar</button>
-              <button onClick={handleConfirmRevision} className="px-4 py-2 bg-brand-700 text-white rounded-lg hover:bg-brand-800 shadow-md">Gerar Nova Versão</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Modal (Removed Create Logic) */}
+      {/* Edit Modal (Updated with Client Select) */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-lg w-full p-6 border dark:border-slate-700">
@@ -355,103 +287,35 @@ export const MaterialList: React.FC<MaterialListProps> = ({ materials, onUpdate,
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Cliente</label>
-                <input 
-                  type="text" 
-                  value={formData.client}
-                  onChange={e => setFormData({ ...formData, client: e.target.value })}
-                  className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2"
-                  placeholder="Nome do Cliente"
-                />
+                <select 
+                    value={formData.client} 
+                    onChange={e => setFormData({ ...formData, client: e.target.value })} 
+                    className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2"
+                >
+                    <option value="" disabled>Selecione...</option>
+                    {clientsList.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                </select>
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Arquivo / Nome da Lista</label>
-                <input 
-                  type="text" 
-                  value={formData.filename}
-                  onChange={e => setFormData({ ...formData, filename: e.target.value })}
-                  className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2"
-                  placeholder="Ex: LM-TorreA-V1.xlsx"
-                />
-              </div>
-
-               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Base / Setor</label>
-                <input 
-                  type="text" 
-                  value={formData.base}
-                  onChange={e => setFormData({ ...formData, base: e.target.value })}
-                  className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2"
-                  placeholder="Ex: Torre A, Térreo"
-                />
-              </div>
-
-              <div>
-                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Disciplina</label>
-                 <select 
-                   value={formData.discipline}
-                   onChange={e => setFormData({ ...formData, discipline: e.target.value as Discipline })}
-                   className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2"
-                 >
-                   {Object.values(Discipline).map(d => <option key={d} value={d} className="dark:bg-slate-800">{d}</option>)}
-                 </select>
-              </div>
-
+              <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Arquivo / Nome da Lista</label><input type="text" value={formData.filename} onChange={e => setFormData({ ...formData, filename: e.target.value })} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2" placeholder="Ex: LM-TorreA-V1.xlsx" /></div>
+              <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Base / Setor</label><input type="text" value={formData.base} onChange={e => setFormData({ ...formData, base: e.target.value })} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2" placeholder="Ex: Torre A, Térreo" /></div>
+              <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Disciplina</label><select value={formData.discipline} onChange={e => setFormData({ ...formData, discipline: e.target.value as Discipline })} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2">{Object.values(Discipline).map(d => <option key={d} value={d} className="dark:bg-slate-800">{d}</option>)}</select></div>
               <div className="grid grid-cols-2 gap-4">
-                 <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Data Início</label>
-                    <input 
-                      type="date" 
-                      value={formData.startDate}
-                      onChange={e => setFormData({ ...formData, startDate: e.target.value })}
-                      className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 dark:[color-scheme:dark]"
-                    />
-                 </div>
-                 <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Data Fim</label>
-                    <input 
-                      type="date" 
-                      value={formData.endDate}
-                      onChange={e => setFormData({ ...formData, endDate: e.target.value })}
-                      className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 dark:[color-scheme:dark]"
-                    />
-                 </div>
+                 <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Data Início</label><input type="date" value={formData.startDate} onChange={e => setFormData({ ...formData, startDate: e.target.value })} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 dark:[color-scheme:dark]" /></div>
+                 <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Data Fim</label><input type="date" value={formData.endDate} onChange={e => setFormData({ ...formData, endDate: e.target.value })} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 dark:[color-scheme:dark]" /></div>
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Status</label>
                 <div className="flex gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input 
-                      type="radio" 
-                      name="status"
-                      value="IN_PROGRESS"
-                      checked={formData.status === 'IN_PROGRESS'}
-                      onChange={() => setFormData({ ...formData, status: 'IN_PROGRESS' })}
-                      className="text-brand-600 focus:ring-brand-500"
-                    />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">Em Elaboração</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input 
-                      type="radio" 
-                      name="status"
-                      value="DONE"
-                      checked={formData.status === 'DONE'}
-                      onChange={() => setFormData({ ...formData, status: 'DONE' })}
-                      className="text-brand-600 focus:ring-brand-500"
-                    />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">Concluído</span>
-                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer"><input type="radio" name="status" value="IN_PROGRESS" checked={formData.status === 'IN_PROGRESS'} onChange={() => setFormData({ ...formData, status: 'IN_PROGRESS' })} className="text-brand-600 focus:ring-brand-500" /><span className="text-sm text-slate-700 dark:text-slate-300">Em Elaboração</span></label>
+                  <label className="flex items-center gap-2 cursor-pointer"><input type="radio" name="status" value="DONE" checked={formData.status === 'DONE'} onChange={() => setFormData({ ...formData, status: 'DONE' })} className="text-brand-600 focus:ring-brand-500" /><span className="text-sm text-slate-700 dark:text-slate-300">Concluído</span></label>
                 </div>
               </div>
             </div>
 
             <div className="mt-8 flex justify-end space-x-3 pt-4 border-t border-slate-100 dark:border-slate-700">
               <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancelar</button>
-              <button onClick={handleSave} className="px-4 py-2 bg-brand-700 hover:bg-brand-800 text-white rounded-lg shadow-sm font-medium flex items-center gap-2">
-                <Save size={18} /> Salvar
-              </button>
+              <button onClick={handleSave} className="px-4 py-2 bg-brand-700 hover:bg-brand-800 text-white rounded-lg shadow-sm font-medium flex items-center gap-2"><Save size={18} /> Salvar</button>
             </div>
           </div>
         </div>
