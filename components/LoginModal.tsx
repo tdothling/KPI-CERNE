@@ -60,7 +60,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onClose, onLoginSuccess 
                 value={username}
                 onChange={(e) => setUsername(e.target.value.toLowerCase())}
                 className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg pl-3 pr-20 py-2.5 focus:ring-2 focus:ring-brand-500 outline-none"
-                placeholder="ex: thiago.dothling"
+                placeholder="ex: nome.sobrenome"
                 required
                 autoFocus
                 autoCapitalize="none"
