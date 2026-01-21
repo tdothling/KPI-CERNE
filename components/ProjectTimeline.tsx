@@ -16,7 +16,7 @@ import {
   isWithinInterval
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronRight, ChevronDown, Layers, FileText, ZoomIn, X, Briefcase, CalendarClock, CalendarRange } from 'lucide-react';
+import { ChevronRight, ChevronDown, Layers, FileText, ZoomIn, X, Briefcase, CalendarClock, CalendarRange, CheckCircle2, Clock } from 'lucide-react';
 
 interface ProjectTimelineProps {
   projects: ProjectFile[];
@@ -34,6 +34,12 @@ const DISCIPLINE_COLORS: Record<string, string> = {
   [Discipline.SPDA]: 'bg-red-500',        
   [Discipline.HVAC]: 'bg-emerald-500',        
   [Discipline.OTHER]: 'bg-pink-500',       
+};
+
+// CSS Pattern for "In Execution" stripes
+const STRIPE_PATTERN_STYLE = {
+    backgroundImage: 'linear-gradient(45deg,rgba(255,255,255,.15) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.15) 50%,rgba(255,255,255,.15) 75%,transparent 75%,transparent)',
+    backgroundSize: '1rem 1rem'
 };
 
 // Helper: Calculate business duration
@@ -231,6 +237,10 @@ const ClientDetailGantt = ({
                                 const isDisc = row.type === 'DISCIPLINE';
                                 const isExpanded = isDisc && expandedDisciplines.has(row.label);
                                 
+                                // Status Logic for Styling
+                                const isDone = row.status === Status.DONE || row.status === Status.APPROVED || row.status === Status.WAITING_APPROVAL;
+                                const isRejected = row.status === Status.REJECTED;
+                                
                                 return (
                                     <div key={row.id} className={`flex items-center h-10 border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-700/20 transition-colors ${isDisc ? 'bg-slate-50 dark:bg-slate-700/10' : ''}`}>
                                         
@@ -248,10 +258,9 @@ const ClientDetailGantt = ({
                                                     </span>
                                                 </button>
                                             ) : (
-                                                <div className="flex items-center gap-2 pl-8 w-full">
-                                                    <FileText size={14} className="text-slate-300 min-w-[14px]" />
-                                                    <span className="text-xs text-slate-600 dark:text-slate-400 truncate" title={row.label}>{row.label}</span>
-                                                    {row.status === Status.DONE && <span className="ml-auto text-[9px] text-emerald-600 font-bold">✓</span>}
+                                                <div className="flex items-center gap-2 pl-8 w-full overflow-hidden">
+                                                    <div className={`min-w-[4px] h-4 rounded-full ${isDone ? 'bg-slate-400' : (isRejected ? 'bg-rose-500' : 'bg-brand-500')}`}></div>
+                                                    <span className={`text-xs truncate ${isDone ? 'text-slate-400' : 'text-slate-600 dark:text-slate-300 font-medium'}`} title={row.label}>{row.label}</span>
                                                 </div>
                                             )}
                                         </div>
@@ -260,17 +269,28 @@ const ClientDetailGantt = ({
                                         <div className="flex-1 relative h-full">
                                             <div 
                                                 onClick={() => isDisc && toggleDiscipline(row.label)}
-                                                className={`absolute top-1/2 -translate-y-1/2 rounded shadow-sm cursor-pointer transition-all hover:scale-[1.01] ${isDisc ? 'h-5 z-10' : 'h-3 z-0 opacity-80'}`}
+                                                className={`absolute top-1/2 -translate-y-1/2 rounded shadow-sm cursor-pointer transition-all hover:brightness-110 flex items-center ${isDisc ? 'h-5 z-10' : 'h-3 z-0'}`}
                                                 style={{ 
                                                     left: `${offsetPercent}%`, 
                                                     width: `${widthPercent}%`,
-                                                    backgroundColor: isDisc 
-                                                        ? undefined // Use class 
-                                                        : undefined // Use logic
+                                                    // Apply diagonal stripes only if NOT done and is a File row (active work)
+                                                    ...(!isDisc && !isDone && !isRejected ? STRIPE_PATTERN_STYLE : {})
                                                 }}
                                             >
-                                                {/* Bar Styling */}
-                                                <div className={`w-full h-full rounded ${isDisc ? DISCIPLINE_COLORS[row.discipline] : (row.status === Status.DONE ? 'bg-slate-400' : DISCIPLINE_COLORS[row.discipline])}`}></div>
+                                                {/* Bar Content/Color */}
+                                                <div className={`w-full h-full rounded flex items-center justify-center relative overflow-hidden ${
+                                                    isDisc 
+                                                        ? DISCIPLINE_COLORS[row.discipline] 
+                                                        : (isDone 
+                                                            ? 'bg-slate-300 dark:bg-slate-600 border border-slate-400 dark:border-slate-500' 
+                                                            : (isRejected ? 'bg-rose-500' : `${DISCIPLINE_COLORS[row.discipline]} opacity-90`)
+                                                          )
+                                                }`}>
+                                                    {/* Show Checkmark if Done */}
+                                                    {!isDisc && isDone && widthPercent > 3 && (
+                                                        <CheckCircle2 size={10} className="text-slate-500 dark:text-slate-400" />
+                                                    )}
+                                                </div>
                                                 
                                                 {/* Tooltip Overlay */}
                                                 <div className="absolute inset-0 opacity-0 hover:opacity-100 bg-black/10 transition-opacity flex items-center justify-center">
@@ -282,6 +302,18 @@ const ClientDetailGantt = ({
                                 )
                             })}
                         </div>
+                    </div>
+                </div>
+                
+                {/* Legend Footer */}
+                <div className="px-6 py-2 bg-slate-50 dark:bg-slate-700/30 border-t border-slate-200 dark:border-slate-700 flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+                    <div className="flex items-center gap-1.5">
+                        <div className="w-4 h-3 rounded bg-brand-600" style={STRIPE_PATTERN_STYLE}></div>
+                        <span>Em Execução (Ativo)</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <div className="w-4 h-3 rounded bg-slate-300 dark:bg-slate-600 border border-slate-400"></div>
+                        <span>Execução Concluída</span>
                     </div>
                 </div>
             </div>
@@ -444,7 +476,7 @@ export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({ projects, holi
                                     <div className="flex-1 relative h-full">
                                         <div 
                                             onClick={() => setSelectedClient(row.client)}
-                                            className="absolute top-1/2 -translate-y-1/2 h-6 bg-slate-800 dark:bg-slate-500 rounded-md shadow-sm cursor-pointer hover:bg-brand-700 dark:hover:bg-brand-500 transition-all hover:scale-[1.01] hover:h-7 group-hover:shadow-md"
+                                            className="absolute top-1/2 -translate-y-1/2 h-6 bg-slate-800 dark:bg-slate-500 rounded-md shadow-sm cursor-pointer hover:bg-brand-700 dark:hover:bg-brand-500 transition-all hover:h-7 group-hover:shadow-md"
                                             style={{ 
                                                 left: `${offsetPercent}%`, 
                                                 width: `${widthPercent}%` 

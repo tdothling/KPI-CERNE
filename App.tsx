@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { ProjectFile, Discipline, Status, RevisionReason, DateFilterType, MaterialDoc, MaterialStatus } from './types';
+import { ProjectFile, Discipline, Status, RevisionReason, DateFilterType, MaterialDoc } from './types';
 import { Dashboard } from './components/Dashboard';
 import { ProjectList } from './components/ProjectList';
 import { ProjectTimeline } from './components/ProjectTimeline';
@@ -8,13 +8,9 @@ import { BatchEditModal } from './components/BatchEditModal';
 import { HolidayManagerModal } from './components/HolidayManagerModal';
 import { DateRangeFilter } from './components/DateRangeFilter';
 import { MaterialList } from './components/MaterialList';
-import { UploadCloud, Loader2, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Package, FileSpreadsheet } from 'lucide-react';
+import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Package, FileSpreadsheet, Database } from 'lucide-react';
 import { 
-  differenceInCalendarDays, 
-  differenceInBusinessDays, 
   parseISO, 
-  isWeekend, 
-  isWithinInterval, 
   isValid,
   startOfMonth,
   endOfMonth,
@@ -24,54 +20,26 @@ import {
   endOfYear,
   getMonth,
   setMonth,
-  setDate
+  setDate,
+  differenceInBusinessDays,
+  isWeekend,
+  isWithinInterval
 } from 'date-fns';
 
-// Sample initial data for testing
-const INITIAL_PROJECTS: ProjectFile[] = [
-  {
-    id: '1',
-    filename: 'PRJ-A-2024-ARC-01.dwg',
-    client: 'Construtora Alpha',
-    base: 'Torre A',
-    discipline: Discipline.ARCHITECTURE,
-    status: Status.IN_PROGRESS,
-    startDate: '2023-10-01',
-    endDate: '2023-10-05',
-    sendDate: '',
-    feedbackDate: '',
-    blockedDays: 0,
-    revisions: []
-  },
-  {
-    id: '2',
-    filename: 'PRJ-A-2024-HID-02.dwg',
-    client: 'Construtora Alpha',
-    base: 'Torre B',
-    discipline: Discipline.HYDRAULIC,
-    status: Status.DONE, 
-    startDate: '2023-10-02',
-    endDate: '2023-10-10',
-    sendDate: '2023-10-04',
-    feedbackDate: '2023-10-07',
-    blockedDays: 3,
-    revisions: [{ id: 'r1', date: '2023-10-08', reason: RevisionReason.CLIENT_REQUEST, comment: 'Alteração de layout' }]
-  }
-];
-
-const INITIAL_MATERIALS: MaterialDoc[] = [
-  {
-    id: 'm1',
-    client: 'Construtora Alpha',
-    filename: 'LM-TorreA-Hidraulica.xlsx',
-    base: 'Torre A',
-    discipline: Discipline.HYDRAULIC,
-    startDate: '2023-10-10',
-    endDate: '',
-    status: 'IN_PROGRESS',
-    revisions: []
-  }
-];
+// Import Firebase Service
+import { 
+  subscribeToProjects, 
+  addProject, 
+  updateProjectInDb, 
+  deleteProjectFromDb,
+  subscribeToMaterials,
+  addMaterial,
+  updateMaterialInDb,
+  deleteMaterialFromDb,
+  subscribeToHolidays,
+  saveHolidaysToDb
+} from './services/db';
+import { db } from './firebase';
 
 // Custom CERNE Logo Component
 const CerneLogo = () => (
@@ -87,10 +55,8 @@ const CerneLogo = () => (
 
 // --- TAXONOMY & HELPERS ---
 
-// Helper to detect discipline from folder path or filename
 const detectDiscipline = (text: string): Discipline | null => {
   const normalized = text.toLowerCase();
-
   if (normalized.includes('arq')) return Discipline.ARCHITECTURE;
   if (normalized.includes('estrut')) return Discipline.STRUCTURE;
   if (normalized.includes('fund')) return Discipline.FOUNDATION;
@@ -99,28 +65,16 @@ const detectDiscipline = (text: string): Discipline | null => {
   if (normalized.includes('dados') || normalized.includes('logica')) return Discipline.DATA;
   if (normalized.includes('spda')) return Discipline.SPDA;
   if (normalized.includes('clima') || normalized.includes('hvac') || normalized.includes('ar cond')) return Discipline.HVAC;
-
   return null;
 };
 
-// Placeholder for future advanced taxonomy logic
 const extractMetadataFromMaterialFilename = (filename: string, defaultClient: string) => {
-    // 1. Try to detect Discipline
     const discipline = detectDiscipline(filename) || Discipline.OTHER;
-    
-    // 2. Try to detect Client (Simple heuristics, expand later)
-    // E.g. "Cerne_ProjectX_List.xlsx"
-    let client = defaultClient;
-    // Example logic: if filename starts with a known pattern, extract it.
-    // For now, we rely mostly on the user input default, but this is the place to add Regex.
-    
-    return { discipline, client };
+    return { discipline, client: defaultClient };
 };
 
-
-// Helper to generate next revision filename
 const generateRevisionFilename = (name: string): string => {
-  const regex = /^(.*)\s\[R(\d+)\](\.[^.]*)?$/; // Matches "Name [R1].ext" or "Name [R1]"
+  const regex = /^(.*)\s\[R(\d+)\](\.[^.]*)?$/; 
   const match = name.match(regex);
 
   if (match) {
@@ -129,7 +83,6 @@ const generateRevisionFilename = (name: string): string => {
     const ext = match[3] || '';
     return `${base} [R${num}]${ext}`;
   } else {
-    // Find extension if exists
     const lastDotIndex = name.lastIndexOf('.');
     if (lastDotIndex !== -1) {
        const base = name.substring(0, lastDotIndex);
@@ -140,10 +93,8 @@ const generateRevisionFilename = (name: string): string => {
   }
 };
 
-// Helper for Holiday Calculation
 const calculateBusinessDaysWithHolidays = (start: Date, end: Date, holidays: string[]) => {
     let days = differenceInBusinessDays(end, start);
-    
     let holidaysOnWeekdays = 0;
     holidays.forEach(h => {
         const hDate = parseISO(h);
@@ -153,22 +104,44 @@ const calculateBusinessDaysWithHolidays = (start: Date, end: Date, holidays: str
             }
         }
     });
-
     return Math.max(0, days - holidaysOnWeekdays);
 };
-
 
 type Tab = 'dashboard' | 'timeline' | 'projects' | 'materials';
 type ImportType = 'PROJECT' | 'MATERIAL_LIST';
 
 export default function App() {
-  const [projects, setProjects] = useState<ProjectFile[]>(INITIAL_PROJECTS);
-  const [materials, setMaterials] = useState<MaterialDoc[]>(INITIAL_MATERIALS);
+  // Use Firebase Data (Empty initially, populated by useEffect)
+  const [projects, setProjects] = useState<ProjectFile[]>([]);
+  const [materials, setMaterials] = useState<MaterialDoc[]>([]);
+  const [holidays, setHolidays] = useState<string[]>([]);
   
+  const [dbConnected, setDbConnected] = useState(false);
+
+  // --- FIREBASE SUBSCRIPTIONS ---
+  useEffect(() => {
+    // Check if config exists
+    if (!db) {
+        setDbConnected(false);
+        return;
+    }
+    setDbConnected(true);
+
+    const unsubProjects = subscribeToProjects(setProjects);
+    const unsubMaterials = subscribeToMaterials(setMaterials);
+    const unsubHolidays = subscribeToHolidays(setHolidays);
+
+    return () => {
+        unsubProjects();
+        unsubMaterials();
+        unsubHolidays();
+    };
+  }, []);
+
+  // UI States
   const [selectedClient, setSelectedClient] = useState<string>('Todos');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
-  const [holidays, setHolidays] = useState<string[]>([]); // Store 'YYYY-MM-DD' strings
   
   // Date Filter State
   const [dateFilterType, setDateFilterType] = useState<DateFilterType>('ALL');
@@ -180,14 +153,12 @@ export default function App() {
   const [importType, setImportType] = useState<ImportType>('PROJECT');
   const [uploadDiscipline, setUploadDiscipline] = useState<Discipline>(Discipline.ARCHITECTURE);
   const [uploadClient, setUploadClient] = useState<string>('');
-  const [uploadBase, setUploadBase] = useState<string>(''); // Base State
+  const [uploadBase, setUploadBase] = useState<string>(''); 
   const [isFolderUpload, setIsFolderUpload] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Batch Edit State
+  // Other Modals
   const [isBatchEditOpen, setIsBatchEditOpen] = useState(false);
-  
-  // Holiday Manager State
   const [isHolidayManagerOpen, setIsHolidayManagerOpen] = useState(false);
 
   // Dark Mode Effect
@@ -201,90 +172,83 @@ export default function App() {
 
   const toggleTheme = () => setIsDarkMode(!isDarkMode);
 
-  // Helper to calculate Start/End Date based on DateFilterType
+  // Filters Calculation (Same as before)
   const getFilterDateRange = () => {
     if (dateFilterType === 'ALL') return null;
-    
     let start: Date, end: Date;
-
     if (dateFilterType === 'CUSTOM') {
       if (!customRange.start || !customRange.end) return null;
       start = parseISO(customRange.start);
       end = parseISO(customRange.end);
-      // set End to end of day to be inclusive
       end.setHours(23, 59, 59, 999);
       return { start, end };
     }
-
     switch (dateFilterType) {
-      case 'MONTH':
-        start = startOfMonth(referenceDate);
-        end = endOfMonth(referenceDate);
-        break;
-      case 'QUARTER':
-        start = startOfQuarter(referenceDate);
-        end = endOfQuarter(referenceDate);
-        break;
+      case 'MONTH': start = startOfMonth(referenceDate); end = endOfMonth(referenceDate); break;
+      case 'QUARTER': start = startOfQuarter(referenceDate); end = endOfQuarter(referenceDate); break;
       case 'SEMESTER':
         const month = getMonth(referenceDate);
-        if (month < 6) { // 1st Semester (Jan-Jun)
-          start = startOfYear(referenceDate);
-          end = setDate(setMonth(referenceDate, 5), 30); // June 30th
-        } else { // 2nd Semester (Jul-Dec)
-          start = setDate(setMonth(referenceDate, 6), 1); // July 1st
-          end = endOfYear(referenceDate);
-        }
-        // Fix strict End Of Day
+        if (month < 6) { start = startOfYear(referenceDate); end = setDate(setMonth(referenceDate, 5), 30); } 
+        else { start = setDate(setMonth(referenceDate, 6), 1); end = endOfYear(referenceDate); }
         end.setHours(23, 59, 59, 999);
         break;
-      case 'YEAR':
-        start = startOfYear(referenceDate);
-        end = endOfYear(referenceDate);
-        break;
-      default:
-        return null;
+      case 'YEAR': start = startOfYear(referenceDate); end = endOfYear(referenceDate); break;
+      default: return null;
     }
     return { start, end };
   };
 
-  // Filter Data
   const filteredProjects = useMemo(() => {
     let result = projects;
-
-    // 1. Client Filter
     if (selectedClient !== 'Todos') {
       result = result.filter(p => p.client === selectedClient);
     }
-
-    // 2. Date Filter
     const dateRange = getFilterDateRange();
     if (dateRange) {
       const { start: filterStart, end: filterEnd } = dateRange;
-      
       result = result.filter(p => {
         if (!p.startDate) return false;
         const projectStart = parseISO(p.startDate);
-        
         let projectEnd: Date;
         if (p.endDate && isValid(parseISO(p.endDate))) {
             projectEnd = parseISO(p.endDate);
         } else {
             projectEnd = new Date(); 
         }
-
         return projectStart <= filterEnd && projectEnd >= filterStart;
       });
     }
-
     return result;
   }, [projects, selectedClient, dateFilterType, referenceDate, customRange]);
+
+  const filteredMaterials = useMemo(() => {
+    let result = materials;
+    if (selectedClient !== 'Todos') {
+      result = result.filter(m => m.client === selectedClient);
+    }
+    const dateRange = getFilterDateRange();
+    if (dateRange) {
+      const { start: filterStart, end: filterEnd } = dateRange;
+      result = result.filter(m => {
+        if (!m.startDate) return false;
+        const matStart = parseISO(m.startDate);
+        let matEnd: Date;
+        if (m.endDate && isValid(parseISO(m.endDate))) {
+            matEnd = parseISO(m.endDate);
+        } else {
+            matEnd = new Date(); 
+        }
+        return matStart <= filterEnd && matEnd >= filterStart;
+      });
+    }
+    return result;
+  }, [materials, selectedClient, dateFilterType, referenceDate, customRange]);
 
   const uniqueClients = useMemo(() => {
     const clients = new Set(projects.map(p => p.client));
     return ['Todos', ...Array.from(clients).sort()];
   }, [projects]);
 
-  // Clients list for Datalist
   const clientSuggestions = useMemo(() => {
     const clients = new Set([
         ...projects.map(p => p.client),
@@ -293,14 +257,15 @@ export default function App() {
     return Array.from(clients).sort();
   }, [projects, materials]);
 
-  // Handle File Upload Flow
+  // --- HANDLERS (Now using DB Services) ---
+
   const handleOpenUploadModal = () => {
     setIsUploadModalOpen(true);
     setUploadDiscipline(Discipline.ARCHITECTURE); 
     setUploadClient(''); 
     setUploadBase(''); 
     setIsFolderUpload(false); 
-    setImportType('PROJECT'); // Default to Project
+    setImportType('PROJECT'); 
   };
 
   const triggerFileSelect = () => {
@@ -315,62 +280,50 @@ export default function App() {
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
-    // 1. Handle PROJECT Import
     if (importType === 'PROJECT') {
         const finalClientName = uploadClient.trim() || 'Cliente Geral';
         const finalBaseName = uploadBase.trim() || 'Geral';
 
-        const newProjects: ProjectFile[] = Array.from(files).map((f: any) => {
+        // Loop and add individually (Firestore handles concurrency well)
+        Array.from(files).forEach((f: any) => {
             let discipline = uploadDiscipline;
-            
             if (isFolderUpload && f.webkitRelativePath) {
                 const detected = detectDiscipline(f.webkitRelativePath);
                 if (detected) discipline = detected;
             }
 
-            return {
-                id: crypto.randomUUID(),
+            addProject({
                 filename: f.name,
                 client: finalClientName,
                 base: finalBaseName,
                 discipline: discipline, 
-                status: Status.TODO,
+                status: Status.IN_PROGRESS,
                 startDate: new Date().toISOString().split('T')[0],
                 endDate: '',
                 sendDate: '',
                 feedbackDate: '',
                 blockedDays: 0,
                 revisions: []
-            };
+            });
         });
-
-        setProjects(prev => [...newProjects, ...prev]);
         setActiveTab('projects');
-    }
-    
-    // 2. Handle MATERIAL LIST Import
-    else if (importType === 'MATERIAL_LIST') {
+    } else if (importType === 'MATERIAL_LIST') {
          const finalClientName = uploadClient.trim() || 'Cliente Geral';
          const finalBaseName = uploadBase.trim() || 'Geral';
 
-         const newMaterials: MaterialDoc[] = Array.from(files).map((f: any) => {
-             // Taxonomy Logic for Materials
+         Array.from(files).forEach((f: any) => {
              const metadata = extractMetadataFromMaterialFilename(f.name, finalClientName);
-
-             return {
-                 id: crypto.randomUUID(),
+             addMaterial({
                  filename: f.name,
-                 client: metadata.client, // Use extracted or fallback
+                 client: metadata.client,
                  base: finalBaseName,
-                 discipline: metadata.discipline, // Use extracted or fallback
+                 discipline: metadata.discipline,
                  startDate: new Date().toISOString().split('T')[0],
                  endDate: '',
                  status: 'IN_PROGRESS',
                  revisions: []
-             };
+             });
          });
-         
-         setMaterials(prev => [...prev, ...newMaterials]);
          setActiveTab('materials');
     }
 
@@ -378,121 +331,127 @@ export default function App() {
     event.target.value = '';
   };
 
-  // --- CRUD OPERATIONS (PROJECTS) ---
   const updateProject = (updated: ProjectFile) => {
-    setProjects(prev => prev.map(p => p.id === updated.id ? updated : p));
+    updateProjectInDb(updated);
   };
 
   const deleteProject = (id: string) => {
-    setProjects(prev => prev.filter(p => p.id !== id));
+    deleteProjectFromDb(id);
   };
 
   const addProjectRevision = (id: string, reason: RevisionReason, comment: string) => {
     const originalProject = projects.find(p => p.id === id);
     if (!originalProject) return;
 
-    const updatedOriginal: ProjectFile = { ...originalProject, status: Status.REVISED };
-    const newProject: ProjectFile = {
-      ...originalProject,
-      id: crypto.randomUUID(), 
+    // 1. Update original status
+    updateProjectInDb({ ...originalProject, status: Status.REVISED });
+
+    // 2. Create new revision file
+    addProject({
+      ...originalProject, // Copy fields
       filename: generateRevisionFilename(originalProject.filename), 
-      status: Status.TODO, 
+      status: Status.IN_PROGRESS,
       startDate: new Date().toISOString().split('T')[0], 
       endDate: '', 
       sendDate: '', 
       feedbackDate: '', 
       blockedDays: 0, 
       revisions: [{ id: crypto.randomUUID(), date: new Date().toISOString().split('T')[0], reason, comment }]
-    };
-
-    setProjects(prev => {
-        const listWithUpdatedOriginal = prev.map(p => p.id === id ? updatedOriginal : p);
-        return [...listWithUpdatedOriginal, newProject];
     });
   };
 
-  // --- CRUD OPERATIONS (MATERIALS) ---
   const updateMaterial = (updated: MaterialDoc) => {
-     setMaterials(prev => prev.map(m => m.id === updated.id ? updated : m));
+     updateMaterialInDb(updated);
   };
 
   const deleteMaterial = (id: string) => {
-     setMaterials(prev => prev.filter(m => m.id !== id));
+     deleteMaterialFromDb(id);
   };
 
   const addMaterialRevision = (id: string, reason: RevisionReason, comment: string) => {
       const original = materials.find(m => m.id === id);
       if (!original) return;
 
-      const updatedOriginal: MaterialDoc = { ...original, status: 'REVISED' };
-      const newDoc: MaterialDoc = {
+      updateMaterialInDb({ ...original, status: 'REVISED' });
+
+      addMaterial({
           ...original,
-          id: crypto.randomUUID(),
           filename: generateRevisionFilename(original.filename),
           status: 'IN_PROGRESS',
           startDate: new Date().toISOString().split('T')[0],
           endDate: '',
           revisions: [{ id: crypto.randomUUID(), date: new Date().toISOString().split('T')[0], reason: reason.toString(), comment }]
-      };
-
-      setMaterials(prev => {
-          const list = prev.map(m => m.id === id ? updatedOriginal : m);
-          return [...list, newDoc];
       });
   };
 
-
-  // Batch Update Logic (Fields)
+  // Batch Update
   const handleBatchUpdate = (ids: string[], field: keyof ProjectFile, value: any) => {
-    setProjects(prev => prev.map(project => {
-      if (!ids.includes(project.id)) return project;
-      const updatedProject = { ...project, [field]: value };
-      
-      // Consistency Logic (Same as before)
-      if (field === 'blockedDays' && updatedProject.sendDate) {
-        const days = parseFloat(value as string);
-        const validDays = isNaN(days) ? 0 : days;
-        const startDate = new Date(updatedProject.sendDate);
-        const targetTime = startDate.getTime() + (validDays * 24 * 60 * 60 * 1000);
-        updatedProject.feedbackDate = new Date(targetTime).toISOString().split('T')[0];
-      }
-      return updatedProject;
-    }));
+    // Iterate and update each document individually
+    ids.forEach(id => {
+        const project = projects.find(p => p.id === id);
+        if (project) {
+            const updatedProject = { ...project, [field]: value };
+            
+            // Consistency Logic (re-calc dates if blockedDays changes)
+            if (field === 'blockedDays' && updatedProject.sendDate) {
+                const days = parseFloat(value as string);
+                const validDays = isNaN(days) ? 0 : days;
+                const startDate = new Date(updatedProject.sendDate);
+                const targetTime = startDate.getTime() + (validDays * 24 * 60 * 60 * 1000);
+                updatedProject.feedbackDate = new Date(targetTime).toISOString().split('T')[0];
+            }
+            updateProjectInDb(updatedProject);
+        }
+    });
   };
   
-  // Batch Workflow Logic (Actions)
   const handleBatchWorkflow = (ids: string[], action: 'COMPLETE' | 'SEND' | 'APPROVE' | 'REJECT', date: string) => {
-    setProjects(prev => prev.map(project => {
-      if (!ids.includes(project.id)) return project;
-      const updatedProject = { ...project };
+    ids.forEach(id => {
+        const project = projects.find(p => p.id === id);
+        if (!project) return;
 
-      if (action === 'COMPLETE') {
-          if (updatedProject.startDate && date < updatedProject.startDate) return project; 
-          updatedProject.status = Status.DONE;
-          updatedProject.endDate = date;
-      }
-      if (action === 'SEND') {
-          if (!updatedProject.endDate || date < updatedProject.endDate) return project;
-          updatedProject.status = Status.WAITING_APPROVAL;
-          updatedProject.sendDate = date;
-      }
-      if (action === 'APPROVE') {
-          if (!updatedProject.sendDate || date < updatedProject.sendDate) return project; 
-          updatedProject.status = Status.APPROVED;
-          updatedProject.feedbackDate = date;
-          updatedProject.blockedDays = calculateBusinessDaysWithHolidays(parseISO(updatedProject.sendDate), parseISO(date), holidays);
-      }
-      if (action === 'REJECT') {
-          if (!updatedProject.sendDate || date < updatedProject.sendDate) return project;
-          updatedProject.status = Status.REJECTED;
-          updatedProject.feedbackDate = date;
-          updatedProject.blockedDays = calculateBusinessDaysWithHolidays(parseISO(updatedProject.sendDate), parseISO(date), holidays);
-      }
-      return updatedProject;
-    }));
+        const updatedProject = { ...project };
+        let shouldUpdate = false;
+
+        if (action === 'COMPLETE') {
+            if (!updatedProject.startDate || date >= updatedProject.startDate) {
+                updatedProject.status = Status.DONE;
+                updatedProject.endDate = date;
+                shouldUpdate = true;
+            }
+        }
+        if (action === 'SEND') {
+            if (updatedProject.endDate && date >= updatedProject.endDate) {
+                updatedProject.status = Status.WAITING_APPROVAL;
+                updatedProject.sendDate = date;
+                shouldUpdate = true;
+            }
+        }
+        if (action === 'APPROVE') {
+            if (updatedProject.sendDate && date >= updatedProject.sendDate) {
+                updatedProject.status = Status.APPROVED;
+                updatedProject.feedbackDate = date;
+                updatedProject.blockedDays = calculateBusinessDaysWithHolidays(parseISO(updatedProject.sendDate), parseISO(date), holidays);
+                shouldUpdate = true;
+            }
+        }
+        if (action === 'REJECT') {
+            if (updatedProject.sendDate && date >= updatedProject.sendDate) {
+                updatedProject.status = Status.REJECTED;
+                updatedProject.feedbackDate = date;
+                updatedProject.blockedDays = calculateBusinessDaysWithHolidays(parseISO(updatedProject.sendDate), parseISO(date), holidays);
+                shouldUpdate = true;
+            }
+        }
+
+        if (shouldUpdate) updateProjectInDb(updatedProject);
+    });
   };
 
-  // CSV Export Logic
+  const handleUpdateHolidays = (newHolidays: string[]) => {
+      saveHolidaysToDb(newHolidays);
+  };
+
   const handleExportCSV = () => {
     const headers = ["Arquivo","Cliente","Disciplina","Status","Data Início","Data Fim (Exec)","Data Envio","Data Feedback","Dias Bloqueados","Qtd Revisões","Base"];
     const rows = filteredProjects.map(p => [
@@ -529,6 +488,13 @@ export default function App() {
           </div>
 
           <div className="flex items-center space-x-4">
+            {!dbConnected && (
+                <div className="hidden lg:flex items-center text-rose-600 bg-rose-50 px-3 py-1 rounded-full text-xs font-bold animate-pulse border border-rose-200">
+                    <Database size={14} className="mr-1" />
+                    DB Desconectado (Configure firebase.ts)
+                </div>
+            )}
+
             <button onClick={toggleTheme} className="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
               {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
             </button>
@@ -555,7 +521,7 @@ export default function App() {
               <span>Edição em Lote</span>
             </button>
             
-            <button onClick={handleOpenUploadModal} className="bg-brand-700 hover:bg-brand-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm">
+            <button onClick={handleOpenUploadModal} disabled={!dbConnected} className="bg-brand-700 hover:bg-brand-800 disabled:bg-slate-400 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm">
               <UploadCloud className="w-4 h-4" />
               <span className="hidden sm:inline">Importar</span>
             </button>
@@ -576,6 +542,22 @@ export default function App() {
       {/* Main Content */}
       <main className="w-full px-4 sm:px-6 lg:px-8 py-8">
         
+        {/* Warning Banner if DB not connected */}
+        {!dbConnected && (
+            <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-lg flex items-start gap-3">
+                <Database className="text-rose-600 flex-shrink-0 mt-0.5" />
+                <div>
+                    <h4 className="font-bold text-rose-800">Banco de Dados Não Configurado</h4>
+                    <p className="text-sm text-rose-700">
+                        O sistema está em modo somente leitura (sem dados). Para salvar projetos, você precisa configurar o Firebase.<br/>
+                        1. Crie um projeto no <a href="https://console.firebase.google.com/" target="_blank" className="underline font-bold">Firebase Console</a>.<br/>
+                        2. Copie as chaves do projeto Web.<br/>
+                        3. Cole as chaves no arquivo <code>firebase.ts</code> deste projeto.
+                    </p>
+                </div>
+            </div>
+        )}
+
         {/* Controls Bar */}
         <div className="mb-6 flex flex-col lg:flex-row gap-4 justify-between items-start lg:items-end">
           {/* Tab Navigation */}
@@ -612,7 +594,12 @@ export default function App() {
         <div className="mt-6">
           {activeTab === 'dashboard' && (
             <div className="animate-in fade-in zoom-in-95 duration-200">
-              <Dashboard data={filteredProjects} isDarkMode={isDarkMode} holidays={holidays} />
+              <Dashboard 
+                data={filteredProjects} 
+                materials={filteredMaterials} 
+                isDarkMode={isDarkMode} 
+                holidays={holidays} 
+              />
             </div>
           )}
 
@@ -777,7 +764,7 @@ export default function App() {
 
       {/* Holiday Manager Modal */}
       {isHolidayManagerOpen && (
-        <HolidayManagerModal holidays={holidays} onUpdateHolidays={setHolidays} onClose={() => setIsHolidayManagerOpen(false)} />
+        <HolidayManagerModal holidays={holidays} onUpdateHolidays={handleUpdateHolidays} onClose={() => setIsHolidayManagerOpen(false)} />
       )}
     </div>
   );

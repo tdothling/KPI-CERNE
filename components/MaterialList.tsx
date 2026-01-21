@@ -224,7 +224,7 @@ export const MaterialList: React.FC<MaterialListProps> = ({ materials, onUpdate,
                       doc.status === 'DONE' 
                         ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-400' 
                         : doc.status === 'REVISED'
-                          ? 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-500'
+                          ? 'text-slate-500 bg-slate-200 border-slate-300 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-400 line-through decoration-slate-400 decoration-2'
                           : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-400'
                     }`}>
                       {doc.status === 'DONE' && <CheckCircle2 size={12} />}

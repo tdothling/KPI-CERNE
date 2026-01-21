@@ -4,12 +4,13 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
   PieChart, Pie, Cell 
 } from 'recharts';
-import { ProjectFile, Discipline, Status } from '../types';
+import { ProjectFile, Discipline, Status, MaterialDoc } from '../types';
 import { differenceInBusinessDays, parseISO, isWeekend, isWithinInterval, isValid } from 'date-fns';
 import { LayoutDashboard } from 'lucide-react';
 
 interface DashboardProps {
   data: ProjectFile[];
+  materials?: MaterialDoc[];
   isDarkMode?: boolean;
   holidays: string[];
 }
@@ -44,7 +45,7 @@ const getRevisionNumber = (filename: string): number => {
     return match ? parseInt(match[1], 10) : 0;
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ data, isDarkMode = false, holidays }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDarkMode = false, holidays }) => {
 
   const axisColor = isDarkMode ? '#94a3b8' : '#64748b';
   const gridColor = isDarkMode ? '#334155' : '#e2e8f0';
@@ -191,6 +192,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, isDarkMode = false, 
     return { executionData, blockedData, fttData, volumeData, reasonsData };
   }, [data, holidays]);
 
+  const materialStats = useMemo(() => {
+     const total = materials.length;
+     const done = materials.filter(m => m.status === 'DONE').length;
+     const pending = total - done;
+     const percentage = total > 0 ? Math.round((done / total) * 100) : 0;
+     
+     // Data for the Pie Chart
+     const chartData = [
+         { name: 'Concluído', value: done, color: '#10b981' }, // Emerald
+         { name: 'Pendente', value: pending, color: isDarkMode ? '#334155' : '#e2e8f0' } // Slate
+     ];
+
+     return { total, done, percentage, chartData };
+  }, [materials, isDarkMode]);
+
   return (
     <div className="animate-in fade-in zoom-in-95 duration-200">
       <div className="flex items-center justify-between mb-6">
@@ -239,8 +255,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, isDarkMode = false, 
           </div>
         </div>
         
-        {/* Row 2: Secondary Metrics (2x2 Grid) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Row 2: Secondary Metrics (Grid) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           
           {/* Chart 1: Average Execution Time */}
           <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200">
@@ -341,6 +357,45 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, isDarkMode = false, 
                 </PieChart>
               </ResponsiveContainer>
             </div>
+          </div>
+
+          {/* Chart 5: Material Completion Rate (ICLM) */}
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200">
+             <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4">ICLM (Conclusão de Listas)</h3>
+             <div className="h-60 relative flex flex-col items-center justify-center">
+                 <ResponsiveContainer width="100%" height="100%">
+                     <PieChart>
+                         <Pie
+                             data={materialStats.chartData}
+                             cx="50%"
+                             cy="50%"
+                             startAngle={180}
+                             endAngle={0}
+                             innerRadius={60}
+                             outerRadius={80}
+                             paddingAngle={0}
+                             dataKey="value"
+                         >
+                             {materialStats.chartData.map((entry, index) => (
+                                 <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
+                             ))}
+                         </Pie>
+                         <Tooltip 
+                            formatter={(value: number) => [value, 'Listas']}
+                            contentStyle={{ backgroundColor: tooltipBg, color: tooltipText, border: isDarkMode ? '1px solid #475569' : 'none' }}
+                         />
+                     </PieChart>
+                 </ResponsiveContainer>
+                 <div className="absolute top-1/2 left-0 right-0 text-center -translate-y-1 transform">
+                     <span className="text-3xl font-bold text-slate-800 dark:text-white block">{materialStats.percentage}%</span>
+                     <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Concluído</span>
+                 </div>
+                 <div className="mt-[-20px] text-center">
+                     <p className="text-xs text-slate-400 dark:text-slate-500">
+                         {materialStats.done} concluídas de {materialStats.total} emitidas
+                     </p>
+                 </div>
+             </div>
           </div>
 
         </div>

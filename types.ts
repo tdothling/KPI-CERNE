@@ -1,4 +1,5 @@
 
+
 export enum Discipline {
   ARCHITECTURE = 'Arquitetura',
   STRUCTURE = 'Estrutura',
@@ -12,7 +13,6 @@ export enum Discipline {
 }
 
 export enum Status {
-  TODO = 'A Fazer',
   IN_PROGRESS = 'Em Andamento',
   DONE = 'Execução Concluída', // Alterado de 'Concluído' para ser mais específico
   WAITING_APPROVAL = 'Aguardando Aprovação', // Novo

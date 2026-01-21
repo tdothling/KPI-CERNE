@@ -90,7 +90,6 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
     );
 
     // 1. Group by Base Name
-    // This ensures revisions are always attached to their base file
     const groups: Record<string, ProjectFile[]> = {};
     
     filtered.forEach(p => {
@@ -101,27 +100,22 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
         groups[baseName].push(p);
     });
 
-    // 2. Sort within groups (Revision Ascending: Base -> R1 -> R2)
-    // This ensures revisions appear below the base file in chronological order
+    // 2. Sort within groups (Revision Ascending)
     Object.values(groups).forEach(group => {
         group.sort((a, b) => getRevisionNumber(a.filename) - getRevisionNumber(b.filename));
     });
 
-    // 3. Sort Groups based on the Base File (index 0 after sorting revisions)
-    // We use the base file's data to sort the entire group
+    // 3. Sort Groups
     const sortedGroups = Object.values(groups).sort((groupA, groupB) => {
-        const fileA = groupA[0]; // Base file
-        const fileB = groupB[0]; // Base file
+        const fileA = groupA[0];
+        const fileB = groupB[0];
 
-        // Determine value to sort by
         let valA = fileA[sortConfig.key];
         let valB = fileB[sortConfig.key];
 
-        // Specific handling for complex types or strings
         if (typeof valA === 'string') valA = valA.toLowerCase();
         if (typeof valB === 'string') valB = valB.toLowerCase();
         
-        // Handle undefined or special cases if necessary (e.g. blockedDays)
         if (sortConfig.key === 'blockedDays') {
              valA = fileA.blockedDays || 0;
              valB = fileB.blockedDays || 0;
@@ -132,7 +126,6 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
         return 0;
     });
 
-    // 4. Flatten the array
     return sortedGroups.flat();
   }, [projects, sortConfig, search]);
 
@@ -187,7 +180,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
     }
   };
 
-  // 1. Confirm Completion (End Execution)
+  // Flow handlers... (Completion, Send, Approval, Rejection)
   const handleConfirmCompletion = () => {
     if (!pendingCompletion) return;
     const project = projects.find(p => p.id === pendingCompletion.id);
@@ -205,7 +198,6 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
     setPendingCompletion(null);
   };
 
-  // 2. Confirm Send (Send to Client)
   const handleConfirmSend = () => {
     if (!pendingSend) return;
     const project = projects.find(p => p.id === pendingSend.id);
@@ -223,60 +215,40 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
     setPendingSend(null);
   };
 
-  // 3. Confirm Approval (Positive Feedback)
   const handleConfirmApproval = () => {
     if (!pendingApproval) return;
     const project = projects.find(p => p.id === pendingApproval.id);
     if (project) {
-        // Validation: Date cannot be before Send Date
         if (project.sendDate && pendingApproval.date < project.sendDate) {
             alert(`Data Inválida: A data de aprovação não pode ser anterior à data de envio (${formatDateDisplay(project.sendDate)}).`);
             return;
         }
-
-        // Auto Calc Blocked Days (Feedback Date - Send Date)
         let blockedDays = project.blockedDays;
         if (project.sendDate) {
             const send = parseISO(project.sendDate);
             const approval = parseISO(pendingApproval.date);
             blockedDays = calculateBusinessDaysWithHolidays(send, approval, holidays);
         }
-
-      onUpdate({ 
-          ...project, 
-          status: Status.APPROVED, 
-          feedbackDate: pendingApproval.date,
-          blockedDays: blockedDays
-      });
+      onUpdate({ ...project, status: Status.APPROVED, feedbackDate: pendingApproval.date, blockedDays: blockedDays });
     }
     setPendingApproval(null);
   };
 
-  // 4. Confirm Rejection (Negative Feedback)
   const handleConfirmRejection = () => {
     if (!pendingRejection) return;
     const project = projects.find(p => p.id === pendingRejection.id);
     if (project) {
-        // Validation: Date cannot be before Send Date
         if (project.sendDate && pendingRejection.date < project.sendDate) {
              alert(`Data Inválida: A data de reprovação não pode ser anterior à data de envio (${formatDateDisplay(project.sendDate)}).`);
              return;
         }
-
-        // Auto Calc Blocked Days (Feedback Date - Send Date)
         let blockedDays = project.blockedDays;
         if (project.sendDate) {
             const send = parseISO(project.sendDate);
             const rejection = parseISO(pendingRejection.date);
             blockedDays = calculateBusinessDaysWithHolidays(send, rejection, holidays);
         }
-
-        onUpdate({
-            ...project,
-            status: Status.REJECTED,
-            feedbackDate: pendingRejection.date,
-            blockedDays: blockedDays
-        });
+        onUpdate({ ...project, status: Status.REJECTED, feedbackDate: pendingRejection.date, blockedDays: blockedDays });
     }
     setPendingRejection(null);
   }
@@ -298,8 +270,44 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
 
   const updateEditingField = (field: keyof ProjectFile, value: any) => {
     if (!editingProject) return;
+    
+    // Create a copy of the project with the new value applied first
     let updated = { ...editingProject, [field]: value };
-    // Basic date validations could go here
+    
+    // STRICT STATUS LOGIC: Status is derived from dates
+    // 1. Feedback Date Exists -> APPROVED or REJECTED
+    if (updated.feedbackDate) {
+        // If the status was already REJECTED, keep it. Otherwise, default to APPROVED.
+        // This allows the user to switch between Approved/Rejected manually if the date exists.
+        if (updated.status !== Status.REJECTED && updated.status !== Status.APPROVED) {
+            updated.status = Status.APPROVED;
+        }
+        // If the user clears the feedback date, we fall through to the next check
+    } 
+    else if (updated.sendDate) {
+        // 2. Send Date Exists -> WAITING APPROVAL
+        updated.status = Status.WAITING_APPROVAL;
+    }
+    else if (updated.endDate) {
+        // 3. End Date Exists -> DONE
+        updated.status = Status.DONE;
+    }
+    else {
+        // 4. Fallback to IN PROGRESS
+        updated.status = Status.IN_PROGRESS;
+    }
+
+    // Special Case: If user is manually changing STATUS (via dropdown), allow it ONLY if logic permits.
+    // However, the dropdown will be disabled for non-feedback states in the UI to prevent breaking logic.
+    if (field === 'status') {
+         // If user is trying to set REJECTED/APPROVED, ensure feedback date exists
+         if ((value === Status.APPROVED || value === Status.REJECTED) && !updated.feedbackDate) {
+             // Revert or warn? Since we auto-set dates, this shouldn't happen via UI if we disable it.
+             // We just accept the value if it comes from the enabled dropdown.
+             updated.status = value;
+         }
+    }
+
     setEditingProject(updated);
   };
 
@@ -310,7 +318,6 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
       case Status.WAITING_APPROVAL: return 'text-blue-700 bg-blue-100 border-blue-300 dark:bg-blue-900/40 dark:border-blue-700 dark:text-blue-400';
       case Status.DONE: return 'text-violet-700 bg-violet-100 border-violet-300 dark:bg-violet-900/40 dark:border-violet-700 dark:text-violet-400';
       case Status.IN_PROGRESS: return 'text-brand-700 bg-brand-50 border-brand-200 dark:bg-brand-900/40 dark:border-brand-800 dark:text-brand-400';
-      case Status.TODO: return 'text-slate-500 bg-slate-100 border-slate-200 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400';
       case Status.REVISED: return 'text-slate-500 bg-slate-200 border-slate-300 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-400 line-through decoration-slate-400 decoration-2';
       default: return 'text-amber-600 bg-amber-50 border-amber-200 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-400';
     }
@@ -336,7 +343,8 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
   );
 
   if (projects.length === 0) {
-    return (
+    // ... Empty State ...
+     return (
       <div className="animate-in fade-in zoom-in-95 duration-200">
          <div className="flex items-center justify-between mb-6">
             <div>
@@ -355,8 +363,6 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
       </div>
     );
   }
-
-  const isDefaultView = sortConfig.key === 'filename';
 
   return (
     <div className="animate-in fade-in zoom-in-95 duration-200">
@@ -395,7 +401,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
             <tr>
               {renderHeader("Arquivo", "filename", "min-w-[350px] border-r border-slate-200 dark:border-slate-700/50")}
               {renderHeader("Cliente", "client", "min-w-[150px]")}
-              {renderHeader("Base", "base", "min-w-[100px]")} {/* NEW COLUMN */}
+              {renderHeader("Base", "base", "min-w-[100px]")}
               {renderHeader("Disciplina", "discipline")}
               {renderHeader("Status", "status")}
               {renderHeader("Início", "startDate", "bg-slate-100/50 dark:bg-slate-800/50 border-l border-slate-200 dark:border-slate-700")}
@@ -411,29 +417,17 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
             {sortedProjects.map((project, index) => {
                const revNumber = getRevisionNumber(project.filename);
                const isRevision = revNumber > 0;
-               
                const currentBase = getProjectBaseName(project.filename);
-               
-               // Logic to identify the LATEST version in the group (for Revision Button)
-               // Since sorting is ASC (Orig -> R1 -> R2), the LATEST is the LAST one in the group.
                const nextProject = sortedProjects[index + 1];
                const isLastInGroup = (!nextProject || getProjectBaseName(nextProject.filename) !== currentBase);
-               
-               // Allow branching:
-               // 1. If it's the latest version (Last in group)
-               // 2. OR if it is REJECTED (You might need to branch from a rejected R1 to create R2)
-               // 3. AND it's not already REVISED (If it's revised, it already has a child)
                const canCreateRevision = isLastInGroup || project.status === Status.REJECTED;
 
-               // Feedback Date Color Logic
                let feedbackColorClass = "text-slate-600 dark:text-slate-400";
                if (project.status === Status.APPROVED) feedbackColorClass = "text-emerald-700 dark:text-emerald-400 font-medium";
                if (project.status === Status.REJECTED) feedbackColorClass = "text-rose-700 dark:text-rose-400 font-medium";
 
                return (
               <tr key={project.id} className={`hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors ${isLastInGroup ? 'border-b-4 border-slate-100 dark:border-slate-800' : ''}`}>
-                
-                {/* File Name */}
                 <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200 border-r border-slate-100 dark:border-slate-700/50">
                   <div className="flex items-center space-x-2 overflow-hidden" title={project.filename}>
                     {isRevision && <CornerDownRight size={14} className="text-slate-400 flex-shrink-0" />}
@@ -447,101 +441,50 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                     </span>
                   </div>
                 </td>
-
                 <td className="px-4 py-3 text-slate-600 dark:text-slate-400 truncate max-w-[150px]">{project.client}</td>
-                <td className="px-4 py-3 text-slate-600 dark:text-slate-400 truncate max-w-[100px]">{project.base || '-'}</td> {/* NEW COLUMN CELL */}
+                <td className="px-4 py-3 text-slate-600 dark:text-slate-400 truncate max-w-[100px]">{project.base || '-'}</td>
                 <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{project.discipline}</td>
                 <td className="px-4 py-3">
                   <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${getStatusColor(project.status)}`}>
                     {project.status === Status.DONE ? 'Concluído' : project.status}
                   </span>
                 </td>
-                
                 <td className="px-4 py-3 border-l border-slate-100 dark:border-slate-700/50 text-slate-600 dark:text-slate-400 text-xs">{formatDateDisplay(project.startDate)}</td>
                 <td className="px-4 py-3 border-r border-slate-100 dark:border-slate-700/50 text-slate-600 dark:text-slate-400 text-xs">{formatDateDisplay(project.endDate)}</td>
                 <td className="px-4 py-3 border-l border-brand-50 dark:border-brand-900/20 bg-brand-50/30 dark:bg-brand-900/10 text-brand-700 dark:text-brand-400 text-xs font-medium">{formatDateDisplay(project.sendDate)}</td>
-                
-                {/* Feedback Date Column */}
                 <td className={`px-4 py-3 border-r border-slate-100 dark:border-slate-900/30 bg-slate-50/30 dark:bg-slate-900/10 text-xs ${feedbackColorClass}`}>
                   {formatDateDisplay(project.feedbackDate)}
                 </td>
-
                 <td className="px-4 py-3 text-center"><span className="font-mono text-xs text-slate-700 dark:text-slate-300">{project.blockedDays || '-'}</span></td>
-
-                {/* --- WORKFLOW ACTIONS --- */}
                 <td className="px-4 py-3">
                     <div className="flex items-center justify-center space-x-2">
-                        {/* 1. Complete Execution */}
-                        {(project.status === Status.IN_PROGRESS || project.status === Status.TODO) && (
-                            <button
-                                onClick={() => {
-                                    const today = new Date().toISOString().split('T')[0];
-                                    setPendingCompletion({ id: project.id, date: today });
-                                }}
-                                title="Concluir Execução"
-                                className="p-1.5 bg-violet-50 text-violet-600 hover:bg-violet-100 rounded-md transition-colors border border-violet-200"
-                            >
+                        {project.status === Status.IN_PROGRESS && (
+                            <button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingCompletion({ id: project.id, date: today }); }} title="Concluir Execução" className="p-1.5 bg-violet-50 text-violet-600 hover:bg-violet-100 rounded-md transition-colors border border-violet-200">
                                 <CheckSquare size={16} />
                             </button>
                         )}
-
-                        {/* 2. Send to Client */}
                         {(project.status === Status.DONE) && (
-                            <button
-                                onClick={() => {
-                                    const today = new Date().toISOString().split('T')[0];
-                                    // Default to end date if available and valid, else today
-                                    const defaultDate = (project.endDate && today > project.endDate) ? today : (project.endDate || today);
-                                    setPendingSend({ id: project.id, date: defaultDate });
-                                }}
-                                title="Registrar Envio ao Cliente"
-                                className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md transition-colors border border-blue-200"
-                            >
+                            <button onClick={() => { const today = new Date().toISOString().split('T')[0]; const defaultDate = (project.endDate && today > project.endDate) ? today : (project.endDate || today); setPendingSend({ id: project.id, date: defaultDate }); }} title="Registrar Envio ao Cliente" className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md transition-colors border border-blue-200">
                                 <Send size={16} />
                             </button>
                         )}
-
-                        {/* 3. Approve OR Reject (Only when waiting for approval) */}
                         {project.status === Status.WAITING_APPROVAL && (
                             <>
-                                <button
-                                    onClick={() => {
-                                        const today = new Date().toISOString().split('T')[0];
-                                        setPendingApproval({ id: project.id, date: today });
-                                    }}
-                                    title="Aprovar Projeto"
-                                    className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md transition-colors border border-emerald-200"
-                                >
+                                <button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingApproval({ id: project.id, date: today }); }} title="Aprovar Projeto" className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md transition-colors border border-emerald-200">
                                     <BadgeCheck size={16} />
                                 </button>
-                                
-                                <button
-                                    onClick={() => {
-                                        const today = new Date().toISOString().split('T')[0];
-                                        setPendingRejection({ id: project.id, date: today });
-                                    }}
-                                    title="Reprovar Projeto"
-                                    className="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-md transition-colors border border-rose-200"
-                                >
+                                <button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingRejection({ id: project.id, date: today }); }} title="Reprovar Projeto" className="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-md transition-colors border border-rose-200">
                                     <ThumbsDown size={16} />
                                 </button>
                             </>
                         )}
-
-                        {/* Manual revision/branching */}
-                        {canCreateRevision && project.status !== Status.REVISED && project.status !== Status.WAITING_APPROVAL && (
-                             <button 
-                                onClick={() => setActiveRevModal(project.id)}
-                                title={project.status === Status.REJECTED ? "Gerar Nova Revisão (Pós-Reprovação)" : "Gerar Revisão (Manual)"}
-                                className={`p-1.5 rounded-md transition-colors border ${project.status === Status.REJECTED ? 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100' : 'text-slate-400 hover:text-brand-600 border-transparent hover:bg-brand-50'}`}
-                             >
+                        {canCreateRevision && project.sendDate && project.status !== Status.REVISED && project.status !== Status.WAITING_APPROVAL && (
+                             <button onClick={() => setActiveRevModal(project.id)} title={project.status === Status.REJECTED ? "Gerar Nova Revisão (Pós-Reprovação)" : "Gerar Revisão"} className={`p-1.5 rounded-md transition-colors border ${project.status === Status.REJECTED ? 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100' : 'text-slate-400 hover:text-brand-600 border-transparent hover:bg-brand-50'}`}>
                                <GitBranch size={16} />
                              </button>
                         )}
                     </div>
                 </td>
-
-                {/* CRUD Actions */}
                 <td className="px-4 py-3 text-right">
                   <div className="flex items-center justify-end space-x-1">
                     <button onClick={() => setDetailsProject(project)} className="p-1.5 text-slate-400 hover:text-violet-500 rounded-full hover:bg-violet-50 transition-colors"><Eye size={16} /></button>
@@ -554,133 +497,16 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
             })}
              {sortedProjects.length === 0 && (
                 <tr>
-                  <td colSpan={13} className="px-6 py-10 text-center text-slate-400 italic">
-                    Nenhum registro encontrado.
-                  </td>
+                  <td colSpan={13} className="px-6 py-10 text-center text-slate-400 italic">Nenhum registro encontrado.</td>
                 </tr>
               )}
           </tbody>
         </table>
       </div>
       </div>
-
-      {/* ... MODALS (Kept the same) ... */}
       
-      {/* 1. COMPLETION Modal */}
-      {pendingCompletion && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-sm w-full p-6 border dark:border-slate-700">
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="bg-violet-100 dark:bg-violet-900/30 p-2 rounded-full text-violet-600 dark:text-violet-400">
-                <CheckSquare size={24} />
-              </div>
-              <h3 className="text-lg font-bold text-slate-800 dark:text-white">Concluir Execução</h3>
-            </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Defina a data em que o desenho/projeto foi finalizado.</p>
-            <input type="date" value={pendingCompletion.date} onChange={(e) => setPendingCompletion(prev => prev ? { ...prev, date: e.target.value } : null)} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 mb-6 dark:[color-scheme:dark]" />
-            <div className="flex justify-end space-x-3">
-              <button onClick={() => setPendingCompletion(null)} className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancelar</button>
-              <button onClick={handleConfirmCompletion} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg shadow-md font-medium">Concluir</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 2. SEND Modal */}
-      {pendingSend && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-sm w-full p-6 border dark:border-slate-700">
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-full text-blue-600 dark:text-blue-400">
-                <Send size={24} />
-              </div>
-              <h3 className="text-lg font-bold text-slate-800 dark:text-white">Registrar Envio</h3>
-            </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Quando este projeto foi enviado para o cliente?</p>
-            <input type="date" value={pendingSend.date} onChange={(e) => setPendingSend(prev => prev ? { ...prev, date: e.target.value } : null)} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 mb-6 dark:[color-scheme:dark]" />
-            <div className="flex justify-end space-x-3">
-              <button onClick={() => setPendingSend(null)} className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancelar</button>
-              <button onClick={handleConfirmSend} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-md font-medium">Confirmar Envio</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 3. APPROVAL Modal */}
-      {pendingApproval && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-sm w-full p-6 border dark:border-slate-700">
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="bg-emerald-100 dark:bg-emerald-900/30 p-2 rounded-full text-emerald-600 dark:text-emerald-400">
-                <BadgeCheck size={24} />
-              </div>
-              <h3 className="text-lg font-bold text-slate-800 dark:text-white">Registrar Aprovação</h3>
-            </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">O projeto foi aprovado. Confirme a data para calcular o tempo de feedback.</p>
-            <input type="date" value={pendingApproval.date} onChange={(e) => setPendingApproval(prev => prev ? { ...prev, date: e.target.value } : null)} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 mb-6 dark:[color-scheme:dark]" />
-            <div className="flex justify-end space-x-3">
-              <button onClick={() => setPendingApproval(null)} className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancelar</button>
-              <button onClick={handleConfirmApproval} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-md font-medium">Aprovar Projeto</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 4. REJECTION Modal */}
-      {pendingRejection && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-sm w-full p-6 border dark:border-slate-700">
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="bg-rose-100 dark:bg-rose-900/30 p-2 rounded-full text-rose-600 dark:text-rose-400">
-                <ThumbsDown size={24} />
-              </div>
-              <h3 className="text-lg font-bold text-slate-800 dark:text-white">Registrar Reprovação</h3>
-            </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-              O projeto foi reprovado? Registre a data do feedback.
-              <br/><span className="text-xs text-rose-500 italic mt-1 block">O status mudará para Reprovado e a opção de Aprovação será removida.</span>
-            </p>
-            <input type="date" value={pendingRejection.date} onChange={(e) => setPendingRejection(prev => prev ? { ...prev, date: e.target.value } : null)} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 mb-6 dark:[color-scheme:dark]" />
-            <div className="flex justify-end space-x-3">
-              <button onClick={() => setPendingRejection(null)} className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancelar</button>
-              <button onClick={handleConfirmRejection} className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg shadow-md font-medium">Reprovar</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 5. NEW REVISION Modal (Branch) */}
-      {activeRevModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-md w-full p-6 border dark:border-slate-700">
-            <div className="flex items-center space-x-3 mb-4">
-                <div className="bg-amber-100 dark:bg-amber-900/30 p-2 rounded-full text-amber-600 dark:text-amber-400">
-                    <GitBranch size={24} />
-                </div>
-                <h3 className="text-lg font-bold text-slate-800 dark:text-white">Gerar Nova Versão</h3>
-            </div>
-            
-            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 bg-slate-50 dark:bg-slate-900/50 text-slate-700 dark:text-slate-300 p-3 rounded-lg border border-slate-100 dark:border-slate-700">
-              Isso criará um novo registro (Ex: [R1]) para correção, reiniciando o ciclo de trabalho.
-            </p>
-            
-            <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Motivo da Nova Versão</label>
-            <select value={revReason} onChange={(e) => setRevReason(e.target.value as RevisionReason)} className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 mb-4">
-              {Object.values(RevisionReason).map(r => <option key={r} value={r}>{r}</option>)}
-            </select>
-
-            <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Comentários</label>
-            <textarea value={revComment} onChange={(e) => setRevComment(e.target.value)} className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 mb-6 h-24 resize-none" placeholder="O que será corrigido?" />
-
-            <div className="flex justify-end space-x-3">
-              <button onClick={() => setActiveRevModal(null)} className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancelar</button>
-              <button onClick={handleRevisionSubmit} className="px-4 py-2 bg-brand-700 text-white rounded-lg hover:bg-brand-800 shadow-md">Gerar Nova Versão</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Project Modal */}
+      {/* ... (Existing Modals: editingProject, pendingCompletion, pendingSend, etc...) */}
+      
       {editingProject && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-2xl w-full p-6 border dark:border-slate-700 flex flex-col max-h-[90vh] overflow-y-auto">
@@ -711,10 +537,19 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                    </select>
                 </div>
                 <div>
-                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Status</label>
-                   <select value={editingProject.status} onChange={(e) => updateEditingField('status', e.target.value)} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2">
+                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      Status <span className="text-xs font-normal text-slate-400 ml-1">(Calculado automaticamente)</span>
+                   </label>
+                   <select 
+                     value={editingProject.status} 
+                     onChange={(e) => updateEditingField('status', e.target.value)} 
+                     disabled={!editingProject.feedbackDate}
+                     className="w-full border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-lg px-3 py-2 cursor-not-allowed disabled:opacity-70"
+                   >
                      {Object.values(Status).map(s => <option key={s} value={s}>{s}</option>)}
                    </select>
+                   {!editingProject.feedbackDate && <p className="text-xs text-brand-600 mt-1">Status bloqueado. Preencha as datas para avançar etapas.</p>}
+                   {editingProject.feedbackDate && <p className="text-xs text-emerald-600 mt-1">Desbloqueado: Você pode alternar entre Aprovado e Reprovado.</p>}
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Data Início</label>
@@ -739,6 +574,119 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
         </div>
       )}
 
+      {/* Completion Modal */}
+      {pendingCompletion && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-sm w-full p-6 border dark:border-slate-700">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="bg-violet-100 dark:bg-violet-900/30 p-2 rounded-full text-violet-600 dark:text-violet-400">
+                <CheckSquare size={24} />
+              </div>
+              <h3 className="text-lg font-bold text-slate-800 dark:text-white">Concluir Execução</h3>
+            </div>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Defina a data em que o desenho/projeto foi finalizado.</p>
+            <input type="date" value={pendingCompletion.date} onChange={(e) => setPendingCompletion(prev => prev ? { ...prev, date: e.target.value } : null)} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 mb-6 dark:[color-scheme:dark]" />
+            <div className="flex justify-end space-x-3">
+              <button onClick={() => setPendingCompletion(null)} className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancelar</button>
+              <button onClick={handleConfirmCompletion} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg shadow-md font-medium">Concluir</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Other Modals (Send, Approval, Rejection, Revision, Delete, History, Details) remain unchanged in logic but included to complete file structure */}
+      {/* ... keeping Send, Approval, Rejection, Revision, Delete, History, Details Modals same as before ... */}
+      
+      {/* SEND Modal */}
+      {pendingSend && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-sm w-full p-6 border dark:border-slate-700">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-full text-blue-600 dark:text-blue-400">
+                <Send size={24} />
+              </div>
+              <h3 className="text-lg font-bold text-slate-800 dark:text-white">Registrar Envio</h3>
+            </div>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Quando este projeto foi enviado para o cliente?</p>
+            <input type="date" value={pendingSend.date} onChange={(e) => setPendingSend(prev => prev ? { ...prev, date: e.target.value } : null)} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 mb-6 dark:[color-scheme:dark]" />
+            <div className="flex justify-end space-x-3">
+              <button onClick={() => setPendingSend(null)} className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancelar</button>
+              <button onClick={handleConfirmSend} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-md font-medium">Confirmar Envio</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* APPROVAL Modal */}
+      {pendingApproval && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-sm w-full p-6 border dark:border-slate-700">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="bg-emerald-100 dark:bg-emerald-900/30 p-2 rounded-full text-emerald-600 dark:text-emerald-400">
+                <BadgeCheck size={24} />
+              </div>
+              <h3 className="text-lg font-bold text-slate-800 dark:text-white">Registrar Aprovação</h3>
+            </div>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">O projeto foi aprovado. Confirme a data para calcular o tempo de feedback.</p>
+            <input type="date" value={pendingApproval.date} onChange={(e) => setPendingApproval(prev => prev ? { ...prev, date: e.target.value } : null)} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 mb-6 dark:[color-scheme:dark]" />
+            <div className="flex justify-end space-x-3">
+              <button onClick={() => setPendingApproval(null)} className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancelar</button>
+              <button onClick={handleConfirmApproval} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-md font-medium">Aprovar Projeto</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* REJECTION Modal */}
+      {pendingRejection && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-sm w-full p-6 border dark:border-slate-700">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="bg-rose-100 dark:bg-rose-900/30 p-2 rounded-full text-rose-600 dark:text-rose-400">
+                <ThumbsDown size={24} />
+              </div>
+              <h3 className="text-lg font-bold text-slate-800 dark:text-white">Registrar Reprovação</h3>
+            </div>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+              O projeto foi reprovado? Registre a data do feedback.
+              <br/><span className="text-xs text-rose-500 italic mt-1 block">O status mudará para Reprovado e a opção de Aprovação será removida.</span>
+            </p>
+            <input type="date" value={pendingRejection.date} onChange={(e) => setPendingRejection(prev => prev ? { ...prev, date: e.target.value } : null)} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 mb-6 dark:[color-scheme:dark]" />
+            <div className="flex justify-end space-x-3">
+              <button onClick={() => setPendingRejection(null)} className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancelar</button>
+              <button onClick={handleConfirmRejection} className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg shadow-md font-medium">Reprovar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NEW REVISION Modal */}
+      {activeRevModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-md w-full p-6 border dark:border-slate-700">
+            <div className="flex items-center space-x-3 mb-4">
+                <div className="bg-amber-100 dark:bg-amber-900/30 p-2 rounded-full text-amber-600 dark:text-amber-400">
+                    <GitBranch size={24} />
+                </div>
+                <h3 className="text-lg font-bold text-slate-800 dark:text-white">Gerar Nova Versão</h3>
+            </div>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 bg-slate-50 dark:bg-slate-900/50 text-slate-700 dark:text-slate-300 p-3 rounded-lg border border-slate-100 dark:border-slate-700">
+              Isso criará um novo registro (Ex: [R1]) para correção, reiniciando o ciclo de trabalho.
+            </p>
+            <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Motivo da Nova Versão</label>
+            <select value={revReason} onChange={(e) => setRevReason(e.target.value as RevisionReason)} className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 mb-4">
+              {Object.values(RevisionReason).map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Comentários</label>
+            <textarea value={revComment} onChange={(e) => setRevComment(e.target.value)} className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 mb-6 h-24 resize-none" placeholder="O que será corrigido?" />
+            <div className="flex justify-end space-x-3">
+              <button onClick={() => setActiveRevModal(null)} className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancelar</button>
+              <button onClick={handleRevisionSubmit} className="px-4 py-2 bg-brand-700 text-white rounded-lg hover:bg-brand-800 shadow-md">Gerar Nova Versão</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete Confirmation Modal */}
       {projectToDelete && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
@@ -756,7 +704,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
         </div>
       )}
 
-      {/* View History Modal */}
+       {/* View History Modal */}
        {viewHistoryProject && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-lg w-full p-6 border dark:border-slate-700 flex flex-col max-h-[80vh]">
@@ -804,6 +752,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
       {detailsProject && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-4xl w-full p-0 border dark:border-slate-700 flex flex-col max-h-[90vh] overflow-hidden">
+             {/* Header and content same as previous */}
              <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-start bg-slate-50 dark:bg-slate-700/30">
                 <div>
                    <h3 className="text-2xl font-bold text-slate-800 dark:text-white break-all">{detailsProject.filename}</h3>
@@ -814,7 +763,9 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                 </div>
                 <button onClick={() => setDetailsProject(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"><X size={28} /></button>
              </div>
+             {/* ... rest of detail modal ... */}
              <div className="overflow-y-auto p-6 space-y-8">
+                {/* Same grid layout */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                    <div className="p-4 bg-slate-50 dark:bg-slate-700/40 rounded-lg border border-slate-100 dark:border-slate-700/50">
                       <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase block mb-1">Cliente</span>
@@ -837,6 +788,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                       <span className="text-lg font-semibold text-slate-800 dark:text-slate-100">R{getRevisionNumber(detailsProject.filename)}</span>
                    </div>
                 </div>
+                {/* Timeline */}
                 <div>
                    <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4">Linha do Tempo</h4>
                    <div className="flex flex-col md:flex-row justify-between items-center md:items-start bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6 relative overflow-hidden">
@@ -869,6 +821,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                       </div>
                    </div>
                 </div>
+                {/* Revisions History */}
                 <div>
                   <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4">Histórico Completo de Revisões</h4>
                   {detailsHistory.length === 0 ? (
