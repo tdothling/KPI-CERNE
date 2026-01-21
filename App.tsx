@@ -766,6 +766,7 @@ export default function App() {
                     onUpdate={handleUpdatePurchase}
                     onDelete={handleDeletePurchase}
                     currentUser={currentUser ? formatUsername(currentUser.email) : ''}
+                    holidays={holidays}
                 />
              </div>
           )}

@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo } from 'react';
 import { PurchaseDoc, PurchaseStatus } from '../types';
-import { Trash2, Edit2, ShoppingCart, Search, Plus, ExternalLink, CheckCircle2, Clock, Truck, XCircle, Tag, MapPin, Briefcase, Calendar, ArrowRight } from 'lucide-react';
-import { format, parseISO, isValid, differenceInCalendarDays } from 'date-fns';
+import { Trash2, Edit2, ShoppingCart, Search, Plus, ExternalLink, CheckCircle2, Clock, Truck, XCircle, Tag, MapPin, Briefcase, Calendar, ArrowRight, CreditCard, CheckSquare } from 'lucide-react';
+import { format, parseISO, isValid, differenceInBusinessDays, isWeekend, isWithinInterval } from 'date-fns';
 
 interface PurchaseListProps {
   purchases: PurchaseDoc[];
@@ -10,6 +10,7 @@ interface PurchaseListProps {
   onUpdate: (updated: PurchaseDoc) => void;
   onDelete: (id: string) => void;
   currentUser: string; 
+  holidays: string[];
 }
 
 const formatDateDisplay = (dateStr: string) => {
@@ -18,10 +19,36 @@ const formatDateDisplay = (dateStr: string) => {
     return isValid(date) ? format(date, 'dd/MM/yyyy') : '-';
 };
 
-export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, onUpdate, onDelete, currentUser }) => {
+// Helper: Calculate business duration (Lead Time)
+const calculateBusinessDays = (start: Date, end: Date, holidays: string[]) => {
+    if (!isValid(start) || !isValid(end)) return 0;
+    
+    // Ensure end >= start for valid calculation, otherwise 0
+    if (end < start) return 0;
+
+    let days = differenceInBusinessDays(end, start);
+    
+    let holidaysOnWeekdays = 0;
+    holidays.forEach(h => {
+        const hDate = parseISO(h);
+        if (isValid(hDate) && isWithinInterval(hDate, { start, end })) {
+            if (!isWeekend(hDate)) {
+                holidaysOnWeekdays++;
+            }
+        }
+    });
+
+    return Math.max(0, days - holidaysOnWeekdays);
+};
+
+export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, onUpdate, onDelete, currentUser, holidays }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+
+  // Workflow States
+  const [pendingBuy, setPendingBuy] = useState<{ id: string, date: string } | null>(null);
+  const [pendingDelivery, setPendingDelivery] = useState<{ id: string, date: string } | null>(null);
 
   const [formData, setFormData] = useState<Omit<PurchaseDoc, 'id'>>({
     description: '',
@@ -96,6 +123,32 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, on
       setIsModalOpen(false);
   };
 
+  const handleConfirmBuy = () => {
+    if (!pendingBuy) return;
+    const item = purchases.find(p => p.id === pendingBuy.id);
+    if (item) {
+        onUpdate({ ...item, status: PurchaseStatus.BOUGHT });
+    }
+    setPendingBuy(null);
+  };
+
+  const handleConfirmDelivery = () => {
+    if (!pendingDelivery) return;
+    const item = purchases.find(p => p.id === pendingDelivery.id);
+    if (item) {
+        if (item.requestDate && pendingDelivery.date < item.requestDate) {
+            alert("A data de entrega não pode ser anterior à data do pedido.");
+            return;
+        }
+        onUpdate({ 
+            ...item, 
+            status: PurchaseStatus.DELIVERED, 
+            arrivalDate: pendingDelivery.date 
+        });
+    }
+    setPendingDelivery(null);
+  };
+
   const getStatusColor = (status: PurchaseStatus) => {
       switch(status) {
           case PurchaseStatus.DELIVERED: return 'text-emerald-700 bg-emerald-100 border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-400';
@@ -106,23 +159,13 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, on
       }
   };
 
-  const nextStatus = (current: PurchaseStatus): PurchaseStatus => {
-      const flow = [PurchaseStatus.PENDING, PurchaseStatus.BOUGHT, PurchaseStatus.DELIVERED];
-      const idx = flow.indexOf(current);
-      if (idx === -1 || idx === flow.length - 1) return current;
-      return flow[idx + 1];
-  };
-
-  // Calcula dias entre pedido e chegada (Lead Time) ou dias decorridos desde o pedido
+  // Calcula dias ÚTEIS entre pedido e chegada (Lead Time) ou dias decorridos desde o pedido
   const getLeadTime = (start: string, end: string) => {
       if (!start) return null;
       const startDate = parseISO(start);
       const endDate = end ? parseISO(end) : new Date(); // Se não chegou, conta até hoje
       
-      if (!isValid(startDate) || !isValid(endDate)) return null;
-      
-      const diff = differenceInCalendarDays(endDate, startDate);
-      return diff;
+      return calculateBusinessDays(startDate, endDate, holidays);
   };
 
   return (
@@ -166,12 +209,13 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, on
                 <table className="w-full text-sm text-left">
                     <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-500 dark:text-slate-400 uppercase text-xs border-b border-slate-200 dark:border-slate-700">
                         <tr>
-                            <th className="px-6 py-3 w-[30%]">Solicitação</th>
+                            <th className="px-6 py-3 w-[25%]">Solicitação</th>
                             <th className="px-6 py-3 w-[20%]">Destino</th>
-                            <th className="px-6 py-3 w-[20%]">Aplicação</th>
-                            <th className="px-6 py-3 w-[15%]">Ciclo (Datas)</th>
+                            <th className="px-6 py-3 w-[15%]">Aplicação</th>
+                            <th className="px-6 py-3 w-[20%]">Ciclo (Dias Úteis)</th>
                             <th className="px-6 py-3 w-[10%] text-center">Status</th>
-                            <th className="px-6 py-3 w-[5%] text-right">Ações</th>
+                            <th className="px-6 py-3 w-[5%] text-center">Fluxo</th>
+                            <th className="px-6 py-3 w-[5%] text-right">Editar</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
@@ -230,7 +274,7 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, on
                                         </div>
                                         {p.status === PurchaseStatus.DELIVERED && p.arrivalDate && (
                                             <span className="text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-500 px-1.5 py-0.5 rounded self-start">
-                                                Lead Time: {leadTime} dias
+                                                Lead Time: {leadTime} dias úteis
                                             </span>
                                         )}
                                         {p.status !== PurchaseStatus.DELIVERED && p.status !== PurchaseStatus.CANCELED && (
@@ -241,31 +285,44 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, on
                                     </div>
                                 </td>
 
-                                {/* Status */}
+                                {/* Status Badge (Static) */}
                                 <td className="px-6 py-4 text-center">
-                                     <button 
-                                        onClick={() => {
-                                            const next = nextStatus(p.status);
-                                            const updates: Partial<PurchaseDoc> = { status: next };
-                                            // Auto-fill arrival date if delivered
-                                            if (next === PurchaseStatus.DELIVERED && !p.arrivalDate) {
-                                                updates.arrivalDate = new Date().toISOString().split('T')[0];
-                                            }
-                                            onUpdate({ ...p, ...updates });
-                                        }}
-                                        disabled={p.status === PurchaseStatus.DELIVERED || p.status === PurchaseStatus.CANCELED}
-                                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border cursor-pointer hover:opacity-80 transition-opacity ${getStatusColor(p.status)}`}
-                                        title={p.status !== PurchaseStatus.DELIVERED ? "Clique para avançar etapa" : ""}
+                                     <span 
+                                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(p.status)}`}
                                      >
                                         {p.status === PurchaseStatus.PENDING && <Clock size={12} />}
                                         {p.status === PurchaseStatus.BOUGHT && <Truck size={12} />}
                                         {p.status === PurchaseStatus.DELIVERED && <CheckCircle2 size={12} />}
                                         {p.status === PurchaseStatus.CANCELED && <XCircle size={12} />}
                                         {p.status}
-                                     </button>
+                                     </span>
                                 </td>
 
-                                {/* Ações */}
+                                {/* Ações de Fluxo */}
+                                <td className="px-6 py-4 text-center">
+                                    <div className="flex items-center justify-center gap-2">
+                                        {p.status === PurchaseStatus.PENDING && (
+                                            <button 
+                                                onClick={() => setPendingBuy({ id: p.id, date: new Date().toISOString().split('T')[0] })}
+                                                title="Registrar Compra"
+                                                className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md transition-colors border border-blue-200"
+                                            >
+                                                <CreditCard size={16} />
+                                            </button>
+                                        )}
+                                        {p.status === PurchaseStatus.BOUGHT && (
+                                            <button 
+                                                onClick={() => setPendingDelivery({ id: p.id, date: new Date().toISOString().split('T')[0] })}
+                                                title="Registrar Chegada (Entrega)"
+                                                className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md transition-colors border border-emerald-200"
+                                            >
+                                                <CheckSquare size={16} />
+                                            </button>
+                                        )}
+                                    </div>
+                                </td>
+
+                                {/* Editar / Excluir */}
                                 <td className="px-6 py-4 text-right">
                                     <div className="flex items-center justify-end space-x-2">
                                         <button onClick={() => handleOpenModal(p)} className="p-1.5 text-slate-400 hover:text-brand-600 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
@@ -281,7 +338,7 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, on
                         })}
                          {filteredPurchases.length === 0 && (
                             <tr>
-                                <td colSpan={6} className="px-6 py-10 text-center text-slate-400 italic">
+                                <td colSpan={7} className="px-6 py-10 text-center text-slate-400 italic">
                                     Nenhuma solicitação encontrada.
                                 </td>
                             </tr>
@@ -291,7 +348,7 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, on
              </div>
         </div>
 
-        {/* MODAL */}
+        {/* MODAL: Nova / Editar */}
         {isModalOpen && (
              <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
                  <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-lg w-full p-6 border dark:border-slate-700 flex flex-col max-h-[90vh] overflow-y-auto">
@@ -433,6 +490,50 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, on
                     </form>
                  </div>
              </div>
+        )}
+
+        {/* Modal: Confirm Buy */}
+        {pendingBuy && (
+            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-sm w-full p-6 border dark:border-slate-700">
+                    <div className="flex items-center space-x-3 mb-4">
+                        <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-full text-blue-600 dark:text-blue-400">
+                            <CreditCard size={24} />
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-800 dark:text-white">Registrar Compra</h3>
+                    </div>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">A compra já foi realizada no fornecedor?</p>
+                    <div className="flex justify-end space-x-3">
+                        <button onClick={() => setPendingBuy(null)} className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancelar</button>
+                        <button onClick={handleConfirmBuy} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-md font-medium">Confirmar</button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* Modal: Confirm Delivery */}
+        {pendingDelivery && (
+            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-sm w-full p-6 border dark:border-slate-700">
+                    <div className="flex items-center space-x-3 mb-4">
+                        <div className="bg-emerald-100 dark:bg-emerald-900/30 p-2 rounded-full text-emerald-600 dark:text-emerald-400">
+                            <CheckSquare size={24} />
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-800 dark:text-white">Registrar Entrega</h3>
+                    </div>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Quando o material chegou na base?</p>
+                    <input 
+                        type="date" 
+                        value={pendingDelivery.date} 
+                        onChange={(e) => setPendingDelivery(prev => prev ? { ...prev, date: e.target.value } : null)} 
+                        className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 mb-6 dark:[color-scheme:dark]" 
+                    />
+                    <div className="flex justify-end space-x-3">
+                        <button onClick={() => setPendingDelivery(null)} className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancelar</button>
+                        <button onClick={handleConfirmDelivery} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-md font-medium">Confirmar Chegada</button>
+                    </div>
+                </div>
+            </div>
         )}
     </div>
   );
