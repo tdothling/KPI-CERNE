@@ -8,7 +8,8 @@ import { BatchEditModal } from './components/BatchEditModal';
 import { HolidayManagerModal } from './components/HolidayManagerModal';
 import { DateRangeFilter } from './components/DateRangeFilter';
 import { MaterialList } from './components/MaterialList';
-import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Package, FileSpreadsheet, Database } from 'lucide-react';
+import { LoginModal } from './components/LoginModal'; // Import Modal
+import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Package, FileSpreadsheet, Database, LogIn, LogOut, User as UserIcon } from 'lucide-react';
 import { 
   parseISO, 
   isValid,
@@ -39,7 +40,11 @@ import {
   subscribeToHolidays,
   saveHolidaysToDb
 } from './services/db';
+
+// Import Auth Service
+import { subscribeToAuth, logoutUser, formatUsername } from './services/auth';
 import { db } from './firebase';
+import { User } from 'firebase/auth';
 
 // Custom CERNE Logo Component
 const CerneLogo = () => (
@@ -129,6 +134,10 @@ export default function App() {
   
   const [dbConnected, setDbConnected] = useState(false);
 
+  // User Auth State
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+
   // --- FIREBASE SUBSCRIPTIONS ---
   useEffect(() => {
     // Check if config exists
@@ -141,11 +150,13 @@ export default function App() {
     const unsubProjects = subscribeToProjects(setProjects);
     const unsubMaterials = subscribeToMaterials(setMaterials);
     const unsubHolidays = subscribeToHolidays(setHolidays);
+    const unsubAuth = subscribeToAuth(setCurrentUser);
 
     return () => {
         unsubProjects();
         unsubMaterials();
         unsubHolidays();
+        unsubAuth();
     };
   }, []);
 
@@ -537,8 +548,33 @@ export default function App() {
             {!dbConnected && (
                 <div className="hidden lg:flex items-center text-rose-600 bg-rose-50 px-3 py-1 rounded-full text-xs font-bold animate-pulse border border-rose-200">
                     <Database size={14} className="mr-1" />
-                    DB Desconectado (Configure firebase.ts)
+                    DB Desconectado
                 </div>
+            )}
+
+            {/* Login / User Profile */}
+            {currentUser ? (
+              <div className="hidden sm:flex items-center gap-3 pl-3 border-l border-slate-200 dark:border-slate-700">
+                 <div className="flex flex-col items-end">
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{formatUsername(currentUser.email)}</span>
+                    <span className="text-[10px] text-slate-400">Online</span>
+                 </div>
+                 <button 
+                  onClick={logoutUser}
+                  className="p-2 bg-slate-100 dark:bg-slate-700 hover:bg-rose-50 dark:hover:bg-rose-900/30 text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg transition-colors"
+                  title="Sair"
+                 >
+                    <LogOut size={18} />
+                 </button>
+              </div>
+            ) : (
+               <button 
+                onClick={() => setIsLoginModalOpen(true)}
+                className="hidden sm:flex items-center gap-2 bg-brand-50 hover:bg-brand-100 dark:bg-brand-900/20 dark:hover:bg-brand-900/40 text-brand-700 dark:text-brand-400 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border border-brand-100 dark:border-brand-900/30"
+               >
+                 <LogIn size={16} />
+                 <span>Entrar</span>
+               </button>
             )}
 
             <button onClick={toggleTheme} className="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
@@ -632,6 +668,29 @@ export default function App() {
                   {uniqueClients.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
             </div>
+            
+            {/* Mobile Login Button (Only visible on small screens) */}
+            {!currentUser && (
+               <button 
+                onClick={() => setIsLoginModalOpen(true)}
+                className="md:hidden w-full flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 dark:bg-brand-900/20 dark:hover:bg-brand-900/40 text-brand-700 dark:text-brand-400 px-3 py-2 rounded-lg text-sm font-medium transition-colors border border-brand-100 dark:border-brand-900/30"
+               >
+                 <LogIn size={16} />
+                 <span>Entrar</span>
+               </button>
+            )}
+            {currentUser && (
+                <div className="md:hidden w-full flex items-center justify-between bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-lg">
+                    <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{formatUsername(currentUser.email)}</span>
+                     <button 
+                      onClick={logoutUser}
+                      className="text-rose-600 dark:text-rose-400 text-xs font-bold uppercase"
+                     >
+                        Sair
+                     </button>
+                </div>
+            )}
+
             <DateRangeFilter filterType={dateFilterType} setFilterType={setDateFilterType} referenceDate={referenceDate} setReferenceDate={setReferenceDate} customRange={customRange} setCustomRange={setCustomRange} />
           </div>
         </div>
@@ -811,6 +870,14 @@ export default function App() {
       {/* Holiday Manager Modal */}
       {isHolidayManagerOpen && (
         <HolidayManagerModal holidays={holidays} onUpdateHolidays={handleUpdateHolidays} onClose={() => setIsHolidayManagerOpen(false)} />
+      )}
+
+      {/* Login Modal */}
+      {isLoginModalOpen && (
+        <LoginModal 
+            onClose={() => setIsLoginModalOpen(false)} 
+            onLoginSuccess={() => setIsLoginModalOpen(false)} 
+        />
       )}
     </div>
   );

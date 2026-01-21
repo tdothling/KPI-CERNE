@@ -1,6 +1,7 @@
 
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 
 // --- CONFIGURAÇÃO DO FIREBASE ---
 // Conectado ao projeto: kpi---engenharia-cerne
@@ -17,13 +18,15 @@ const firebaseConfig = {
 
 // Inicialização
 let db: any = null;
+let auth: any = null;
 
 try {
     const app = initializeApp(firebaseConfig);
     db = getFirestore(app);
+    auth = getAuth(app);
     console.log("Firebase conectado com sucesso ao projeto:", firebaseConfig.projectId);
 } catch (e) {
     console.error("Erro ao inicializar Firebase:", e);
 }
 
-export { db };
+export { db, auth };
