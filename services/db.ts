@@ -1,3 +1,4 @@
+
 import { db } from "../firebase";
 import { 
   collection, 
@@ -41,7 +42,10 @@ export const subscribeToProjects = (callback: (data: ProjectFile[]) => void) => 
   const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
     const projects: ProjectFile[] = [];
     snapshot.forEach((doc) => {
-      projects.push({ id: doc.id, ...doc.data() } as ProjectFile);
+      // FIX: Ensure we do not overwrite the real doc ID with an 'id' field from data
+      const data = doc.data();
+      if ('id' in data) delete data.id; 
+      projects.push({ id: doc.id, ...data } as ProjectFile);
     });
     callback(projects);
   });
@@ -52,7 +56,9 @@ export const subscribeToProjects = (callback: (data: ProjectFile[]) => void) => 
 export const addProject = async (project: Omit<ProjectFile, 'id'>) => {
   if (!isDbActive()) return;
   try {
-    await addDoc(collection(db, COLL_PROJECTS), project);
+    // Double check to ensure we don't save 'id' field
+    const { id, ...cleanProject } = project as any;
+    await addDoc(collection(db, COLL_PROJECTS), cleanProject);
   } catch (e) {
     console.error("Erro ao adicionar projeto:", e);
     alert("Erro ao salvar no banco de dados. Verifique o console.");
@@ -89,7 +95,10 @@ export const subscribeToMaterials = (callback: (data: MaterialDoc[]) => void) =>
   const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
     const materials: MaterialDoc[] = [];
     snapshot.forEach((doc) => {
-      materials.push({ id: doc.id, ...doc.data() } as MaterialDoc);
+      // FIX: Ensure we do not overwrite the real doc ID with an 'id' field from data
+      const data = doc.data();
+      if ('id' in data) delete data.id;
+      materials.push({ id: doc.id, ...data } as MaterialDoc);
     });
     callback(materials);
   });
@@ -100,7 +109,8 @@ export const subscribeToMaterials = (callback: (data: MaterialDoc[]) => void) =>
 export const addMaterial = async (material: Omit<MaterialDoc, 'id'>) => {
   if (!isDbActive()) return;
   try {
-    await addDoc(collection(db, COLL_MATERIALS), material);
+     const { id, ...cleanMaterial } = material as any;
+    await addDoc(collection(db, COLL_MATERIALS), cleanMaterial);
   } catch (e) {
     console.error("Erro ao adicionar material:", e);
   }

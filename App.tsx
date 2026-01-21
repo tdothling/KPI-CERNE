@@ -53,7 +53,18 @@ const CerneLogo = () => (
   </svg>
 );
 
-// --- TAXONOMY & HELPERS ---
+// --- HELPERS ---
+
+const getProjectBaseName = (filename: string): string => {
+  const nameWithoutExt = filename.replace(/\.[^/.]+$/, "");
+  const match = nameWithoutExt.match(/^(.*?)\s\[R\d+\]$/);
+  return match ? match[1] : nameWithoutExt;
+};
+
+const getRevisionNumber = (filename: string): number => {
+  const match = filename.match(/\[R(\d+)\]/);
+  return match ? parseInt(match[1], 10) : 0;
+};
 
 const detectDiscipline = (text: string): Discipline | null => {
   const normalized = text.toLowerCase();
@@ -336,6 +347,35 @@ export default function App() {
   };
 
   const deleteProject = (id: string) => {
+    // Check if we are deleting a revision to restore the previous version
+    const projectToDelete = projects.find(p => p.id === id);
+    if (projectToDelete) {
+        const revNum = getRevisionNumber(projectToDelete.filename);
+        if (revNum > 0) {
+            const baseName = getProjectBaseName(projectToDelete.filename);
+            const prevRevNum = revNum - 1;
+            // Find previous project
+            const prevProject = projects.find(p => 
+                getProjectBaseName(p.filename) === baseName && 
+                getRevisionNumber(p.filename) === prevRevNum
+            );
+            
+            // If previous project exists and is in 'REVISED' state, we likely want to reactivate it
+            if (prevProject && prevProject.status === Status.REVISED) {
+                // Determine sensible status to restore to
+                let newStatus = Status.DONE;
+                
+                // If it had feedback, assume it was rejected (since it needed a revision)
+                if (prevProject.feedbackDate) {
+                    newStatus = Status.REJECTED;
+                } else if (prevProject.sendDate) {
+                    newStatus = Status.WAITING_APPROVAL;
+                }
+                
+                updateProjectInDb({ ...prevProject, status: newStatus });
+            }
+        }
+    }
     deleteProjectFromDb(id);
   };
 
@@ -346,9 +386,12 @@ export default function App() {
     // 1. Update original status
     updateProjectInDb({ ...originalProject, status: Status.REVISED });
 
+    // FIX: Destructure ID out to prevent duplication
+    const { id: _, ...projectData } = originalProject;
+
     // 2. Create new revision file
     addProject({
-      ...originalProject, // Copy fields
+      ...projectData, 
       filename: generateRevisionFilename(originalProject.filename), 
       status: Status.IN_PROGRESS,
       startDate: new Date().toISOString().split('T')[0], 
@@ -374,8 +417,11 @@ export default function App() {
 
       updateMaterialInDb({ ...original, status: 'REVISED' });
 
+      // FIX: Destructure ID out
+      const { id: _, ...materialData } = original;
+
       addMaterial({
-          ...original,
+          ...materialData,
           filename: generateRevisionFilename(original.filename),
           status: 'IN_PROGRESS',
           startDate: new Date().toISOString().split('T')[0],
