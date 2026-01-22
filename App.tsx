@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { ProjectFile, Discipline, Status, RevisionReason, DateFilterType, MaterialDoc, PurchaseDoc, ClientDoc, SiteType } from './types';
 import { Dashboard } from './components/Dashboard';
@@ -6,70 +5,24 @@ import { ProjectList } from './components/ProjectList';
 import { ProjectTimeline } from './components/ProjectTimeline';
 import { BatchEditModal } from './components/BatchEditModal';
 import { HolidayManagerModal } from './components/HolidayManagerModal';
-import { ClientManagerModal } from './components/ClientManagerModal'; // Novo
+import { ClientManagerModal } from './components/ClientManagerModal';
 import { DateRangeFilter } from './components/DateRangeFilter';
 import { MaterialList } from './components/MaterialList';
 import { PurchaseList } from './components/PurchaseList';
 import { LoginModal } from './components/LoginModal'; 
 import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Package, FileSpreadsheet, Database, LogIn, LogOut, ShoppingCart, HardHat } from 'lucide-react';
-import { 
-  parseISO, 
-  isValid,
-  startOfMonth,
-  endOfMonth,
-  startOfQuarter,
-  endOfQuarter,
-  startOfYear,
-  endOfYear,
-  getMonth,
-  setMonth,
-  setDate,
-  differenceInBusinessDays,
-  isWeekend,
-  isWithinInterval,
-  format
-} from 'date-fns';
-
-// Import Firebase Service
-import { 
-  subscribeToProjects, 
-  addProject, 
-  updateProjectInDb, 
-  deleteProjectFromDb,
-  subscribeToMaterials,
-  addMaterial,
-  updateMaterialInDb,
-  deleteMaterialFromDb,
-  subscribeToPurchases,
-  addPurchase,
-  updatePurchaseInDb,
-  deletePurchaseFromDb,
-  subscribeToClients, // Novo
-  addClient, // Novo
-  updateClientInDb, // Novo
-  deleteClientFromDb, // Novo
-  subscribeToHolidays,
-  saveHolidaysToDb
-} from './services/db';
-
-// Import Auth Service
+import { parseISO, isValid, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear, getMonth, setMonth, setDate, endOfDay, format } from 'date-fns';
+import { subscribeToProjects, addProject, updateProjectInDb, deleteProjectFromDb, subscribeToMaterials, addMaterial, updateMaterialInDb, deleteMaterialFromDb, subscribeToPurchases, addPurchase, updatePurchaseInDb, deletePurchaseFromDb, subscribeToClients, addClient, updateClientInDb, deleteClientFromDb, subscribeToHolidays, saveHolidaysToDb } from './services/db';
 import { subscribeToAuth, logoutUser, formatUsername } from './services/auth';
 import { db } from './firebase';
 import { User } from 'firebase/auth';
 
-// Custom CERNE Logo Component
 const CerneLogo = () => (
-  <svg viewBox="0 0 140 40" className="h-10 w-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
-    {/* Background with chamfered top-left corner */}
+  <svg viewBox="0 0 140 40" className="h-10 w-auto" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Logo CERNE">
     <path d="M12 0L140 0V40H0V12L12 0Z" fill="#651830" />
-    {/* Text CERNE - Simplified representation */}
-    <text x="70" y="28" fill="white" fontSize="24" fontFamily="Arial, sans-serif" fontWeight="bold" textAnchor="middle" letterSpacing="2">
-      CERNE
-    </text>
+    <text x="70" y="28" fill="white" fontSize="24" fontFamily="Arial, sans-serif" fontWeight="bold" textAnchor="middle" letterSpacing="2">CERNE</text>
   </svg>
 );
-
-// --- HELPERS ---
 
 const getProjectBaseName = (filename: string): string => {
   const nameWithoutExt = filename.replace(/\.[^/.]+$/, "");
@@ -103,7 +56,6 @@ const extractMetadataFromMaterialFilename = (filename: string, defaultClient: st
 const generateRevisionFilename = (name: string): string => {
   const regex = /^(.*)\s\[R(\d+)\](\.[^.]*)?$/; 
   const match = name.match(regex);
-
   if (match) {
     const base = match[1];
     const num = parseInt(match[2], 10) + 1;
@@ -120,43 +72,22 @@ const generateRevisionFilename = (name: string): string => {
   }
 };
 
-const calculateBusinessDaysWithHolidays = (start: Date, end: Date, holidays: string[]) => {
-    let days = differenceInBusinessDays(end, start);
-    let holidaysOnWeekdays = 0;
-    holidays.forEach(h => {
-        const hDate = parseISO(h);
-        if (isValid(hDate) && isWithinInterval(hDate, { start, end })) {
-            if (!isWeekend(hDate)) {
-                holidaysOnWeekdays++;
-            }
-        }
-    });
-    return Math.max(0, days - holidaysOnWeekdays);
-};
-
 type Tab = 'dashboard' | 'timeline' | 'projects' | 'materials' | 'purchases';
 type ImportType = 'PROJECT' | 'MATERIAL_LIST';
 
 export default function App() {
-  // Use Firebase Data (Empty initially, populated by useEffect)
   const [projects, setProjects] = useState<ProjectFile[]>([]);
   const [materials, setMaterials] = useState<MaterialDoc[]>([]);
   const [purchases, setPurchases] = useState<PurchaseDoc[]>([]); 
-  const [clients, setClients] = useState<ClientDoc[]>([]); // New State
+  const [clients, setClients] = useState<ClientDoc[]>([]);
   const [holidays, setHolidays] = useState<string[]>([]);
-  
   const [dbConnected, setDbConnected] = useState(false);
-
-  // User Auth State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-
-  // Read Only Mode Derived State
+  
   const isReadOnly = !currentUser;
 
-  // --- FIREBASE SUBSCRIPTIONS ---
   useEffect(() => {
-    // Check if config exists
     if (!db) {
         setDbConnected(false);
         return;
@@ -166,7 +97,7 @@ export default function App() {
     const unsubProjects = subscribeToProjects(setProjects);
     const unsubMaterials = subscribeToMaterials(setMaterials);
     const unsubPurchases = subscribeToPurchases(setPurchases);
-    const unsubClients = subscribeToClients(setClients); // Subscribe to Clients
+    const unsubClients = subscribeToClients(setClients);
     const unsubHolidays = subscribeToHolidays(setHolidays);
     const unsubAuth = subscribeToAuth(setCurrentUser);
 
@@ -180,17 +111,14 @@ export default function App() {
     };
   }, []);
 
-  // UI States
   const [selectedClient, setSelectedClient] = useState<string>('Todos');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   
-  // Date Filter State
   const [dateFilterType, setDateFilterType] = useState<DateFilterType>('ALL');
   const [referenceDate, setReferenceDate] = useState<Date>(new Date());
   const [customRange, setCustomRange] = useState<{start: string, end: string}>({ start: '', end: '' });
 
-  // Upload Modal State
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [importType, setImportType] = useState<ImportType>('PROJECT');
   const [uploadDiscipline, setUploadDiscipline] = useState<Discipline>(Discipline.ARCHITECTURE);
@@ -198,24 +126,18 @@ export default function App() {
   const [uploadBase, setUploadBase] = useState<string>(''); 
   const [isFolderUpload, setIsFolderUpload] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Export Modal State
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
-  // Derivada: Cliente selecionado no upload para controle de UI
   const selectedUploadClientDoc = useMemo(() => {
       return clients.find(c => c.name === uploadClient);
   }, [clients, uploadClient]);
 
-  // Se o cliente for do tipo 'Canteiro de Obras', escondemos o input de base
   const shouldShowBaseInput = !selectedUploadClientDoc || selectedUploadClientDoc.type === SiteType.OPERATIONAL_BASE;
 
-  // Other Modals
   const [isBatchEditOpen, setIsBatchEditOpen] = useState(false);
   const [isHolidayManagerOpen, setIsHolidayManagerOpen] = useState(false);
-  const [isClientManagerOpen, setIsClientManagerOpen] = useState(false); // New Modal State
+  const [isClientManagerOpen, setIsClientManagerOpen] = useState(false);
 
-  // Dark Mode Effect
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
@@ -226,15 +148,13 @@ export default function App() {
 
   const toggleTheme = () => setIsDarkMode(!isDarkMode);
 
-  // Filters Calculation (Same as before)
   const getFilterDateRange = () => {
     if (dateFilterType === 'ALL') return null;
     let start: Date, end: Date;
     if (dateFilterType === 'CUSTOM') {
       if (!customRange.start || !customRange.end) return null;
       start = parseISO(customRange.start);
-      end = parseISO(customRange.end);
-      end.setHours(23, 59, 59, 999);
+      end = endOfDay(parseISO(customRange.end));
       return { start, end };
     }
     switch (dateFilterType) {
@@ -306,15 +226,12 @@ export default function App() {
       return result;
   }, [purchases, selectedClient]);
 
-  // Use Registered Clients for Filters
   const uniqueClients = useMemo(() => {
     const registeredNames = clients.map(c => c.name);
     const projectClients = new Set(projects.map(p => p.client));
     const merged = new Set([...registeredNames, ...projectClients]);
     return ['Todos', ...Array.from(merged).sort()];
   }, [clients, projects]);
-
-  // --- HANDLERS ---
 
   const handleOpenUploadModal = () => {
     setIsUploadModalOpen(true);
@@ -452,10 +369,7 @@ export default function App() {
   };
   const handleUpdateHolidays = (newHolidays: string[]) => saveHolidaysToDb(newHolidays);
   
-  // EXPORT LOGIC
-  const handleExportCSV = () => {
-    setIsExportModalOpen(true);
-  };
+  const handleExportCSV = () => setIsExportModalOpen(true);
 
   const handleConfirmExport = (type: 'PROJECTS' | 'MATERIALS' | 'PURCHASES') => {
     let headers: string[] = [];
@@ -485,7 +399,6 @@ export default function App() {
         filename = "Compras";
     }
 
-    // Generate CSV content with BOM for Excel compatibility and Semicolon separator
     const csvContent = [
         headers.join(";"),
         ...rows.map(r => r.map(c => `"${String(c || '').replace(/"/g, '""')}"`).join(";"))
@@ -505,7 +418,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 pb-20 transition-colors duration-200">
-      {/* Header */}
       <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-40 transition-colors duration-200">
         <div className="w-full px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3">
@@ -515,13 +427,12 @@ export default function App() {
 
           <div className="flex items-center space-x-4">
             {!dbConnected && (
-                <div className="hidden lg:flex items-center text-rose-600 bg-rose-50 px-3 py-1 rounded-full text-xs font-bold animate-pulse border border-rose-200">
-                    <Database size={14} className="mr-1" />
+                <div className="hidden lg:flex items-center text-rose-600 bg-rose-50 px-3 py-1 rounded-full text-xs font-bold animate-pulse border border-rose-200" role="alert">
+                    <Database size={14} className="mr-1" aria-hidden="true" />
                     DB Desconectado
                 </div>
             )}
 
-            {/* Login / User Profile */}
             {currentUser ? (
               <div className="hidden sm:flex items-center gap-3 pl-3 border-l border-slate-200 dark:border-slate-700">
                  <div className="flex flex-col items-end">
@@ -531,27 +442,26 @@ export default function App() {
                         <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Online</span>
                     </div>
                  </div>
-                 <button onClick={logoutUser} className="p-2 bg-slate-100 dark:bg-slate-700 hover:bg-rose-50 dark:hover:bg-rose-900/30 text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg transition-colors" title="Sair"><LogOut size={18} /></button>
+                 <button onClick={logoutUser} className="p-2 bg-slate-100 dark:bg-slate-700 hover:bg-rose-50 dark:hover:bg-rose-900/30 text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg transition-colors" title="Sair" aria-label="Sair"><LogOut size={18} /></button>
               </div>
             ) : (
                <button onClick={() => setIsLoginModalOpen(true)} className="hidden sm:flex items-center gap-2 bg-brand-50 hover:bg-brand-100 dark:bg-brand-900/20 dark:hover:bg-brand-900/40 text-brand-700 dark:text-brand-400 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border border-brand-100 dark:border-brand-900/30"><LogIn size={16} /><span>Entrar</span></button>
             )}
 
-            <button onClick={toggleTheme} className="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+            <button onClick={toggleTheme} className="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" aria-label="Alternar Tema">
               {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
             </button>
 
              <div className="hidden md:flex items-center space-x-2 bg-slate-100 dark:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600">
-              <Filter className="w-4 h-4 text-brand-600 dark:text-brand-400" />
-              <select value={selectedClient} onChange={(e) => setSelectedClient(e.target.value)} className="bg-transparent text-sm font-medium text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer">
+              <Filter className="w-4 h-4 text-brand-600 dark:text-brand-400" aria-hidden="true" />
+              <select value={selectedClient} onChange={(e) => setSelectedClient(e.target.value)} className="bg-transparent text-sm font-medium text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer" aria-label="Filtrar por Cliente">
                 {uniqueClients.map(c => <option key={c} value={c} className="dark:bg-slate-800">{c}</option>)}
               </select>
             </div>
 
-            {/* ONLY SHOW IF LOGGED IN */}
             {!isReadOnly && (
               <>
-                <button onClick={() => setIsHolidayManagerOpen(true)} className="p-2 text-slate-500 hover:text-brand-600 dark:text-slate-400 dark:hover:text-brand-400 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors relative">
+                <button onClick={() => setIsHolidayManagerOpen(true)} className="p-2 text-slate-500 hover:text-brand-600 dark:text-slate-400 dark:hover:text-brand-400 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors relative" aria-label="Gerenciar Feriados">
                     <CalendarDays size={20} />
                     {holidays.length > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-brand-500 rounded-full"></span>}
                 </button>
@@ -583,9 +493,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="w-full px-4 sm:px-6 lg:px-8 py-8">
-        {/* ... (DB Connection Warning) ... */}
         {!dbConnected && (
             <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-lg flex items-start gap-3">
                 <Database className="text-rose-600 flex-shrink-0 mt-0.5" />
@@ -596,12 +504,9 @@ export default function App() {
             </div>
         )}
 
-        {/* Controls Bar */}
         <div className="mb-6 flex flex-col lg:flex-row gap-4 justify-between items-start lg:items-end">
-          {/* ... (Tabs Navigation) ... */}
           <div className="w-full lg:w-auto border-b border-slate-200 dark:border-slate-700 overflow-x-auto no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
             <nav className="-mb-px flex space-x-6 min-w-max" aria-label="Tabs">
-              {/* ... same tabs ... */}
               <button onClick={() => setActiveTab('dashboard')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${activeTab === 'dashboard' ? 'border-brand-600 text-brand-600 dark:text-brand-400' : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300'}`}><LayoutDashboard size={18} /> Indicadores</button>
               <button onClick={() => setActiveTab('timeline')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${activeTab === 'timeline' ? 'border-brand-600 text-brand-600 dark:text-brand-400' : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300'}`}><Calendar size={18} /> Cronograma</button>
               <button onClick={() => setActiveTab('projects')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${activeTab === 'projects' ? 'border-brand-600 text-brand-600 dark:text-brand-400' : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300'}`}><List size={18} /> Projetos</button>
@@ -610,15 +515,13 @@ export default function App() {
             </nav>
           </div>
 
-          {/* Date Filter & Mobile Controls */}
           <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto items-end sm:items-center">
              <div className="md:hidden w-full flex items-center space-x-2 bg-white dark:bg-slate-800 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600">
                 <Filter className="w-4 h-4 text-brand-600 dark:text-brand-400" />
-                <select value={selectedClient} onChange={(e) => setSelectedClient(e.target.value)} className="bg-transparent w-full text-sm font-medium text-slate-700 dark:text-slate-200 focus:outline-none">
+                <select value={selectedClient} onChange={(e) => setSelectedClient(e.target.value)} className="bg-transparent w-full text-sm font-medium text-slate-700 dark:text-slate-200 focus:outline-none" aria-label="Filtrar por Cliente">
                   {uniqueClients.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
             </div>
-            {/* ... Login/Logout mobile buttons ... */}
             {!currentUser && ( <button onClick={() => setIsLoginModalOpen(true)} className="md:hidden w-full flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 dark:bg-brand-900/20 dark:hover:bg-brand-900/40 text-brand-700 dark:text-brand-400 px-3 py-2 rounded-lg text-sm font-medium transition-colors border border-brand-100 dark:border-brand-900/30"><LogIn size={16} /><span>Entrar</span></button> )}
             {currentUser && ( <div className="md:hidden w-full flex items-center justify-between bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-lg"><span className="text-sm font-bold text-slate-700 dark:text-slate-200">{formatUsername(currentUser.email)}</span><button onClick={logoutUser} className="text-rose-600 dark:text-rose-400 text-xs font-bold uppercase">Sair</button></div> )}
 
@@ -626,7 +529,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Tab Content - Pass isReadOnly prop */}
         <div className="mt-6">
           {activeTab === 'dashboard' && <div className="animate-in fade-in zoom-in-95 duration-200"><Dashboard data={filteredProjects} materials={filteredMaterials} isDarkMode={isDarkMode} holidays={holidays} /></div>}
           {activeTab === 'timeline' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectTimeline projects={filteredProjects} holidays={holidays} /></div>}
@@ -636,20 +538,17 @@ export default function App() {
         </div>
       </main>
       
-       {/* Upload Modal - Only renders if logged in because button is hidden otherwise */}
        {isUploadModalOpen && (
         <div className="fixed inset-0 bg-black/60 dark:bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-md w-full p-6 transform transition-all border dark:border-slate-700">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-bold text-slate-800 dark:text-white">Importar Arquivos</h3>
-              <button onClick={() => setIsUploadModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+              <button onClick={() => setIsUploadModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors" aria-label="Fechar Modal">
                 <X size={24} />
               </button>
             </div>
             
             <div className="space-y-6 mb-8">
-              
-              {/* Import Type Selector */}
               <div>
                   <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">O que você deseja importar?</label>
                   <div className="grid grid-cols-2 gap-3">
@@ -662,7 +561,6 @@ export default function App() {
                   </div>
               </div>
 
-              {/* Client Selection (Enforced Select) */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                   Cliente Padrão (Registro de Obra) *
@@ -680,7 +578,6 @@ export default function App() {
                 {clients.length === 0 && <p className="text-xs text-rose-500 mt-1">Nenhum cliente cadastrado. Use o botão "Registro de Obra".</p>}
               </div>
 
-               {/* Base Selection (CONDITIONAL) */}
                {(importType === 'PROJECT' || importType === 'MATERIAL_LIST') && shouldShowBaseInput && (
                 <div className="animate-in fade-in slide-in-from-top-2 duration-200">
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Nº da Base - Localização</label>
@@ -688,17 +585,15 @@ export default function App() {
                 </div>
                )}
 
-              {/* Folder Upload Toggle */}
               {importType === 'PROJECT' && (
                 <div className="bg-brand-50 dark:bg-slate-700/50 p-3 rounded-lg border border-brand-100 dark:border-slate-600">
                     <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2"><FolderInput className="text-brand-600 dark:text-brand-400" size={20} /><div><span className="text-sm font-semibold text-slate-800 dark:text-slate-200 block">Modo Pasta (Auto-Tag)</span><span className="text-xs text-slate-500 dark:text-slate-400 block">Detecta Disciplina pelo nome da pasta</span></div></div>
-                    <label className="relative inline-flex items-center cursor-pointer"><input type="checkbox" checked={isFolderUpload} onChange={(e) => setIsFolderUpload(e.target.checked)} className="sr-only peer" /><div className="w-11 h-6 bg-slate-200 dark:bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-700"></div></label>
+                    <label className="relative inline-flex items-center cursor-pointer"><input type="checkbox" checked={isFolderUpload} onChange={(e) => setIsFolderUpload(e.target.checked)} className="sr-only peer" aria-label="Ativar Modo Pasta" /><div className="w-11 h-6 bg-slate-200 dark:bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-700"></div></label>
                     </div>
                 </div>
               )}
 
-              {/* Discipline Selection */}
               <div className={`${(importType === 'PROJECT' && isFolderUpload) ? 'opacity-50 pointer-events-none grayscale' : ''} transition-all`}>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Disciplina Padrão {importType === 'PROJECT' && isFolderUpload && '(Usada se a detecção falhar)'} {importType === 'MATERIAL_LIST' && '(Será tentada a detecção pelo nome do arquivo)'}</label>
                 <div className="relative">
@@ -718,7 +613,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Export Modal */}
       {isExportModalOpen && (
         <div className="fixed inset-0 bg-black/60 dark:bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-sm w-full p-6 border dark:border-slate-700">
@@ -727,7 +621,7 @@ export default function App() {
                 <Download className="text-brand-600 dark:text-brand-400" size={20} />
                 Exportar Dados
               </h3>
-              <button onClick={() => setIsExportModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+              <button onClick={() => setIsExportModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors" aria-label="Fechar Modal">
                 <X size={24} />
               </button>
             </div>
@@ -786,17 +680,14 @@ export default function App() {
         </div>
       )}
 
-      {/* Batch Edit Modal */}
       {isBatchEditOpen && (
         <BatchEditModal projects={filteredProjects} onClose={() => setIsBatchEditOpen(false)} onApply={handleBatchUpdate} onWorkflow={handleBatchWorkflow} />
       )}
 
-      {/* Holiday Manager Modal */}
       {isHolidayManagerOpen && (
         <HolidayManagerModal holidays={holidays} onUpdateHolidays={handleUpdateHolidays} onClose={() => setIsHolidayManagerOpen(false)} />
       )}
 
-      {/* Client Manager Modal */}
       {isClientManagerOpen && (
         <ClientManagerModal 
             clients={clients}
@@ -807,7 +698,6 @@ export default function App() {
         />
       )}
 
-      {/* Login Modal */}
       {isLoginModalOpen && (
         <LoginModal onClose={() => setIsLoginModalOpen(false)} onLoginSuccess={() => setIsLoginModalOpen(false)} />
       )}
