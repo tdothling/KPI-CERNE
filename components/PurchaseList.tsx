@@ -12,6 +12,7 @@ interface PurchaseListProps {
   onDelete: (id: string) => void;
   currentUser: string; 
   holidays: string[];
+  readOnly?: boolean; // New prop
 }
 
 const formatDateDisplay = (dateStr: string) => {
@@ -36,7 +37,7 @@ const calculateBusinessDays = (start: Date, end: Date, holidays: string[]) => {
     return Math.max(0, days - holidaysOnWeekdays);
 };
 
-export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, onUpdate, onDelete, currentUser, holidays }) => {
+export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, onUpdate, onDelete, currentUser, holidays, readOnly = false }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -178,9 +179,11 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, on
                 </h2>
                 <p className="text-sm text-slate-500 dark:text-slate-400">Rastreamento de solicitações, destino e recebimento de materiais.</p>
             </div>
-            <button onClick={() => handleOpenModal()} className="bg-brand-700 hover:bg-brand-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shadow-sm">
-                <Plus size={18} /> Registrar Solicitação
-            </button>
+            {!readOnly && (
+                <button onClick={() => handleOpenModal()} className="bg-brand-700 hover:bg-brand-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shadow-sm">
+                    <Plus size={18} /> Registrar Solicitação
+                </button>
+            )}
         </div>
 
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -203,7 +206,7 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, on
                             <th className="px-6 py-3 w-[15%]">Aplicação</th>
                             <th className="px-6 py-3 w-[20%]">Ciclo (Dias Úteis)</th>
                             <th className="px-6 py-3 w-[10%] text-center">Status</th>
-                            <th className="px-6 py-3 w-[5%] text-center">Fluxo</th>
+                            {!readOnly && <th className="px-6 py-3 w-[5%] text-center">Fluxo</th>}
                             <th className="px-6 py-3 w-[5%] text-right">Ações</th>
                         </tr>
                     </thead>
@@ -237,23 +240,31 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, on
                                     </div>
                                 </td>
                                 <td className="px-6 py-4 text-center"><span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(p.status)}`}>{p.status === PurchaseStatus.PENDING && <Clock size={12} />}{p.status === PurchaseStatus.BOUGHT && <Truck size={12} />}{p.status === PurchaseStatus.DELIVERED && <CheckCircle2 size={12} />}{p.status === PurchaseStatus.CANCELED && <XCircle size={12} />}{p.status}</span></td>
-                                <td className="px-6 py-4 text-center">
-                                    <div className="flex items-center justify-center gap-2">
-                                        {p.status === PurchaseStatus.PENDING && <button onClick={() => setPendingBuy({ id: p.id, date: new Date().toISOString().split('T')[0] })} title="Registrar Compra" className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md transition-colors border border-blue-200"><CreditCard size={16} /></button>}
-                                        {p.status === PurchaseStatus.BOUGHT && <button onClick={() => setPendingDelivery({ id: p.id, date: new Date().toISOString().split('T')[0] })} title="Registrar Chegada (Entrega)" className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md transition-colors border border-emerald-200"><CheckSquare size={16} /></button>}
-                                    </div>
-                                </td>
+                                
+                                {!readOnly && (
+                                    <td className="px-6 py-4 text-center">
+                                        <div className="flex items-center justify-center gap-2">
+                                            {p.status === PurchaseStatus.PENDING && <button onClick={() => setPendingBuy({ id: p.id, date: new Date().toISOString().split('T')[0] })} title="Registrar Compra" className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md transition-colors border border-blue-200"><CreditCard size={16} /></button>}
+                                            {p.status === PurchaseStatus.BOUGHT && <button onClick={() => setPendingDelivery({ id: p.id, date: new Date().toISOString().split('T')[0] })} title="Registrar Chegada (Entrega)" className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md transition-colors border border-emerald-200"><CheckSquare size={16} /></button>}
+                                        </div>
+                                    </td>
+                                )}
+
                                 <td className="px-6 py-4 text-right">
                                     <div className="flex items-center justify-end space-x-1">
                                         <button onClick={() => setDetailsPurchase(p)} className="p-1.5 text-slate-400 hover:text-violet-500 rounded hover:bg-violet-50 dark:hover:bg-violet-900/30 transition-colors"><Eye size={16} /></button>
-                                        <button onClick={() => handleOpenModal(p)} className="p-1.5 text-slate-400 hover:text-blue-500 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"><Edit2 size={16} /></button>
-                                        <button onClick={() => onDelete(p.id)} className="p-1.5 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors"><Trash2 size={16} /></button>
+                                        {!readOnly && (
+                                            <>
+                                                <button onClick={() => handleOpenModal(p)} className="p-1.5 text-slate-400 hover:text-blue-500 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"><Edit2 size={16} /></button>
+                                                <button onClick={() => onDelete(p.id)} className="p-1.5 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors"><Trash2 size={16} /></button>
+                                            </>
+                                        )}
                                     </div>
                                 </td>
                             </tr>
                         );
                         })}
-                         {filteredPurchases.length === 0 && (<tr><td colSpan={7} className="px-6 py-10 text-center text-slate-400 italic">Nenhuma solicitação encontrada.</td></tr>)}
+                         {filteredPurchases.length === 0 && (<tr><td colSpan={readOnly ? 6 : 7} className="px-6 py-10 text-center text-slate-400 italic">Nenhuma solicitação encontrada.</td></tr>)}
                     </tbody>
                 </table>
              </div>

@@ -1,5 +1,5 @@
 
-import { db } from "../firebase";
+import { db, auth } from "../firebase"; // Import auth explicitly
 import { 
   collection, 
   doc, 
@@ -10,10 +10,10 @@ import {
   setDoc,
   query,
   orderBy,
-  limit, // Importado para Otimização 2
+  limit, 
   QuerySnapshot,
   DocumentData,
-  getDoc // Importado para leitura única
+  getDoc 
 } from "firebase/firestore";
 import { ProjectFile, MaterialDoc, PurchaseDoc, ClientDoc } from "../types";
 
@@ -23,7 +23,7 @@ const COLL_MATERIALS = "materials";
 const COLL_HOLIDAYS = "settings"; 
 const COLL_PURCHASES = "purchases";
 const COLL_CLIENTS = "clients";
-const COLL_CONFIG = "configuration"; // Coleção hipotética para configs gerais
+const COLL_CONFIG = "configuration"; 
 
 // --- GENERIC HELPERS ---
 
@@ -35,15 +35,21 @@ const isDbActive = () => {
     return true;
 };
 
+// SECURITY CHECK: Ensure user is authenticated for write operations
+const checkAuth = (operation: string) => {
+    if (!auth || !auth.currentUser) {
+        console.error(`Security Alert: Unauthorized attempt to ${operation}.`);
+        alert("Acesso Negado: Você precisa estar logado para realizar esta ação.");
+        return false;
+    }
+    return true;
+};
+
 // --- PROJECTS ---
 
 export const subscribeToProjects = (callback: (data: ProjectFile[]) => void) => {
   if (!isDbActive()) return () => {};
 
-  // OTIMIZAÇÃO 2: LIMITAÇÃO DE LEITURAS
-  // Limitamos a 50 projetos mais recentes (baseado na data de criação ou nome)
-  // Nota: Idealmente, tenha um campo 'createdAt' para ordenar. Aqui usaremos 'filename' ou sem ordem específica se não houver campo de data confiável em todos.
-  // Se quiser ordenar por data de início: orderBy("startDate", "desc")
   const q = query(
     collection(db, COLL_PROJECTS), 
     limit(50) 
@@ -63,7 +69,7 @@ export const subscribeToProjects = (callback: (data: ProjectFile[]) => void) => 
 };
 
 export const addProject = async (project: Omit<ProjectFile, 'id'>) => {
-  if (!isDbActive()) return;
+  if (!isDbActive() || !checkAuth('add project')) return;
   try {
     const { id, ...cleanProject } = project as any;
     await addDoc(collection(db, COLL_PROJECTS), cleanProject);
@@ -74,7 +80,7 @@ export const addProject = async (project: Omit<ProjectFile, 'id'>) => {
 };
 
 export const updateProjectInDb = async (project: ProjectFile) => {
-  if (!isDbActive()) return;
+  if (!isDbActive() || !checkAuth('update project')) return;
   try {
     const { id, ...data } = project;
     const docRef = doc(db, COLL_PROJECTS, id);
@@ -85,7 +91,7 @@ export const updateProjectInDb = async (project: ProjectFile) => {
 };
 
 export const deleteProjectFromDb = async (id: string) => {
-  if (!isDbActive()) return;
+  if (!isDbActive() || !checkAuth('delete project')) return;
   try {
     await deleteDoc(doc(db, COLL_PROJECTS, id));
   } catch (e) {
@@ -98,7 +104,6 @@ export const deleteProjectFromDb = async (id: string) => {
 export const subscribeToMaterials = (callback: (data: MaterialDoc[]) => void) => {
   if (!isDbActive()) return () => {};
 
-  // OTIMIZAÇÃO 2: LIMITAÇÃO DE LEITURAS
   const q = query(
       collection(db, COLL_MATERIALS),
       limit(50)
@@ -118,7 +123,7 @@ export const subscribeToMaterials = (callback: (data: MaterialDoc[]) => void) =>
 };
 
 export const addMaterial = async (material: Omit<MaterialDoc, 'id'>) => {
-  if (!isDbActive()) return;
+  if (!isDbActive() || !checkAuth('add material')) return;
   try {
      const { id, ...cleanMaterial } = material as any;
     await addDoc(collection(db, COLL_MATERIALS), cleanMaterial);
@@ -128,7 +133,7 @@ export const addMaterial = async (material: Omit<MaterialDoc, 'id'>) => {
 };
 
 export const updateMaterialInDb = async (material: MaterialDoc) => {
-  if (!isDbActive()) return;
+  if (!isDbActive() || !checkAuth('update material')) return;
   try {
     const { id, ...data } = material;
     const docRef = doc(db, COLL_MATERIALS, id);
@@ -139,7 +144,7 @@ export const updateMaterialInDb = async (material: MaterialDoc) => {
 };
 
 export const deleteMaterialFromDb = async (id: string) => {
-  if (!isDbActive()) return;
+  if (!isDbActive() || !checkAuth('delete material')) return;
   try {
     await deleteDoc(doc(db, COLL_MATERIALS, id));
   } catch (e) {
@@ -152,8 +157,6 @@ export const deleteMaterialFromDb = async (id: string) => {
 export const subscribeToPurchases = (callback: (data: PurchaseDoc[]) => void) => {
   if (!isDbActive()) return () => {};
 
-  // OTIMIZAÇÃO 2: LIMITAÇÃO DE LEITURAS
-  // Ordenar por data de solicitação decrescente para pegar as últimas 50
   const q = query(
       collection(db, COLL_PURCHASES), 
       orderBy("requestDate", "desc"),
@@ -174,7 +177,7 @@ export const subscribeToPurchases = (callback: (data: PurchaseDoc[]) => void) =>
 };
 
 export const addPurchase = async (purchase: Omit<PurchaseDoc, 'id'>) => {
-  if (!isDbActive()) return;
+  if (!isDbActive() || !checkAuth('add purchase')) return;
   try {
     const { id, ...cleanPurchase } = purchase as any;
     await addDoc(collection(db, COLL_PURCHASES), cleanPurchase);
@@ -184,7 +187,7 @@ export const addPurchase = async (purchase: Omit<PurchaseDoc, 'id'>) => {
 };
 
 export const updatePurchaseInDb = async (purchase: PurchaseDoc) => {
-  if (!isDbActive()) return;
+  if (!isDbActive() || !checkAuth('update purchase')) return;
   try {
     const { id, ...data } = purchase;
     const docRef = doc(db, COLL_PURCHASES, id);
@@ -195,7 +198,7 @@ export const updatePurchaseInDb = async (purchase: PurchaseDoc) => {
 };
 
 export const deletePurchaseFromDb = async (id: string) => {
-  if (!isDbActive()) return;
+  if (!isDbActive() || !checkAuth('delete purchase')) return;
   try {
     await deleteDoc(doc(db, COLL_PURCHASES, id));
   } catch (e) {
@@ -208,7 +211,6 @@ export const deletePurchaseFromDb = async (id: string) => {
 export const subscribeToClients = (callback: (data: ClientDoc[]) => void) => {
   if (!isDbActive()) return () => {};
 
-  // Clientes geralmente são poucos, mas é boa prática limitar se escalar
   const q = query(collection(db, COLL_CLIENTS), orderBy("name"), limit(100));
   
   const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
@@ -225,7 +227,7 @@ export const subscribeToClients = (callback: (data: ClientDoc[]) => void) => {
 };
 
 export const addClient = async (client: Omit<ClientDoc, 'id'>) => {
-  if (!isDbActive()) return;
+  if (!isDbActive() || !checkAuth('add client')) return;
   try {
     const { id, ...cleanClient } = client as any;
     await addDoc(collection(db, COLL_CLIENTS), cleanClient);
@@ -235,7 +237,7 @@ export const addClient = async (client: Omit<ClientDoc, 'id'>) => {
 };
 
 export const updateClientInDb = async (client: ClientDoc) => {
-  if (!isDbActive()) return;
+  if (!isDbActive() || !checkAuth('update client')) return;
   try {
     const { id, ...data } = client;
     const docRef = doc(db, COLL_CLIENTS, id);
@@ -246,7 +248,7 @@ export const updateClientInDb = async (client: ClientDoc) => {
 };
 
 export const deleteClientFromDb = async (id: string) => {
-  if (!isDbActive()) return;
+  if (!isDbActive() || !checkAuth('delete client')) return;
   try {
     await deleteDoc(doc(db, COLL_CLIENTS, id));
   } catch (e) {
@@ -254,14 +256,11 @@ export const deleteClientFromDb = async (id: string) => {
   }
 };
 
-// --- HOLIDAYS & SETTINGS (OTIMIZAÇÃO 4: Single Document) ---
-// Em vez de ler uma coleção inteira, lemos um único documento contendo arrays.
-// Ex: { dates: ['2024-01-01', ...] }
+// --- HOLIDAYS & SETTINGS ---
 
 export const subscribeToHolidays = (callback: (holidays: string[]) => void) => {
     if (!isDbActive()) return () => {};
 
-    // Lê apenas o documento 'holidays' dentro da coleção 'settings'
     const docRef = doc(db, COLL_HOLIDAYS, "holidays");
     
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
@@ -277,7 +276,7 @@ export const subscribeToHolidays = (callback: (holidays: string[]) => void) => {
 };
 
 export const saveHolidaysToDb = async (holidays: string[]) => {
-    if (!isDbActive()) return;
+    if (!isDbActive() || !checkAuth('update holidays')) return;
     try {
         await setDoc(doc(db, COLL_HOLIDAYS, "holidays"), { dates: holidays });
     } catch (e) {
@@ -285,12 +284,9 @@ export const saveHolidaysToDb = async (holidays: string[]) => {
     }
 };
 
-// Exemplo da OTIMIZAÇÃO 4 (Não usado na UI ainda, mas mostra como fazer para Dropdowns)
 export const getAppConfig = async () => {
     if (!isDbActive()) return null;
     try {
-        // Lê um único documento que conteria arrays de disciplinas, status, etc.
-        // Custo: 1 Read (independente de ter 10 ou 1000 categorias no array)
         const docRef = doc(db, COLL_CONFIG, "general"); 
         const snap = await getDoc(docRef);
         if (snap.exists()) {

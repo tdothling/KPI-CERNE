@@ -11,6 +11,7 @@ interface ProjectListProps {
   onDelete: (id: string) => void;
   onAddRevision: (id: string, reason: RevisionReason, comment: string) => void;
   holidays: string[];
+  readOnly?: boolean; // New prop
 }
 
 // ... (Helpers: getProjectBaseName, getRevisionNumber, formatDateDisplay, calculateBusinessDaysWithHolidays same as before)
@@ -22,7 +23,7 @@ const calculateBusinessDaysWithHolidays = (start: Date, end: Date, holidays: str
 type SortKey = keyof ProjectFile | 'blockedDays';
 type SortDirection = 'asc' | 'desc';
 
-export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, onDelete, onAddRevision, holidays }) => {
+export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, onDelete, onAddRevision, holidays, readOnly = false }) => {
   const [activeRevModal, setActiveRevModal] = useState<string | null>(null);
   const [projectToDelete, setProjectToDelete] = useState<ProjectFile | null>(null);
   const [editingProject, setEditingProject] = useState<ProjectFile | null>(null);
@@ -112,7 +113,10 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left whitespace-nowrap">
           <thead className="text-xs text-slate-500 dark:text-slate-400 uppercase bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
-            <tr>{renderHeader("Arquivo", "filename", "min-w-[350px] border-r border-slate-200 dark:border-slate-700/50")}{renderHeader("Cliente", "client", "min-w-[150px]")}{renderHeader("Base", "base", "min-w-[100px]")}{renderHeader("Disciplina", "discipline")}{renderHeader("Status", "status")}{renderHeader("Início", "startDate", "bg-slate-100/50 dark:bg-slate-800/50 border-l border-slate-200 dark:border-slate-700")}{renderHeader("Fim Exec.", "endDate", "bg-slate-100/50 dark:bg-slate-800/50 border-r border-slate-200 dark:border-slate-700")}{renderHeader("Envio", "sendDate", "text-brand-700 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-900/20 border-l border-brand-100 dark:border-brand-900/30")}{renderHeader("Feedback", "feedbackDate", "text-slate-700 dark:text-slate-300 bg-slate-50/50 dark:bg-slate-900/20 border-r border-slate-100 dark:border-slate-900/30")}{renderHeader("Bloqueado", "blockedDays", "w-24 text-center")}<th className="px-4 py-3 text-center">Ações de Fluxo</th><th className="px-4 py-3 text-right">Editar</th></tr>
+            <tr>{renderHeader("Arquivo", "filename", "min-w-[350px] border-r border-slate-200 dark:border-slate-700/50")}{renderHeader("Cliente", "client", "min-w-[150px]")}{renderHeader("Base", "base", "min-w-[100px]")}{renderHeader("Disciplina", "discipline")}{renderHeader("Status", "status")}{renderHeader("Início", "startDate", "bg-slate-100/50 dark:bg-slate-800/50 border-l border-slate-200 dark:border-slate-700")}{renderHeader("Fim Exec.", "endDate", "bg-slate-100/50 dark:bg-slate-800/50 border-r border-slate-200 dark:border-slate-700")}{renderHeader("Envio", "sendDate", "text-brand-700 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-900/20 border-l border-brand-100 dark:border-brand-900/30")}{renderHeader("Feedback", "feedbackDate", "text-slate-700 dark:text-slate-300 bg-slate-50/50 dark:bg-slate-900/20 border-r border-slate-100 dark:border-slate-900/30")}{renderHeader("Bloqueado", "blockedDays", "w-24 text-center")}
+            {!readOnly && <th className="px-4 py-3 text-center">Ações de Fluxo</th>}
+            <th className="px-4 py-3 text-right">Detalhes{!readOnly && '/Editar'}</th>
+            </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
             {sortedProjects.map((project, index) => {
@@ -129,12 +133,26 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                 <td className="px-4 py-3 border-l border-brand-50 dark:border-brand-900/20 bg-brand-50/30 dark:bg-brand-900/10 text-brand-700 dark:text-brand-400 text-xs font-medium">{formatDateDisplay(project.sendDate)}</td>
                 <td className={`px-4 py-3 border-r border-slate-100 dark:border-slate-900/30 bg-slate-50/30 dark:bg-slate-900/10 text-xs ${feedbackColorClass}`}>{formatDateDisplay(project.feedbackDate)}</td>
                 <td className="px-4 py-3 text-center"><span className="font-mono text-xs text-slate-700 dark:text-slate-300">{project.blockedDays || '-'}</span></td>
-                <td className="px-4 py-3"><div className="flex items-center justify-center space-x-2">{project.status === Status.IN_PROGRESS && (<button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingCompletion({ id: project.id, date: today }); }} title="Concluir Execução" className="p-1.5 bg-violet-50 text-violet-600 hover:bg-violet-100 rounded-md transition-colors border border-violet-200"><CheckSquare size={16} /></button>)}{(project.status === Status.DONE) && (<button onClick={() => { const today = new Date().toISOString().split('T')[0]; const defaultDate = (project.endDate && today > project.endDate) ? today : (project.endDate || today); setPendingSend({ id: project.id, date: defaultDate }); }} title="Registrar Envio ao Cliente" className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md transition-colors border border-blue-200"><Send size={16} /></button>)}{project.status === Status.WAITING_APPROVAL && (<><button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingApproval({ id: project.id, date: today }); }} title="Aprovar Projeto" className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md transition-colors border border-emerald-200"><BadgeCheck size={16} /></button><button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingRejection({ id: project.id, date: today }); }} title="Reprovar Projeto" className="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-md transition-colors border border-rose-200"><ThumbsDown size={16} /></button></>)}{canCreateRevision && project.sendDate && project.status !== Status.REVISED && project.status !== Status.WAITING_APPROVAL && (<button onClick={() => setActiveRevModal(project.id)} title={project.status === Status.REJECTED ? "Gerar Nova Revisão (Pós-Reprovação)" : "Gerar Revisão"} className={`p-1.5 rounded-md transition-colors border ${project.status === Status.REJECTED ? 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100' : 'text-slate-400 hover:text-brand-600 border-transparent hover:bg-brand-50'}`}><GitBranch size={16} /></button>)}</div></td>
-                <td className="px-4 py-3 text-right"><div className="flex items-center justify-end space-x-1"><button onClick={() => setDetailsProject(project)} className="p-1.5 text-slate-400 hover:text-violet-500 rounded-full hover:bg-violet-50 transition-colors"><Eye size={16} /></button><button onClick={() => setEditingProject({ ...project })} className="p-1.5 text-slate-400 hover:text-blue-500 rounded-full hover:bg-blue-50 transition-colors"><Edit2 size={16} /></button><button onClick={() => setProjectToDelete(project)} className="p-1.5 text-slate-400 hover:text-rose-500 rounded-full hover:bg-rose-50 transition-colors"><Trash2 size={16} /></button></div></td>
+                
+                {!readOnly && (
+                    <td className="px-4 py-3"><div className="flex items-center justify-center space-x-2">{project.status === Status.IN_PROGRESS && (<button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingCompletion({ id: project.id, date: today }); }} title="Concluir Execução" className="p-1.5 bg-violet-50 text-violet-600 hover:bg-violet-100 rounded-md transition-colors border border-violet-200"><CheckSquare size={16} /></button>)}{(project.status === Status.DONE) && (<button onClick={() => { const today = new Date().toISOString().split('T')[0]; const defaultDate = (project.endDate && today > project.endDate) ? today : (project.endDate || today); setPendingSend({ id: project.id, date: defaultDate }); }} title="Registrar Envio ao Cliente" className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md transition-colors border border-blue-200"><Send size={16} /></button>)}{project.status === Status.WAITING_APPROVAL && (<><button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingApproval({ id: project.id, date: today }); }} title="Aprovar Projeto" className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md transition-colors border border-emerald-200"><BadgeCheck size={16} /></button><button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingRejection({ id: project.id, date: today }); }} title="Reprovar Projeto" className="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-md transition-colors border border-rose-200"><ThumbsDown size={16} /></button></>)}{canCreateRevision && project.sendDate && project.status !== Status.REVISED && project.status !== Status.WAITING_APPROVAL && (<button onClick={() => setActiveRevModal(project.id)} title={project.status === Status.REJECTED ? "Gerar Nova Revisão (Pós-Reprovação)" : "Gerar Revisão"} className={`p-1.5 rounded-md transition-colors border ${project.status === Status.REJECTED ? 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100' : 'text-slate-400 hover:text-brand-600 border-transparent hover:bg-brand-50'}`}><GitBranch size={16} /></button>)}</div></td>
+                )}
+
+                <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end space-x-1">
+                        <button onClick={() => setDetailsProject(project)} className="p-1.5 text-slate-400 hover:text-violet-500 rounded-full hover:bg-violet-50 transition-colors"><Eye size={16} /></button>
+                        {!readOnly && (
+                            <>
+                                <button onClick={() => setEditingProject({ ...project })} className="p-1.5 text-slate-400 hover:text-blue-500 rounded-full hover:bg-blue-50 transition-colors"><Edit2 size={16} /></button>
+                                <button onClick={() => setProjectToDelete(project)} className="p-1.5 text-slate-400 hover:text-rose-500 rounded-full hover:bg-rose-50 transition-colors"><Trash2 size={16} /></button>
+                            </>
+                        )}
+                    </div>
+                </td>
               </tr>
             );
             })}
-             {sortedProjects.length === 0 && (<tr><td colSpan={13} className="px-6 py-10 text-center text-slate-400 italic">Nenhum registro encontrado.</td></tr>)}
+             {sortedProjects.length === 0 && (<tr><td colSpan={readOnly ? 11 : 13} className="px-6 py-10 text-center text-slate-400 italic">Nenhum registro encontrado.</td></tr>)}
           </tbody>
         </table>
       </div>

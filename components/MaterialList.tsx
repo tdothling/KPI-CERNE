@@ -10,6 +10,7 @@ interface MaterialListProps {
     onUpdate: (updated: MaterialDoc) => void;
     onDelete: (id: string) => void;
     onAddRevision: (id: string, reason: RevisionReason, comment: string) => void;
+    readOnly?: boolean; // New prop
 }
 
 // Helper to get base name (filename without revision tag)
@@ -24,7 +25,7 @@ const getRevisionNumber = (filename: string): number => {
   return match ? parseInt(match[1], 10) : 0;
 };
 
-export const MaterialList: React.FC<MaterialListProps> = ({ materials, onUpdate, onDelete, onAddRevision }) => {
+export const MaterialList: React.FC<MaterialListProps> = ({ materials, onUpdate, onDelete, onAddRevision, readOnly = false }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -195,8 +196,8 @@ export const MaterialList: React.FC<MaterialListProps> = ({ materials, onUpdate,
                 <th className="px-6 py-3">Início</th>
                 <th className="px-6 py-3">Fim</th>
                 <th className="px-6 py-3">Status</th>
-                <th className="px-6 py-3 text-center">Ações de Fluxo</th>
-                <th className="px-6 py-3 text-right">Editar</th>
+                {!readOnly && <th className="px-6 py-3 text-center">Ações de Fluxo</th>}
+                {!readOnly && <th className="px-6 py-3 text-right">Editar</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
@@ -242,26 +243,30 @@ export const MaterialList: React.FC<MaterialListProps> = ({ materials, onUpdate,
                       {doc.status === 'DONE' ? 'Concluído' : doc.status === 'REVISED' ? 'Revisado' : 'Em Elaboração'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-center">
-                    <div className="flex items-center justify-center gap-2">
-                      {doc.status === 'IN_PROGRESS' && (
-                        <button onClick={() => setPendingCompletion({ id: doc.id, date: new Date().toISOString().split('T')[0] })} title="Concluir Lista" className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md transition-colors border border-emerald-200"><CheckSquare size={16} /></button>
-                      )}
-                      {doc.status !== 'REVISED' && (
-                        <button onClick={() => handleOpenRevisionModal(doc)} title="Gerar Revisão" className="p-1.5 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-brand-600 rounded-md transition-colors border border-slate-200"><GitBranch size={16} /></button>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end space-x-2">
-                      <button onClick={() => handleOpenEditModal(doc)} className="p-1.5 text-slate-400 hover:text-brand-600 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"><Edit2 size={16} /></button>
-                      <button onClick={() => handleDelete(doc.id)} className="p-1.5 text-slate-400 hover:text-rose-600 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"><Trash2 size={16} /></button>
-                    </div>
-                  </td>
+                  {!readOnly && (
+                    <td className="px-6 py-4 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                        {doc.status === 'IN_PROGRESS' && (
+                            <button onClick={() => setPendingCompletion({ id: doc.id, date: new Date().toISOString().split('T')[0] })} title="Concluir Lista" className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md transition-colors border border-emerald-200"><CheckSquare size={16} /></button>
+                        )}
+                        {doc.status !== 'REVISED' && (
+                            <button onClick={() => handleOpenRevisionModal(doc)} title="Gerar Revisão" className="p-1.5 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-brand-600 rounded-md transition-colors border border-slate-200"><GitBranch size={16} /></button>
+                        )}
+                        </div>
+                    </td>
+                  )}
+                  {!readOnly && (
+                    <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end space-x-2">
+                        <button onClick={() => handleOpenEditModal(doc)} className="p-1.5 text-slate-400 hover:text-brand-600 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"><Edit2 size={16} /></button>
+                        <button onClick={() => handleDelete(doc.id)} className="p-1.5 text-slate-400 hover:text-rose-600 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"><Trash2 size={16} /></button>
+                        </div>
+                    </td>
+                  )}
                 </tr>
               );
               })}
-              {filteredDocs.length === 0 && (<tr><td colSpan={9} className="px-6 py-10 text-center text-slate-400 italic">Nenhum registro encontrado.</td></tr>)}
+              {filteredDocs.length === 0 && (<tr><td colSpan={readOnly ? 7 : 9} className="px-6 py-10 text-center text-slate-400 italic">Nenhum registro encontrado.</td></tr>)}
             </tbody>
           </table>
         </div>
