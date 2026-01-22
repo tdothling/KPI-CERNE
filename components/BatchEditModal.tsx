@@ -1,14 +1,14 @@
-
 import React, { useState, useMemo } from 'react';
 import { ProjectFile, Discipline, Status } from '../types';
 import { X, Search, CheckSquare, Square, AlertCircle, CheckCircle2, Send, BadgeCheck, ThumbsDown, ArrowRight } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, differenceInBusinessDays, isValid, isWeekend, isWithinInterval } from 'date-fns';
 
 interface BatchEditModalProps {
   projects: ProjectFile[];
   onClose: () => void;
   onApply: (ids: string[], field: keyof ProjectFile, value: any) => void;
   onWorkflow: (ids: string[], action: 'COMPLETE' | 'SEND' | 'APPROVE' | 'REJECT', date: string) => void;
+  holidays: string[];
 }
 
 // Fields allowed for batch editing
@@ -23,6 +23,20 @@ const EDITABLE_FIELDS: { key: keyof ProjectFile; label: string; type: 'text' | '
   { key: 'blockedDays', label: 'Dias Bloqueados', type: 'number' },
 ];
 
+const calculateBusinessDaysWithHolidays = (start: Date, end: Date, holidays: string[]) => {
+    let days = differenceInBusinessDays(end, start);
+    let holidaysOnWeekdays = 0;
+    holidays.forEach(h => {
+        const hDate = parseISO(h);
+        if (isValid(hDate) && isWithinInterval(hDate, { start, end })) {
+            if (!isWeekend(hDate)) {
+                holidaysOnWeekdays++;
+            }
+        }
+    });
+    return Math.max(0, days - holidaysOnWeekdays);
+};
+
 const formatDate = (dateStr: string) => {
   if (!dateStr) return '-';
   try {
@@ -35,7 +49,7 @@ const formatDate = (dateStr: string) => {
 type Mode = 'EDIT' | 'WORKFLOW';
 type WorkflowAction = 'COMPLETE' | 'SEND' | 'APPROVE' | 'REJECT';
 
-export const BatchEditModal: React.FC<BatchEditModalProps> = ({ projects, onClose, onApply, onWorkflow }) => {
+export const BatchEditModal: React.FC<BatchEditModalProps> = ({ projects, onClose, onApply, onWorkflow, holidays }) => {
   const [mode, setMode] = useState<Mode>('EDIT');
   
   // Edit Mode State
@@ -122,6 +136,20 @@ export const BatchEditModal: React.FC<BatchEditModalProps> = ({ projects, onClos
             // Construct hypothetical updated project
             const updated = { ...project, [selectedField]: newValue };
             
+            // Auto-calculate blocked days logic
+            if (selectedField === 'sendDate' || selectedField === 'feedbackDate') {
+                if (updated.sendDate && updated.feedbackDate) {
+                    const send = parseISO(updated.sendDate);
+                    const feedback = parseISO(updated.feedbackDate);
+                    if (isValid(send) && isValid(feedback) && feedback >= send) {
+                        const newBlocked = calculateBusinessDaysWithHolidays(send, feedback, holidays);
+                        if (newBlocked !== project.blockedDays) {
+                            onApply([project.id], 'blockedDays', newBlocked);
+                        }
+                    }
+                }
+            }
+
             let newStatus = updated.status;
 
             if (updated.feedbackDate) {

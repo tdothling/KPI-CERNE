@@ -69,21 +69,21 @@ const ClientDetailGantt = ({ clientName, projects, holidays, onClose }: { client
     const chartWidth = Math.max(900, totalDays * 40);
 
     return (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-[95vw] w-full h-[90vh] flex flex-col border dark:border-slate-700 overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-700/50 shrink-0">
-                    <div><h3 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2"><Briefcase size={20} className="text-slate-500" />{clientName}</h3><p className="text-sm text-slate-500 dark:text-slate-400">Detalhamento por Disciplina e Arquivos</p></div>
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center md:p-4 backdrop-blur-sm p-0">
+            <div className="bg-white dark:bg-slate-800 md:rounded-xl rounded-none shadow-2xl max-w-[95vw] w-full h-full md:h-[90vh] flex flex-col border dark:border-slate-700 overflow-hidden">
+                <div className="px-4 md:px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-700/50 shrink-0">
+                    <div><h3 className="text-lg md:text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2"><Briefcase size={20} className="text-slate-500" />{clientName}</h3><p className="text-xs md:text-sm text-slate-500 dark:text-slate-400">Detalhamento por Disciplina e Arquivos</p></div>
                     <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full transition-colors text-slate-500 dark:text-slate-400" aria-label="Fechar"><X size={24} /></button>
                 </div>
                 <div className="flex-1 overflow-auto custom-scrollbar relative bg-white dark:bg-slate-800">
                     <div style={{ width: `${chartWidth}px` }} className="relative min-h-full">
                         <div className="flex border-b border-slate-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-800 z-30 h-12 shadow-sm">
-                            <div className="w-[350px] flex-shrink-0 p-3 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase bg-white dark:bg-slate-800 sticky left-0 z-40 border-r border-slate-100 dark:border-slate-700 flex items-center">Disciplina / Arquivo</div>
+                            <div className="w-[130px] md:w-[350px] flex-shrink-0 p-3 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase bg-white dark:bg-slate-800 sticky left-0 z-40 border-r border-slate-100 dark:border-slate-700 flex items-center">Disciplina / Arquivo</div>
                             <div className="flex-1 flex relative">
                                 {days.map((day, idx) => { const isWe = isWeekend(day); const isMonthStart = format(day, 'dd') === '01' || idx === 0; return (<div key={idx} style={{ width: `${100 / totalDays}%` }} className={`border-l border-slate-100 dark:border-slate-700/50 flex flex-col items-center justify-end pb-2 ${isWe ? 'bg-slate-50 dark:bg-slate-900/50' : ''}`}><span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold">{format(day, 'dd')}</span>{isMonthStart && (<span className="absolute top-1 text-[9px] font-bold text-brand-700 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/50 px-1 rounded z-10 whitespace-nowrap">{format(day, 'MMM/yy', { locale: ptBR })}</span>)}</div>); })}
                             </div>
                         </div>
-                        <div className="absolute top-12 bottom-0 left-[350px] right-0 flex pointer-events-none z-0">{days.map((day, idx) => { const isWe = isWeekend(day); return (<div key={idx} style={{ width: `${100 / totalDays}%` }} className={`border-l border-slate-100 dark:border-slate-700/30 h-full ${isWe ? 'bg-slate-50/50 dark:bg-slate-900/30' : ''}`} />); })}</div>
+                        <div className="absolute top-12 bottom-0 left-[130px] md:left-[350px] right-0 flex pointer-events-none z-0">{days.map((day, idx) => { const isWe = isWeekend(day); return (<div key={idx} style={{ width: `${100 / totalDays}%` }} className={`border-l border-slate-100 dark:border-slate-700/30 h-full ${isWe ? 'bg-slate-50/50 dark:bg-slate-900/30' : ''}`} />); })}</div>
                         <div className="relative z-10">
                             {visibleRows.map((row: any) => {
                                 const offsetDays = differenceInCalendarDays(row.start, chartStart);
@@ -97,23 +97,23 @@ const ClientDetailGantt = ({ clientName, projects, holidays, onClose }: { client
                                 
                                 return (
                                     <div key={row.id} className={`flex items-center h-10 border-b border-slate-50 dark:border-slate-700/30 hover:bg-slate-50 dark:hover:bg-slate-700/20 group transition-colors ${isDisc ? 'bg-slate-50/50 dark:bg-slate-800' : ''}`}>
-                                        <div className="w-[350px] flex-shrink-0 px-4 flex items-center sticky left-0 z-20 bg-inherit border-r border-slate-100 dark:border-slate-700/50 h-full">
+                                        <div className="w-[130px] md:w-[350px] flex-shrink-0 px-2 md:px-4 flex items-center sticky left-0 z-20 bg-inherit border-r border-slate-100 dark:border-slate-700/50 h-full overflow-hidden">
                                             {isDisc ? (
                                                 <button onClick={() => toggleDiscipline(row.label)} className="flex items-center space-x-2 w-full text-left font-semibold text-slate-700 dark:text-slate-200">
-                                                    {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                                                    <span className="truncate">{row.label}</span>
-                                                    <span className="text-[10px] px-1.5 py-0.5 bg-slate-200 dark:bg-slate-600 rounded-full text-slate-600 dark:text-slate-300 ml-auto">{row.children.length} arq</span>
+                                                    {isExpanded ? <ChevronDown size={14} className="flex-shrink-0" /> : <ChevronRight size={14} className="flex-shrink-0" />}
+                                                    <span className="truncate text-xs md:text-sm">{row.label}</span>
+                                                    <span className="text-[9px] md:text-[10px] px-1.5 py-0.5 bg-slate-200 dark:bg-slate-600 rounded-full text-slate-600 dark:text-slate-300 ml-auto hidden md:inline-block">{row.children.length} arq</span>
                                                 </button>
                                             ) : (
-                                                <div className="pl-6 flex items-center space-x-2 text-sm text-slate-600 dark:text-slate-400 w-full">
+                                                <div className="pl-4 md:pl-6 flex items-center space-x-2 text-xs md:text-sm text-slate-600 dark:text-slate-400 w-full overflow-hidden">
                                                     <span className={`truncate flex-1 ${row.status === Status.DONE ? 'line-through opacity-70' : ''}`} title={row.label}>{row.label}</span>
-                                                    {isDone && <CheckCircle2 size={12} className="text-emerald-500" />}
+                                                    {isDone && <CheckCircle2 size={12} className="text-emerald-500 flex-shrink-0" />}
                                                 </div>
                                             )}
                                         </div>
                                         <div className="flex-1 relative h-full">
                                             <div 
-                                                className={`absolute top-2 bottom-2 rounded-md shadow-sm transition-all flex items-center px-2 whitespace-nowrap overflow-hidden text-xs font-medium text-white ${isDisc ? 'opacity-80' : ''} ${DISCIPLINE_COLORS[row.discipline] || 'bg-slate-400'} ${isRejected ? 'ring-2 ring-rose-500' : ''}`}
+                                                className={`absolute top-2 bottom-2 rounded-md shadow-sm transition-all flex items-center px-2 whitespace-nowrap overflow-hidden text-[10px] md:text-xs font-medium text-white ${isDisc ? 'opacity-80' : ''} ${DISCIPLINE_COLORS[row.discipline] || 'bg-slate-400'} ${isRejected ? 'ring-2 ring-rose-500' : ''}`}
                                                 style={{ left: `${offsetPercent}%`, width: `${widthPercent}%`, ...((isDisc && !isDone) ? STRIPE_PATTERN_STYLE : {}) }}
                                             >
                                                 <span className="drop-shadow-md">{row.duration} dias</span>

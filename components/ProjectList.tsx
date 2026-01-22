@@ -75,7 +75,44 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
   const handleConfirmDelete = () => { if (projectToDelete) { onDelete(projectToDelete.id); setProjectToDelete(null); } };
   
   const handleSaveEdit = () => { if (editingProject) { onUpdate(editingProject); setEditingProject(null); } };
-  const updateEditingField = (field: keyof ProjectFile, value: any) => { if (!editingProject) return; let updated = { ...editingProject, [field]: value }; if (updated.feedbackDate) { if (updated.status !== Status.REJECTED && updated.status !== Status.APPROVED) { updated.status = Status.APPROVED; } } else if (updated.sendDate) { updated.status = Status.WAITING_APPROVAL; } else if (updated.endDate) { updated.status = Status.DONE; } else { updated.status = Status.IN_PROGRESS; } if (field === 'status') { if ((value === Status.APPROVED || value === Status.REJECTED) && !updated.feedbackDate) { updated.status = value; } } setEditingProject(updated); };
+  
+  const updateEditingField = (field: keyof ProjectFile, value: any) => { 
+      if (!editingProject) return; 
+      
+      let updated = { ...editingProject, [field]: value }; 
+      
+      // Auto-calculate blocked days if dates change
+      if (field === 'sendDate' || field === 'feedbackDate') {
+          if (updated.sendDate && updated.feedbackDate) {
+              const send = parseISO(updated.sendDate);
+              const feedback = parseISO(updated.feedbackDate);
+              if (isValid(send) && isValid(feedback) && feedback >= send) {
+                  updated.blockedDays = calculateBusinessDaysWithHolidays(send, feedback, holidays);
+              }
+          }
+      }
+
+      if (updated.feedbackDate) { 
+          if (updated.status !== Status.REJECTED && updated.status !== Status.APPROVED) { 
+              updated.status = Status.APPROVED; 
+          } 
+      } else if (updated.sendDate) { 
+          updated.status = Status.WAITING_APPROVAL; 
+      } else if (updated.endDate) { 
+          updated.status = Status.DONE; 
+      } else { 
+          updated.status = Status.IN_PROGRESS; 
+      } 
+      
+      if (field === 'status') { 
+          if ((value === Status.APPROVED || value === Status.REJECTED) && !updated.feedbackDate) { 
+              updated.status = value; 
+          } 
+      } 
+      
+      setEditingProject(updated); 
+  };
+
   const getStatusColor = (status: Status) => { switch(status) { case Status.APPROVED: return 'text-emerald-700 bg-emerald-100 border-emerald-300 dark:bg-emerald-900/40 dark:border-emerald-700 dark:text-emerald-400'; case Status.REJECTED: return 'text-rose-700 bg-rose-100 border-rose-300 dark:bg-rose-900/40 dark:border-rose-700 dark:text-rose-400'; case Status.WAITING_APPROVAL: return 'text-blue-700 bg-blue-100 border-blue-300 dark:bg-blue-900/40 dark:border-blue-700 dark:text-blue-400'; case Status.DONE: return 'text-violet-700 bg-violet-100 border-violet-300 dark:bg-violet-900/40 dark:border-violet-700 dark:text-violet-400'; case Status.IN_PROGRESS: return 'text-brand-700 bg-brand-50 border-brand-200 dark:bg-brand-900/40 dark:border-brand-800 dark:text-brand-400'; case Status.REVISED: return 'text-slate-500 bg-slate-200 border-slate-300 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-400 line-through decoration-slate-400 decoration-2'; default: return 'text-amber-600 bg-amber-50 border-amber-200 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-400'; } };
   const SortIcon = ({ column }: { column: SortKey }) => { if (sortConfig.key !== column) return <ArrowUpDown size={12} className="ml-1 text-slate-300 dark:text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity" />; return sortConfig.direction === 'asc' ? <ArrowUp size={12} className="ml-1 text-brand-600 dark:text-brand-400" /> : <ArrowDown size={12} className="ml-1 text-brand-600 dark:text-brand-400" />; };
   const renderHeader = (label: string, key: SortKey, className: string = "") => ( <th className={`px-4 py-3 cursor-pointer group hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors select-none ${className}`} onClick={() => handleSort(key)}> <div className={`flex items-center ${className.includes('text-right') ? 'justify-end' : className.includes('text-center') ? 'justify-center' : 'justify-start'}`}> {label} <SortIcon column={key} /> </div> </th> );

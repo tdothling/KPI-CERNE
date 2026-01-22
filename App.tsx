@@ -505,7 +505,7 @@ export default function App() {
         )}
 
         <div className="mb-6 flex flex-col lg:flex-row gap-4 justify-between items-start lg:items-end">
-          <div className="w-full lg:w-auto border-b border-slate-200 dark:border-slate-700 overflow-x-auto no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
+          <div className="w-full lg:w-auto border-b border-slate-200 dark:border-slate-700 overflow-x-auto overflow-y-hidden no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
             <nav className="-mb-px flex space-x-6 min-w-max" aria-label="Tabs">
               <button onClick={() => setActiveTab('dashboard')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${activeTab === 'dashboard' ? 'border-brand-600 text-brand-600 dark:text-brand-400' : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300'}`}><LayoutDashboard size={18} /> Indicadores</button>
               <button onClick={() => setActiveTab('timeline')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${activeTab === 'timeline' ? 'border-brand-600 text-brand-600 dark:text-brand-400' : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300'}`}><Calendar size={18} /> Cronograma</button>
@@ -681,7 +681,7 @@ export default function App() {
       )}
 
       {isBatchEditOpen && (
-        <BatchEditModal projects={filteredProjects} onClose={() => setIsBatchEditOpen(false)} onApply={handleBatchUpdate} onWorkflow={handleBatchWorkflow} />
+        <BatchEditModal projects={filteredProjects} onClose={() => setIsBatchEditOpen(false)} onApply={handleBatchUpdate} onWorkflow={handleBatchWorkflow} holidays={holidays} />
       )}
 
       {isHolidayManagerOpen && (
