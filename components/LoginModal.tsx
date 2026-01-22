@@ -11,6 +11,7 @@ interface LoginModalProps {
 export const LoginModal: React.FC<LoginModalProps> = ({ onClose, onLoginSuccess }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -20,7 +21,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onClose, onLoginSuccess 
     setError('');
 
     try {
-      await loginWithUsername(username, password);
+      await loginWithUsername(username, password, rememberMe);
       onLoginSuccess();
       onClose();
     } catch (err: any) {
@@ -60,7 +61,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onClose, onLoginSuccess 
                 value={username}
                 onChange={(e) => setUsername(e.target.value.toLowerCase())}
                 className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg pl-3 pr-20 py-2.5 focus:ring-2 focus:ring-brand-500 outline-none"
-                placeholder="ex: nome.sobrenome"
+                placeholder="nome.sobrenome"
                 required
                 autoFocus
                 autoCapitalize="none"
@@ -80,6 +81,19 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onClose, onLoginSuccess 
               placeholder="••••••••"
               required
             />
+          </div>
+
+          <div className="flex items-center">
+            <input
+              id="remember-me"
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="h-4 w-4 text-brand-600 focus:ring-brand-500 border-gray-300 rounded cursor-pointer"
+            />
+            <label htmlFor="remember-me" className="ml-2 block text-sm text-slate-600 dark:text-slate-300 cursor-pointer select-none">
+              Manter conectado
+            </label>
           </div>
 
           {error && (

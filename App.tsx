@@ -469,7 +469,10 @@ export default function App() {
               <div className="hidden sm:flex items-center gap-3 pl-3 border-l border-slate-200 dark:border-slate-700">
                  <div className="flex flex-col items-end">
                     <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{formatUsername(currentUser.email)}</span>
-                    <span className="text-[10px] text-slate-400">Online</span>
+                    <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Online</span>
+                    </div>
                  </div>
                  <button onClick={logoutUser} className="p-2 bg-slate-100 dark:bg-slate-700 hover:bg-rose-50 dark:hover:bg-rose-900/30 text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg transition-colors" title="Sair"><LogOut size={18} /></button>
               </div>

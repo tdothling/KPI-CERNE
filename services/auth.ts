@@ -4,13 +4,16 @@ import {
   signInWithEmailAndPassword, 
   signOut, 
   onAuthStateChanged,
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence,
   User 
 } from "firebase/auth";
 
 // Domain suffix to make emails valid for Firebase
 const INVISIBLE_DOMAIN = "@cerne.internal";
 
-export const loginWithUsername = async (username: string, password: string) => {
+export const loginWithUsername = async (username: string, password: string, remember: boolean = false) => {
   if (!auth) throw new Error("Firebase Auth not initialized");
   
   // Clean username and append domain
@@ -18,6 +21,10 @@ export const loginWithUsername = async (username: string, password: string) => {
   const email = `${cleanUsername}${INVISIBLE_DOMAIN}`;
 
   try {
+    // Set persistence based on user preference
+    const persistenceType = remember ? browserLocalPersistence : browserSessionPersistence;
+    await setPersistence(auth, persistenceType);
+
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     return userCredential.user;
   } catch (error: any) {
