@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { PurchaseDoc, PurchaseStatus } from '../types';
-import { Trash2, Edit2, ShoppingCart, Search, Plus, ExternalLink, CheckCircle2, Clock, Truck, XCircle, Tag, MapPin, Briefcase, Calendar, ArrowRight, CreditCard, CheckSquare } from 'lucide-react';
+import { Trash2, Edit2, ShoppingCart, Search, Plus, ExternalLink, CheckCircle2, Clock, Truck, XCircle, Tag, MapPin, Briefcase, Calendar, ArrowRight, CreditCard, CheckSquare, Eye, X } from 'lucide-react';
 import { format, parseISO, isValid, differenceInBusinessDays, isWeekend, isWithinInterval } from 'date-fns';
 import { subscribeToClients } from '../services/db'; // Direct subscribe if needed, or pass via props
 
@@ -44,6 +44,9 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, on
   // Clients state for dropdown (fetched locally or passed down)
   // Ideally passed down, but to keep changes localized, fetching here is safe for now
   const [clientsList, setClientsList] = useState<{id: string, name: string}[]>([]);
+
+  // Details Modal State
+  const [detailsPurchase, setDetailsPurchase] = useState<PurchaseDoc | null>(null);
 
   // Fetch clients when modal opens
   React.useEffect(() => {
@@ -150,10 +153,10 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, on
 
   const getStatusColor = (status: PurchaseStatus) => {
       switch(status) {
-          case PurchaseStatus.DELIVERED: return 'text-emerald-700 bg-emerald-100 border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-400';
-          case PurchaseStatus.BOUGHT: return 'text-blue-700 bg-blue-100 border-blue-200 dark:bg-blue-900/40 dark:text-blue-400';
-          case PurchaseStatus.PENDING: return 'text-amber-700 bg-amber-100 border-amber-200 dark:bg-amber-900/40 dark:text-amber-400';
-          case PurchaseStatus.CANCELED: return 'text-slate-500 bg-slate-200 border-slate-300 dark:bg-slate-700 dark:text-slate-400 line-through';
+          case PurchaseStatus.DELIVERED: return 'text-emerald-700 bg-emerald-100 border-emerald-200 dark:bg-emerald-900/40 dark:border-emerald-700 dark:text-emerald-400';
+          case PurchaseStatus.BOUGHT: return 'text-blue-700 bg-blue-100 border-blue-200 dark:bg-blue-900/40 dark:border-blue-700 dark:text-blue-400';
+          case PurchaseStatus.PENDING: return 'text-amber-700 bg-amber-100 border-amber-200 dark:bg-amber-900/40 dark:border-amber-700 dark:text-amber-400';
+          case PurchaseStatus.CANCELED: return 'text-slate-500 bg-slate-200 border-slate-300 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-400 line-through';
           default: return 'text-slate-600 bg-slate-100 border-slate-200 dark:bg-slate-800 dark:text-slate-400';
       }
   };
@@ -201,7 +204,7 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, on
                             <th className="px-6 py-3 w-[20%]">Ciclo (Dias Úteis)</th>
                             <th className="px-6 py-3 w-[10%] text-center">Status</th>
                             <th className="px-6 py-3 w-[5%] text-center">Fluxo</th>
-                            <th className="px-6 py-3 w-[5%] text-right">Editar</th>
+                            <th className="px-6 py-3 w-[5%] text-right">Ações</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
@@ -241,9 +244,10 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, on
                                     </div>
                                 </td>
                                 <td className="px-6 py-4 text-right">
-                                    <div className="flex items-center justify-end space-x-2">
-                                        <button onClick={() => handleOpenModal(p)} className="p-1.5 text-slate-400 hover:text-brand-600 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"><Edit2 size={16} /></button>
-                                        <button onClick={() => onDelete(p.id)} className="p-1.5 text-slate-400 hover:text-rose-600 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"><Trash2 size={16} /></button>
+                                    <div className="flex items-center justify-end space-x-1">
+                                        <button onClick={() => setDetailsPurchase(p)} className="p-1.5 text-slate-400 hover:text-violet-500 rounded hover:bg-violet-50 dark:hover:bg-violet-900/30 transition-colors"><Eye size={16} /></button>
+                                        <button onClick={() => handleOpenModal(p)} className="p-1.5 text-slate-400 hover:text-blue-500 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"><Edit2 size={16} /></button>
+                                        <button onClick={() => onDelete(p.id)} className="p-1.5 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors"><Trash2 size={16} /></button>
                                     </div>
                                 </td>
                             </tr>
@@ -263,7 +267,7 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, on
                             {editingId ? <Edit2 size={20} className="text-brand-600" /> : <Plus size={20} className="text-brand-600" />}
                             {editingId ? 'Editar Solicitação' : 'Nova Solicitação de Compra'}
                         </h3>
-                        <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><Tag size={24} /></button>
+                        <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X size={24} /></button>
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-4">
@@ -316,6 +320,80 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, on
              </div>
         )}
         
+        {/* Detail Modal */}
+        {detailsPurchase && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-2xl w-full p-0 border dark:border-slate-700 flex flex-col max-h-[90vh] overflow-hidden">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-start bg-slate-50 dark:bg-slate-700/30">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800 dark:text-white">{detailsPurchase.description}</h3>
+                <div className="flex items-center space-x-2 mt-2">
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(detailsPurchase.status)}`}>
+                        {detailsPurchase.status}
+                    </span>
+                    <span className="text-xs text-slate-400 dark:text-slate-500">ID: {detailsPurchase.id}</span>
+                </div>
+              </div>
+              <button onClick={() => setDetailsPurchase(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase block mb-1">Cliente</span>
+                        <span className="text-base font-semibold text-slate-800 dark:text-slate-200">{detailsPurchase.client}</span>
+                    </div>
+                    <div>
+                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase block mb-1">Base / Setor</span>
+                        <span className="text-base font-semibold text-slate-800 dark:text-slate-200">{detailsPurchase.base || '-'}</span>
+                    </div>
+                    <div>
+                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase block mb-1">Aplicação</span>
+                        <span className="text-base font-semibold text-slate-800 dark:text-slate-200">{detailsPurchase.application || '-'}</span>
+                    </div>
+                    <div>
+                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase block mb-1">Solicitante</span>
+                        <span className="text-base font-semibold text-slate-800 dark:text-slate-200">{detailsPurchase.requester}</span>
+                    </div>
+                    
+                    <div className="p-3 bg-slate-50 dark:bg-slate-700/30 rounded-lg border border-slate-100 dark:border-slate-700">
+                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase block mb-1">Data Pedido</span>
+                        <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{formatDateDisplay(detailsPurchase.requestDate)}</span>
+                    </div>
+                     <div className="p-3 bg-slate-50 dark:bg-slate-700/30 rounded-lg border border-slate-100 dark:border-slate-700">
+                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase block mb-1">Data Entrega</span>
+                        <span className={`text-sm font-semibold ${detailsPurchase.arrivalDate ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>{detailsPurchase.arrivalDate ? formatDateDisplay(detailsPurchase.arrivalDate) : 'Pendente'}</span>
+                    </div>
+                </div>
+
+                {detailsPurchase.link && (
+                    <div>
+                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase block mb-1">Link de Referência</span>
+                        <a href={detailsPurchase.link} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:text-brand-700 hover:underline break-all text-sm flex items-center gap-1">
+                            {detailsPurchase.link} <ExternalLink size={12} />
+                        </a>
+                    </div>
+                )}
+
+                <div>
+                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase block mb-2">Observações</span>
+                    <div className="p-4 bg-slate-50 dark:bg-slate-700/30 rounded-lg border border-slate-100 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm whitespace-pre-wrap min-h-[80px]">
+                        {detailsPurchase.observation || <span className="text-slate-400 italic">Sem observações.</span>}
+                    </div>
+                </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/30 flex justify-end">
+                <button onClick={() => setDetailsPurchase(null)} className="px-6 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-medium rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm">
+                    Fechar
+                </button>
+            </div>
+          </div>
+        </div>
+      )}
+
         {/* ... Buy/Delivery Modals ... */}
         {pendingBuy && ( <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-sm w-full p-6 border dark:border-slate-700"><div className="flex items-center space-x-3 mb-4"><div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-full text-blue-600 dark:text-blue-400"><CreditCard size={24} /></div><h3 className="text-lg font-bold text-slate-800 dark:text-white">Registrar Compra</h3></div><p className="text-sm text-slate-500 dark:text-slate-400 mb-4">A compra já foi realizada no fornecedor?</p><div className="flex justify-end space-x-3"><button onClick={() => setPendingBuy(null)} className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancelar</button><button onClick={handleConfirmBuy} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-md font-medium">Confirmar</button></div></div></div> )}
         {pendingDelivery && ( <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-sm w-full p-6 border dark:border-slate-700"><div className="flex items-center space-x-3 mb-4"><div className="bg-emerald-100 dark:bg-emerald-900/30 p-2 rounded-full text-emerald-600 dark:text-emerald-400"><CheckSquare size={24} /></div><h3 className="text-lg font-bold text-slate-800 dark:text-white">Registrar Entrega</h3></div><p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Quando o material chegou na base?</p><input type="date" value={pendingDelivery.date} onChange={(e) => setPendingDelivery(prev => prev ? { ...prev, date: e.target.value } : null)} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 mb-6 dark:[color-scheme:dark]" /><div className="flex justify-end space-x-3"><button onClick={() => setPendingDelivery(null)} className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancelar</button><button onClick={handleConfirmDelivery} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-md font-medium">Confirmar Chegada</button></div></div></div> )}
