@@ -10,8 +10,10 @@ import {
   setDoc,
   query,
   orderBy,
+  limit, // Importado para Otimização 2
   QuerySnapshot,
-  DocumentData
+  DocumentData,
+  getDoc // Importado para leitura única
 } from "firebase/firestore";
 import { ProjectFile, MaterialDoc, PurchaseDoc, ClientDoc } from "../types";
 
@@ -20,7 +22,8 @@ const COLL_PROJECTS = "projects";
 const COLL_MATERIALS = "materials";
 const COLL_HOLIDAYS = "settings"; 
 const COLL_PURCHASES = "purchases";
-const COLL_CLIENTS = "clients"; // Nova coleção
+const COLL_CLIENTS = "clients";
+const COLL_CONFIG = "configuration"; // Coleção hipotética para configs gerais
 
 // --- GENERIC HELPERS ---
 
@@ -37,7 +40,14 @@ const isDbActive = () => {
 export const subscribeToProjects = (callback: (data: ProjectFile[]) => void) => {
   if (!isDbActive()) return () => {};
 
-  const q = query(collection(db, COLL_PROJECTS));
+  // OTIMIZAÇÃO 2: LIMITAÇÃO DE LEITURAS
+  // Limitamos a 50 projetos mais recentes (baseado na data de criação ou nome)
+  // Nota: Idealmente, tenha um campo 'createdAt' para ordenar. Aqui usaremos 'filename' ou sem ordem específica se não houver campo de data confiável em todos.
+  // Se quiser ordenar por data de início: orderBy("startDate", "desc")
+  const q = query(
+    collection(db, COLL_PROJECTS), 
+    limit(50) 
+  );
   
   const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
     const projects: ProjectFile[] = [];
@@ -88,7 +98,11 @@ export const deleteProjectFromDb = async (id: string) => {
 export const subscribeToMaterials = (callback: (data: MaterialDoc[]) => void) => {
   if (!isDbActive()) return () => {};
 
-  const q = query(collection(db, COLL_MATERIALS));
+  // OTIMIZAÇÃO 2: LIMITAÇÃO DE LEITURAS
+  const q = query(
+      collection(db, COLL_MATERIALS),
+      limit(50)
+  );
   
   const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
     const materials: MaterialDoc[] = [];
@@ -138,7 +152,13 @@ export const deleteMaterialFromDb = async (id: string) => {
 export const subscribeToPurchases = (callback: (data: PurchaseDoc[]) => void) => {
   if (!isDbActive()) return () => {};
 
-  const q = query(collection(db, COLL_PURCHASES));
+  // OTIMIZAÇÃO 2: LIMITAÇÃO DE LEITURAS
+  // Ordenar por data de solicitação decrescente para pegar as últimas 50
+  const q = query(
+      collection(db, COLL_PURCHASES), 
+      orderBy("requestDate", "desc"),
+      limit(50)
+  );
   
   const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
     const purchases: PurchaseDoc[] = [];
@@ -188,7 +208,8 @@ export const deletePurchaseFromDb = async (id: string) => {
 export const subscribeToClients = (callback: (data: ClientDoc[]) => void) => {
   if (!isDbActive()) return () => {};
 
-  const q = query(collection(db, COLL_CLIENTS), orderBy("name"));
+  // Clientes geralmente são poucos, mas é boa prática limitar se escalar
+  const q = query(collection(db, COLL_CLIENTS), orderBy("name"), limit(100));
   
   const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
     const clients: ClientDoc[] = [];
@@ -233,11 +254,14 @@ export const deleteClientFromDb = async (id: string) => {
   }
 };
 
-// --- HOLIDAYS ---
+// --- HOLIDAYS & SETTINGS (OTIMIZAÇÃO 4: Single Document) ---
+// Em vez de ler uma coleção inteira, lemos um único documento contendo arrays.
+// Ex: { dates: ['2024-01-01', ...] }
 
 export const subscribeToHolidays = (callback: (holidays: string[]) => void) => {
     if (!isDbActive()) return () => {};
 
+    // Lê apenas o documento 'holidays' dentro da coleção 'settings'
     const docRef = doc(db, COLL_HOLIDAYS, "holidays");
     
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
@@ -260,3 +284,21 @@ export const saveHolidaysToDb = async (holidays: string[]) => {
         console.error("Erro ao salvar feriados:", e);
     }
 };
+
+// Exemplo da OTIMIZAÇÃO 4 (Não usado na UI ainda, mas mostra como fazer para Dropdowns)
+export const getAppConfig = async () => {
+    if (!isDbActive()) return null;
+    try {
+        // Lê um único documento que conteria arrays de disciplinas, status, etc.
+        // Custo: 1 Read (independente de ter 10 ou 1000 categorias no array)
+        const docRef = doc(db, COLL_CONFIG, "general"); 
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+            return snap.data(); 
+        }
+        return null;
+    } catch (e) {
+        console.error("Erro ao buscar configs:", e);
+        return null;
+    }
+}
