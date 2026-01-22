@@ -96,7 +96,7 @@ const ClientDetailGantt = ({ clientName, projects, holidays, onClose }: { client
                                 const isRejected = row.status === Status.REJECTED;
                                 
                                 return (
-                                    <div key={row.id} className={`flex items-center h-10 border-b border-slate-50 dark:border-slate-700/30 hover:bg-slate-50 dark:hover:bg-slate-700/20 group transition-colors ${isDisc ? 'bg-slate-50/50 dark:bg-slate-800' : ''}`}>
+                                    <div key={row.id} className={`flex items-center h-10 border-b border-slate-50 dark:border-slate-700/30 hover:bg-slate-50 dark:hover:bg-slate-700/20 group transition-colors ${isDisc ? 'bg-slate-50/50 dark:bg-slate-800' : 'bg-white dark:bg-slate-800'}`}>
                                         <div className="w-[130px] md:w-[350px] flex-shrink-0 px-2 md:px-4 flex items-center sticky left-0 z-20 bg-inherit border-r border-slate-100 dark:border-slate-700/50 h-full overflow-hidden">
                                             {isDisc ? (
                                                 <button onClick={() => toggleDiscipline(row.label)} className="flex items-center space-x-2 w-full text-left font-semibold text-slate-700 dark:text-slate-200">
