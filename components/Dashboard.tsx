@@ -256,6 +256,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
                     backgroundColor: tooltipBg,
                     color: tooltipText
                   }}
+                  itemStyle={{ color: tooltipText }}
+                  labelStyle={{ color: tooltipText }}
                 />
                 <Legend />
                 {Object.values(Discipline).map((discipline) => (
@@ -287,6 +289,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
                   <Tooltip 
                     cursor={{ fill: 'transparent' }} 
                     contentStyle={{ backgroundColor: tooltipBg, color: tooltipText, border: isDarkMode ? '1px solid #475569' : 'none' }}
+                    itemStyle={{ color: tooltipText }}
+                    labelStyle={{ color: tooltipText }}
                   />
                   <Bar dataKey="avgDays" name="Dias Úteis" radius={[4, 4, 0, 0]}>
                     {stats.executionData.map((entry, index) => (
@@ -311,6 +315,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
                     <Tooltip 
                       cursor={{ fill: 'transparent' }} 
                       contentStyle={{ backgroundColor: tooltipBg, color: tooltipText, border: isDarkMode ? '1px solid #475569' : 'none' }}
+                      itemStyle={{ color: tooltipText }}
+                      labelStyle={{ color: tooltipText }}
                     />
                     <Bar dataKey="count" name="Ocorrências" fill="#6366f1" radius={[0, 4, 4, 0]} barSize={20} />
                   </BarChart>
@@ -336,6 +342,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
                     formatter={(value: number) => [`${value}%`, 'Aprovado sem Revisão']}
                     cursor={{ fill: 'transparent' }} 
                     contentStyle={{ backgroundColor: tooltipBg, color: tooltipText, border: isDarkMode ? '1px solid #475569' : 'none' }}
+                    itemStyle={{ color: tooltipText }}
+                    labelStyle={{ color: tooltipText }}
                   />
                   <Bar dataKey="rate" name="Taxa de Assertividade" radius={[0, 4, 4, 0]} barSize={20}>
                     {stats.fttData.map((entry, index) => (
@@ -369,6 +377,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
                   <Tooltip 
                     formatter={(value: number) => [`${value} dias (média)`, 'Bloqueado']} 
                     contentStyle={{ backgroundColor: tooltipBg, color: tooltipText, border: isDarkMode ? '1px solid #475569' : 'none' }}
+                    itemStyle={{ color: tooltipText }}
                   />
                   <Legend verticalAlign="bottom" height={36} iconSize={10} fontSize={10}/>
                 </PieChart>
@@ -400,6 +409,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
                          <Tooltip 
                             formatter={(value: number) => [value, 'Listas Únicas']}
                             contentStyle={{ backgroundColor: tooltipBg, color: tooltipText, border: isDarkMode ? '1px solid #475569' : 'none' }}
+                            itemStyle={{ color: tooltipText }}
                          />
                      </PieChart>
                  </ResponsiveContainer>
