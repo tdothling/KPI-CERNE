@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { ProjectFile, Discipline, Status, RevisionReason, DateFilterType, MaterialDoc, PurchaseDoc, ClientDoc } from './types';
+import { ProjectFile, Discipline, Status, RevisionReason, DateFilterType, MaterialDoc, PurchaseDoc, ClientDoc, SiteType } from './types';
 import { Dashboard } from './components/Dashboard';
 import { ProjectList } from './components/ProjectList';
 import { ProjectTimeline } from './components/ProjectTimeline';
@@ -26,7 +26,8 @@ import {
   setDate,
   differenceInBusinessDays,
   isWeekend,
-  isWithinInterval
+  isWithinInterval,
+  format
 } from 'date-fns';
 
 // Import Firebase Service
@@ -195,6 +196,17 @@ export default function App() {
   const [isFolderUpload, setIsFolderUpload] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Export Modal State
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
+  // Derivada: Cliente selecionado no upload para controle de UI
+  const selectedUploadClientDoc = useMemo(() => {
+      return clients.find(c => c.name === uploadClient);
+  }, [clients, uploadClient]);
+
+  // Se o cliente for do tipo 'Canteiro de Obras', escondemos o input de base
+  const shouldShowBaseInput = !selectedUploadClientDoc || selectedUploadClientDoc.type === SiteType.OPERATIONAL_BASE;
+
   // Other Modals
   const [isBatchEditOpen, setIsBatchEditOpen] = useState(false);
   const [isHolidayManagerOpen, setIsHolidayManagerOpen] = useState(false);
@@ -283,21 +295,23 @@ export default function App() {
     return result;
   }, [materials, selectedClient, dateFilterType, referenceDate, customRange]);
 
+  const filteredPurchases = useMemo(() => {
+      let result = purchases;
+      if (selectedClient !== 'Todos') {
+        result = result.filter(p => p.client === selectedClient);
+      }
+      return result;
+  }, [purchases, selectedClient]);
+
   // Use Registered Clients for Filters
   const uniqueClients = useMemo(() => {
     const registeredNames = clients.map(c => c.name);
-    // Include any legacy clients from projects that might not be in the registry? 
-    // Ideally we strictly follow the registry, but to not hide existing data, we could merge.
-    // For now, let's prioritize Registered Clients + fallback to 'Todos'.
-    // If strict mode is preferred, just use registeredNames.
-    // Let's add any existing client in projects that is NOT in registry (Legacy support)
     const projectClients = new Set(projects.map(p => p.client));
     const merged = new Set([...registeredNames, ...projectClients]);
-    
     return ['Todos', ...Array.from(merged).sort()];
   }, [clients, projects]);
 
-  // --- HANDLERS (Now using DB Services) ---
+  // --- HANDLERS ---
 
   const handleOpenUploadModal = () => {
     setIsUploadModalOpen(true);
@@ -320,11 +334,15 @@ export default function App() {
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
-    if (importType === 'PROJECT') {
-        const finalClientName = uploadClient.trim();
-        const finalBaseName = uploadBase.trim() || 'Geral';
+    const finalClientName = uploadClient.trim();
+    const clientDoc = clients.find(c => c.name === finalClientName);
+    
+    let finalBaseName = 'Geral';
+    if (clientDoc && clientDoc.type === SiteType.OPERATIONAL_BASE) {
+        finalBaseName = uploadBase.trim() || 'Geral';
+    }
 
-        // Loop and add individually (Firestore handles concurrency well)
+    if (importType === 'PROJECT') {
         Array.from(files).forEach((f: any) => {
             let discipline = uploadDiscipline;
             if (isFolderUpload && f.webkitRelativePath) {
@@ -348,14 +366,11 @@ export default function App() {
         });
         setActiveTab('projects');
     } else if (importType === 'MATERIAL_LIST') {
-         const finalClientName = uploadClient.trim();
-         const finalBaseName = uploadBase.trim() || 'Geral';
-
          Array.from(files).forEach((f: any) => {
              const metadata = extractMetadataFromMaterialFilename(f.name, finalClientName);
              addMaterial({
                  filename: f.name,
-                 client: finalClientName, // Force selected client
+                 client: finalClientName,
                  base: finalBaseName,
                  discipline: metadata.discipline,
                  startDate: new Date().toISOString().split('T')[0],
@@ -371,14 +386,9 @@ export default function App() {
     event.target.value = '';
   };
 
-  // ... (Update/Delete/Revision handlers remain the same) ...
   const updateProject = (updated: ProjectFile) => updateProjectInDb(updated);
-  const deleteProject = (id: string) => {
-    // ... delete logic same as before ...
-    deleteProjectFromDb(id);
-  };
+  const deleteProject = (id: string) => { deleteProjectFromDb(id); };
   const addProjectRevision = (id: string, reason: RevisionReason, comment: string) => {
-      // ... revision logic same as before ...
       const originalProject = projects.find(p => p.id === id);
       if (!originalProject) return;
       updateProjectInDb({ ...originalProject, status: Status.REVISED });
@@ -395,7 +405,6 @@ export default function App() {
   const updateMaterial = (updated: MaterialDoc) => updateMaterialInDb(updated);
   const deleteMaterial = (id: string) => deleteMaterialFromDb(id);
   const addMaterialRevision = (id: string, reason: RevisionReason, comment: string) => {
-      // ... same logic ...
       const original = materials.find(m => m.id === id);
       if (!original) return;
       updateMaterialInDb({ ...original, status: 'REVISED' });
@@ -412,25 +421,20 @@ export default function App() {
   const handleUpdatePurchase = (updated: PurchaseDoc) => updatePurchaseInDb(updated);
   const handleDeletePurchase = (id: string) => { if(confirm("Confirmar exclusão?")) deletePurchaseFromDb(id); };
 
-  // Client Manager Handlers
   const handleAddClient = (client: Omit<ClientDoc, 'id'>) => addClient(client);
   const handleUpdateClient = (client: ClientDoc) => updateClientInDb(client);
   const handleDeleteClient = (id: string) => { if(confirm("Excluir cliente?")) deleteClientFromDb(id); };
 
-  // ... (Batch, Holiday handlers same) ...
   const handleBatchUpdate = (ids: string[], field: keyof ProjectFile, value: any) => {
-      // ... logic ...
       ids.forEach(id => {
         const project = projects.find(p => p.id === id);
         if (project) {
             const updatedProject = { ...project, [field]: value };
-            if (field === 'blockedDays' && updatedProject.sendDate) { /* ... */ }
             updateProjectInDb(updatedProject);
         }
     });
   };
   const handleBatchWorkflow = (ids: string[], action: 'COMPLETE' | 'SEND' | 'APPROVE' | 'REJECT', date: string) => {
-      // ... logic ...
       ids.forEach(id => {
         const project = projects.find(p => p.id === id);
         if (!project) return;
@@ -444,7 +448,57 @@ export default function App() {
     });
   };
   const handleUpdateHolidays = (newHolidays: string[]) => saveHolidaysToDb(newHolidays);
-  const handleExportCSV = () => { /* ... export logic ... */ };
+  
+  // EXPORT LOGIC
+  const handleExportCSV = () => {
+    setIsExportModalOpen(true);
+  };
+
+  const handleConfirmExport = (type: 'PROJECTS' | 'MATERIALS' | 'PURCHASES') => {
+    let headers: string[] = [];
+    let rows: any[][] = [];
+    let filename = "";
+
+    if (type === 'PROJECTS') {
+        headers = ["Nome do Arquivo", "Cliente", "Base", "Disciplina", "Status", "Data Inicio", "Data Fim", "Data Envio", "Data Feedback", "Dias Bloqueados"];
+        rows = filteredProjects.map(p => [
+            p.filename, p.client, p.base || '', p.discipline, p.status, 
+            p.startDate, p.endDate, p.sendDate, p.feedbackDate, p.blockedDays
+        ]);
+        filename = "Projetos";
+    } else if (type === 'MATERIALS') {
+        headers = ["Arquivo", "Cliente", "Base", "Disciplina", "Status", "Data Inicio", "Data Fim"];
+        rows = filteredMaterials.map(m => [
+            m.filename, m.client, m.base || '', m.discipline, m.status,
+            m.startDate, m.endDate
+        ]);
+        filename = "Lista_Materiais";
+    } else if (type === 'PURCHASES') {
+        headers = ["Descricao", "Cliente", "Base", "Aplicacao", "Solicitante", "Status", "Data Pedido", "Data Chegada", "Observacao"];
+        rows = filteredPurchases.map(p => [
+            p.description, p.client, p.base || '', p.application, p.requester, p.status,
+            p.requestDate, p.arrivalDate, p.observation || ''
+        ]);
+        filename = "Compras";
+    }
+
+    // Generate CSV content with BOM for Excel compatibility and Semicolon separator
+    const csvContent = [
+        headers.join(";"),
+        ...rows.map(r => r.map(c => `"${String(c || '').replace(/"/g, '""')}"`).join(";"))
+    ].join("\n");
+
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${filename}_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    setIsExportModalOpen(false);
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 pb-20 transition-colors duration-200">
@@ -619,11 +673,11 @@ export default function App() {
                 {clients.length === 0 && <p className="text-xs text-rose-500 mt-1">Nenhum cliente cadastrado. Use o botão "Registro de Obra".</p>}
               </div>
 
-               {/* Base Selection */}
-               {(importType === 'PROJECT' || importType === 'MATERIAL_LIST') && (
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Base / Setor / Bloco</label>
-                    <input type="text" value={uploadBase} onChange={(e) => setUploadBase(e.target.value)} placeholder="Ex: Torre A, Bloco 1..." className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-base rounded-lg focus:ring-brand-500 focus:border-brand-500 block p-3" />
+               {/* Base Selection (CONDITIONAL) */}
+               {(importType === 'PROJECT' || importType === 'MATERIAL_LIST') && shouldShowBaseInput && (
+                <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Nº da Base - Localização</label>
+                    <input type="text" value={uploadBase} onChange={(e) => setUploadBase(e.target.value)} placeholder="Ex: Base 01, Centro" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-base rounded-lg focus:ring-brand-500 focus:border-brand-500 block p-3" />
                 </div>
                )}
 
@@ -642,7 +696,7 @@ export default function App() {
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Disciplina Padrão {importType === 'PROJECT' && isFolderUpload && '(Usada se a detecção falhar)'} {importType === 'MATERIAL_LIST' && '(Será tentada a detecção pelo nome do arquivo)'}</label>
                 <div className="relative">
                   <select value={uploadDiscipline} onChange={(e) => setUploadDiscipline(e.target.value as Discipline)} className="w-full appearance-none bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-base rounded-lg focus:ring-brand-500 focus:border-brand-500 block p-3 pr-8">
-                    {Object.values(Discipline).map((d) => (<option key={d} value={d}>{d}</option>))}
+                    {Object.values(Discipline).map((d) => (<option key={d} value={d}>{d}</option>)}
                   </select>
                   <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500"><svg className="h-4 w-4 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg></div>
                 </div>
@@ -653,6 +707,74 @@ export default function App() {
               <button onClick={() => setIsUploadModalOpen(false)} className="px-6 py-2.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg font-medium transition-colors">Cancelar</button>
               <button onClick={triggerFileSelect} className="px-6 py-2.5 bg-brand-700 hover:bg-brand-800 text-white rounded-lg font-semibold shadow-md transition-all flex items-center">Selecionar Arquivos {importType === 'MATERIAL_LIST' && 'Excel'}</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Modal */}
+      {isExportModalOpen && (
+        <div className="fixed inset-0 bg-black/60 dark:bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-sm w-full p-6 border dark:border-slate-700">
+             <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                <Download className="text-brand-600 dark:text-brand-400" size={20} />
+                Exportar Dados
+              </h3>
+              <button onClick={() => setIsExportModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+                <X size={24} />
+              </button>
+            </div>
+            
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                Selecione qual base de dados deseja exportar para CSV. Os dados serão filtrados conforme a visualização atual.
+            </p>
+
+            <div className="space-y-3">
+                <button onClick={() => handleConfirmExport('PROJECTS')} className="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg group transition-colors">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 p-2 rounded-lg">
+                            <List size={20} />
+                        </div>
+                        <div className="text-left">
+                            <span className="block font-semibold text-slate-800 dark:text-slate-200">Projetos</span>
+                            <span className="text-xs text-slate-500 dark:text-slate-400">Controle de Arquivos</span>
+                        </div>
+                    </div>
+                    <Download size={18} className="text-slate-400 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors" />
+                </button>
+
+                <button onClick={() => handleConfirmExport('MATERIALS')} className="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg group transition-colors">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 p-2 rounded-lg">
+                            <Package size={20} />
+                        </div>
+                         <div className="text-left">
+                            <span className="block font-semibold text-slate-800 dark:text-slate-200">Lista de Materiais</span>
+                            <span className="text-xs text-slate-500 dark:text-slate-400">Controle de Listas</span>
+                        </div>
+                    </div>
+                    <Download size={18} className="text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" />
+                </button>
+
+                <button onClick={() => handleConfirmExport('PURCHASES')} className="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg group transition-colors">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 p-2 rounded-lg">
+                            <ShoppingCart size={20} />
+                        </div>
+                         <div className="text-left">
+                            <span className="block font-semibold text-slate-800 dark:text-slate-200">Compras</span>
+                            <span className="text-xs text-slate-500 dark:text-slate-400">Solicitações e Entregas</span>
+                        </div>
+                    </div>
+                    <Download size={18} className="text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors" />
+                </button>
+            </div>
+            
+             <div className="mt-6 flex justify-end">
+                 <button onClick={() => setIsExportModalOpen(false)} className="text-sm font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+                     Cancelar
+                 </button>
+             </div>
           </div>
         </div>
       )}
