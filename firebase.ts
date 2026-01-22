@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
+import { initializeFirestore, persistentLocalCache } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
@@ -17,9 +17,13 @@ let auth: any = null;
 
 try {
     const app = initializeApp(firebaseConfig);
-    db = getFirestore(app);
+    
+    // Inicialização moderna do Firestore com cache persistente (substitui enableIndexedDbPersistence)
+    db = initializeFirestore(app, {
+      localCache: persistentLocalCache()
+    });
+
     auth = getAuth(app);
-    enableIndexedDbPersistence(db).catch(() => {});
 } catch (e) {
     console.error("Erro ao inicializar Firebase:", e);
 }

@@ -193,7 +193,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
           <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-2">Massa de Projetos (Volume por Cliente e Disciplina)</h3>
           <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Quantidade total de arquivos demandados por cliente, segmentado por disciplina.</p>
           <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <BarChart data={stats.volumeData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
                 <XAxis dataKey="name" stroke={axisColor} fontSize={12} />
@@ -212,7 +212,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
           <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200">
             <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4">Média Execução (Dias Úteis)</h3>
             <div className="h-60">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                 <BarChart data={stats.executionData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
                   <XAxis dataKey="name" fontSize={10} angle={-45} textAnchor="end" height={60} interval={0} stroke={axisColor} />
@@ -232,7 +232,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
             <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4">Motivos de Revisão (Recorrência)</h3>
             <div className="h-60">
               {stats.reasonsData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                   <BarChart data={stats.reasonsData} layout="vertical" margin={{ left: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={gridColor} />
                     <XAxis type="number" stroke={axisColor} fontSize={10} allowDecimals={false} />
@@ -252,7 +252,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
           <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200">
             <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4" title="Índice de Aprovação na Primeira Revisão">IAPR (Aprovação Direta)</h3>
             <div className="h-60">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                 <BarChart data={stats.fttData} layout="vertical" margin={{ left: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={true} stroke={gridColor} />
                   <XAxis type="number" domain={[0, 100]} unit="%" stroke={axisColor} fontSize={10} />
@@ -271,7 +271,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
           <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200">
             <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4">Média de Tempo Bloqueado</h3>
             <div className="h-60">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                 <PieChart>
                   <Pie data={stats.blockedData} cx="50%" cy="50%" innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="days">
                     {stats.blockedData.map((entry, index) => (
@@ -288,7 +288,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
           <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200">
              <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4">ICLM (Conclusão de Listas)</h3>
              <div className="h-60 relative flex flex-col items-center justify-center">
-                 <ResponsiveContainer width="100%" height="100%">
+                 <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                      <PieChart>
                          <Pie data={materialStats.chartData} cx="50%" cy="50%" startAngle={180} endAngle={0} innerRadius={60} outerRadius={80} paddingAngle={0} dataKey="value">
                              {materialStats.chartData.map((entry, index) => (
