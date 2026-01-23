@@ -10,15 +10,12 @@ import { DateRangeFilter } from './components/DateRangeFilter';
 import { MaterialList } from './components/MaterialList';
 import { PurchaseList } from './components/PurchaseList';
 import { LoginModal } from './components/LoginModal'; 
-import { AdminAuditLog } from './components/AdminAuditLog';
-import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Package, FileSpreadsheet, Database, LogIn, LogOut, ShoppingCart, HardHat, ShieldAlert } from 'lucide-react';
+import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Package, FileSpreadsheet, Database, LogIn, LogOut, ShoppingCart, HardHat } from 'lucide-react';
 import { parseISO, isValid, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear, getMonth, setMonth, setDate, endOfDay, format } from 'date-fns';
 import { subscribeToProjects, addProject, updateProjectInDb, deleteProjectFromDb, subscribeToMaterials, addMaterial, updateMaterialInDb, deleteMaterialFromDb, subscribeToPurchases, addPurchase, updatePurchaseInDb, deletePurchaseFromDb, subscribeToClients, addClient, updateClientInDb, deleteClientFromDb, subscribeToHolidays, saveHolidaysToDb } from './services/db';
 import { subscribeToAuth, logoutUser, formatUsername } from './services/auth';
 import { db } from './firebase';
 import { User } from 'firebase/auth';
-
-const ADMIN_EMAIL = 'thiago.dothling@cerne.internal';
 
 const CerneLogo = () => (
   <svg viewBox="0 0 140 40" className="h-10 w-auto" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Logo CERNE">
@@ -87,10 +84,8 @@ export default function App() {
   const [dbConnected, setDbConnected] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  const [isAdminAuditOpen, setIsAdminAuditOpen] = useState(false);
   
   const isReadOnly = !currentUser;
-  const isAdmin = currentUser?.email === ADMIN_EMAIL;
 
   useEffect(() => {
     if (!db) {
@@ -488,13 +483,6 @@ export default function App() {
               </>
             )}
 
-            {/* BOTÃO AUDIT LOG (ADMIN ONLY) */}
-            {isAdmin && (
-                <button onClick={() => setIsAdminAuditOpen(true)} className="p-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/30 rounded-full transition-colors" title="Audit Log">
-                    <ShieldAlert size={20} />
-                </button>
-            )}
-
              <button onClick={handleExportCSV} className="hidden md:flex bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-lg text-sm font-medium transition-colors items-center space-x-2 border border-slate-200 dark:border-slate-600">
               <Download className="w-4 h-4" />
               <span className="hidden lg:inline">Exportar</span>
@@ -712,10 +700,6 @@ export default function App() {
 
       {isLoginModalOpen && (
         <LoginModal onClose={() => setIsLoginModalOpen(false)} onLoginSuccess={() => setIsLoginModalOpen(false)} />
-      )}
-
-      {isAdminAuditOpen && (
-        <AdminAuditLog currentUserEmail={currentUser?.email} onClose={() => setIsAdminAuditOpen(false)} />
       )}
     </div>
   );
