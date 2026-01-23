@@ -10,12 +10,14 @@ import { DateRangeFilter } from './components/DateRangeFilter';
 import { MaterialList } from './components/MaterialList';
 import { PurchaseList } from './components/PurchaseList';
 import { LoginModal } from './components/LoginModal'; 
-import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Package, FileSpreadsheet, Database, LogIn, LogOut, ShoppingCart, HardHat } from 'lucide-react';
+import { AdminLogs } from './components/AdminLogs';
+import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Package, FileSpreadsheet, Database, LogIn, LogOut, ShoppingCart, HardHat, ShieldAlert } from 'lucide-react';
 import { parseISO, isValid, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear, getMonth, setMonth, setDate, endOfDay, format } from 'date-fns';
 import { subscribeToProjects, addProject, updateProjectInDb, deleteProjectFromDb, subscribeToMaterials, addMaterial, updateMaterialInDb, deleteMaterialFromDb, subscribeToPurchases, addPurchase, updatePurchaseInDb, deletePurchaseFromDb, subscribeToClients, addClient, updateClientInDb, deleteClientFromDb, subscribeToHolidays, saveHolidaysToDb } from './services/db';
 import { subscribeToAuth, logoutUser, formatUsername } from './services/auth';
 import { db } from './firebase';
 import { User } from 'firebase/auth';
+import { registrarLog } from './services/logger';
 
 const CerneLogo = () => (
   <svg viewBox="0 0 140 40" className="h-10 w-auto" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Logo CERNE">
@@ -86,6 +88,9 @@ export default function App() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   
   const isReadOnly = !currentUser;
+  
+  // Security check for Admin button visibility (matches AdminLogs logic)
+  const isAdmin = currentUser && currentUser.email === "thiago.dothling@cerne.internal";
 
   useEffect(() => {
     if (!db) {
@@ -127,6 +132,7 @@ export default function App() {
   const [isFolderUpload, setIsFolderUpload] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isAdminLogsOpen, setIsAdminLogsOpen] = useState(false);
 
   const selectedUploadClientDoc = useMemo(() => {
       return clients.find(c => c.name === uploadClient);
@@ -262,6 +268,17 @@ export default function App() {
         finalBaseName = uploadBase.trim() || 'Geral';
     }
 
+    // PASSO 3 (EXEMPLO B): LOG DE IMPORTAÇÃO EM LOTE
+    // Registra apenas 1 log para N arquivos
+    const count = files.length;
+    let logAction = "IMPORTACAO";
+    let logDetails = {
+        quantidade: count,
+        cliente: finalClientName,
+        tipo: importType,
+        arquivos: Array.from(files).map((f:any) => f.name).slice(0, 5) // Salva só os 5 primeiros nomes para não estourar o log
+    };
+
     if (importType === 'PROJECT') {
         Array.from(files).forEach((f: any) => {
             let discipline = uploadDiscipline;
@@ -285,6 +302,7 @@ export default function App() {
             });
         });
         setActiveTab('projects');
+        registrarLog(logAction, `${count} Projetos Importados`, logDetails);
     } else if (importType === 'MATERIAL_LIST') {
          Array.from(files).forEach((f: any) => {
              const metadata = extractMetadataFromMaterialFilename(f.name, finalClientName);
@@ -300,27 +318,54 @@ export default function App() {
              });
          });
          setActiveTab('materials');
+         registrarLog(logAction, `${count} Listas Importadas`, logDetails);
     }
 
     setIsUploadModalOpen(false);
     event.target.value = '';
   };
 
-  const updateProject = (updated: ProjectFile) => updateProjectInDb(updated);
-  const deleteProject = (id: string) => { deleteProjectFromDb(id); };
+  // PASSO 3 (EXEMPLO A): LOG DE AÇÃO ÚNICA (Atualização de Projeto)
+  const updateProject = (updated: ProjectFile) => { 
+      updateProjectInDb(updated);
+      
+      // Encontra o projeto antigo para comparar (opcional, mas bom para detalhes)
+      const oldProject = projects.find(p => p.id === updated.id);
+      
+      registrarLog("EDICAO", updated.filename, {
+          projetoId: updated.id,
+          statusAnterior: oldProject?.status,
+          novoStatus: updated.status,
+          mudancas: {
+              status: updated.status !== oldProject?.status ? updated.status : undefined,
+              dataFim: updated.endDate !== oldProject?.endDate ? updated.endDate : undefined
+          }
+      });
+  };
+
+  const deleteProject = (id: string) => { 
+      const project = projects.find(p => p.id === id);
+      deleteProjectFromDb(id); 
+      registrarLog("EXCLUSAO", project?.filename || id, { collection: 'projects' });
+  };
+
   const addProjectRevision = (id: string, reason: RevisionReason, comment: string) => {
       const originalProject = projects.find(p => p.id === id);
       if (!originalProject) return;
       updateProjectInDb({ ...originalProject, status: Status.REVISED });
       const { id: _, ...projectData } = originalProject;
+      const newFilename = generateRevisionFilename(originalProject.filename);
+      
       addProject({
         ...projectData, 
-        filename: generateRevisionFilename(originalProject.filename), 
+        filename: newFilename, 
         status: Status.IN_PROGRESS,
         startDate: new Date().toISOString().split('T')[0], 
         endDate: '', sendDate: '', feedbackDate: '', blockedDays: 0, 
         revisions: [{ id: crypto.randomUUID(), date: new Date().toISOString().split('T')[0], reason, comment }]
       });
+
+      registrarLog("CRIACAO", newFilename, { acao: "NOVA_REVISAO", origem: originalProject.filename, motivo: reason });
   };
   const updateMaterial = (updated: MaterialDoc) => updateMaterialInDb(updated);
   const deleteMaterial = (id: string) => deleteMaterialFromDb(id);
@@ -353,8 +398,16 @@ export default function App() {
             updateProjectInDb(updatedProject);
         }
     });
+    // PASSO 3 (EXEMPLO B - VARIAÇÃO): LOG DE EDIÇÃO EM LOTE
+    registrarLog("EDICAO_LOTE", `${ids.length} Itens Alterados`, {
+        campo: field,
+        novoValor: value,
+        idsAfetados: ids
+    });
   };
+
   const handleBatchWorkflow = (ids: string[], action: 'COMPLETE' | 'SEND' | 'APPROVE' | 'REJECT', date: string) => {
+      let count = 0;
       ids.forEach(id => {
         const project = projects.find(p => p.id === id);
         if (!project) return;
@@ -364,7 +417,15 @@ export default function App() {
         if (action === 'SEND') { updatedProject.status = Status.WAITING_APPROVAL; updatedProject.sendDate = date; shouldUpdate = true; }
         if (action === 'APPROVE') { updatedProject.status = Status.APPROVED; updatedProject.feedbackDate = date; shouldUpdate = true; }
         if (action === 'REJECT') { updatedProject.status = Status.REJECTED; updatedProject.feedbackDate = date; shouldUpdate = true; }
-        if (shouldUpdate) updateProjectInDb(updatedProject);
+        if (shouldUpdate) {
+            updateProjectInDb(updatedProject);
+            count++;
+        }
+    });
+    // LOG DE WORKFLOW EM LOTE
+    registrarLog("WORKFLOW_LOTE", `${count} Itens - Ação: ${action}`, {
+        acao: action,
+        dataAplicada: date
     });
   };
   const handleUpdateHolidays = (newHolidays: string[]) => saveHolidaysToDb(newHolidays);
@@ -461,6 +522,12 @@ export default function App() {
 
             {!isReadOnly && (
               <>
+                 {isAdmin && (
+                    <button onClick={() => setIsAdminLogsOpen(true)} className="p-2 text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 rounded-full hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors" title="Logs de Auditoria">
+                        <ShieldAlert size={20} />
+                    </button>
+                 )}
+
                 <button onClick={() => setIsHolidayManagerOpen(true)} className="p-2 text-slate-500 hover:text-brand-600 dark:text-slate-400 dark:hover:text-brand-400 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors relative" aria-label="Gerenciar Feriados">
                     <CalendarDays size={20} />
                     {holidays.length > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-brand-500 rounded-full"></span>}
@@ -700,6 +767,10 @@ export default function App() {
 
       {isLoginModalOpen && (
         <LoginModal onClose={() => setIsLoginModalOpen(false)} onLoginSuccess={() => setIsLoginModalOpen(false)} />
+      )}
+
+      {isAdminLogsOpen && (
+        <AdminLogs currentUser={currentUser} onClose={() => setIsAdminLogsOpen(false)} />
       )}
     </div>
   );
