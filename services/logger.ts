@@ -18,27 +18,39 @@ export const registrarLog = async (
   alvo: string,
   detalhes?: Record<string, any>
 ) => {
-  // Fail-safe: If DB is not connected or no user, we try not to crash the app
-  if (!db || !auth.currentUser) {
-    console.warn("Logger: Tentativa de log sem DB ou Usuário logado.");
+  // 1. Verificação de Segurança do Banco de Dados
+  if (!db) {
+    console.error("Logger Erro: Banco de dados (Firestore) não inicializado.");
+    return;
+  }
+
+  // 2. Verificação de Usuário (Evita tentar logar 'null')
+  const currentUser = auth?.currentUser;
+  
+  // Se não houver usuário logado e a ação não for de Login, ignoramos ou avisamos.
+  if (!currentUser) {
+    console.warn(`Logger Aviso: Tentativa de log '${acao}' ignorada pois não há usuário logado.`);
     return;
   }
 
   try {
-    const user = auth.currentUser;
-    
-    await addDoc(collection(db, COLL_LOGS), {
+    const logData = {
       acao,
       alvo,
       detalhes: detalhes || {},
-      usuario_email: user.email,
-      usuario_uid: user.uid,
+      usuario_email: currentUser.email || "desconhecido",
+      usuario_uid: currentUser.uid,
       data: serverTimestamp(),
-      user_agent: navigator.userAgent // Optional: good for debugging context
-    });
+      user_agent: navigator.userAgent
+    };
+
+    await addDoc(collection(db, COLL_LOGS), logData);
+    
+    // Feedback no console para o desenvolvedor saber que funcionou
+    console.log(`[Log Sistema] Registrado: ${acao} - ${alvo}`);
 
   } catch (error) {
-    // Silent catch to prevent blocking the main thread interaction
-    console.error("Erro ao registrar log de auditoria:", error);
+    // Agora mostramos o erro real no console em vez de silenciar
+    console.error("Logger Falha Crítica: Não foi possível salvar o log.", error);
   }
 };

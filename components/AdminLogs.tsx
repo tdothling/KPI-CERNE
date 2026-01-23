@@ -48,14 +48,11 @@ export const AdminLogs: React.FC<AdminLogsProps> = ({ currentUser, onClose }) =>
       let q;
       const logsRef = collection(db, "logs_sistema");
 
-      // Note: Search functionality in Firestore without external services (Algolia/Elastic) 
-      // is limited. We apply search *after* fetching for simple display filtering, 
-      // or we accept that search only works on loaded items to save DB reads.
-      // For strict economy, we fetch chronological batches.
-
+      // Se for paginação (Carregar Mais), usamos startAfter
       if (isNextPage && lastVisible) {
         q = query(logsRef, orderBy("data", "desc"), startAfter(lastVisible), limit(LOGS_PER_PAGE));
       } else {
+        // Primeira carga ou Refresh
         q = query(logsRef, orderBy("data", "desc"), limit(LOGS_PER_PAGE));
       }
 
@@ -66,11 +63,11 @@ export const AdminLogs: React.FC<AdminLogsProps> = ({ currentUser, onClose }) =>
         fetchedLogs.push({ id: doc.id, ...doc.data() } as LogEntry);
       });
 
-      // Update Cursor
+      // Atualiza o cursor para a próxima página
       const lastDoc = querySnapshot.docs[querySnapshot.docs.length - 1];
       setLastVisible(lastDoc);
 
-      // Update Has More
+      // Verifica se há mais logs para carregar
       if (querySnapshot.docs.length < LOGS_PER_PAGE) {
         setHasMore(false);
       } else {
@@ -84,14 +81,14 @@ export const AdminLogs: React.FC<AdminLogsProps> = ({ currentUser, onClose }) =>
       }
 
     } catch (error) {
-      console.error("Error fetching logs:", error);
+      console.error("Erro ao buscar logs:", error);
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
   }, [hasAccess, lastVisible]);
 
-  // Initial Load
+  // Carga inicial
   useEffect(() => {
     if (hasAccess) {
       fetchLogs(false);
@@ -118,7 +115,6 @@ export const AdminLogs: React.FC<AdminLogsProps> = ({ currentUser, onClose }) =>
     return 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600';
   };
 
-  // Client-side filtering of the *loaded* logs
   const filteredLogs = logs.filter(log => 
     log.alvo.toLowerCase().includes(searchTerm.toLowerCase()) || 
     log.usuario_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -149,7 +145,7 @@ export const AdminLogs: React.FC<AdminLogsProps> = ({ currentUser, onClose }) =>
               <ShieldAlert className="text-brand-600 dark:text-brand-400" size={24} />
               Log de Auditoria
             </h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Rastreamento de atividades (Modo Econômico: Atualização Manual)</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Rastreamento de atividades (Modo Econômico: Atualize para ver novos)</p>
           </div>
           <div className="flex items-center gap-2">
             <button 
