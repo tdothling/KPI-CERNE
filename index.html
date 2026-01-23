@@ -12,14 +12,11 @@
     <meta name="apple-mobile-web-app-title" content="Cerne KPI" />
     <meta name="mobile-web-app-capable" content="yes" />
 
-    <!-- Ícone Quadrado para iOS e Favicon (Baseado na Identidade Cerne) -->
-    <!-- SVG Quadrado (512x512) codificado para Data URI -->
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='512' height='512' fill='%23651830'/%3E%3Cpath d='M0 0L140 0L0 140Z' fill='%238e1c3e'/%3E%3Ctext x='50%25' y='55%25' fill='white' font-size='110' font-family='Arial, sans-serif' font-weight='bold' text-anchor='middle'%3ECERNE%3C/text%3E%3C/svg%3E" />
-    
-    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='512' height='512' fill='%23651830'/%3E%3Cpath d='M0 0L140 0L0 140Z' fill='%238e1c3e'/%3E%3Ctext x='50%25' y='55%25' fill='white' font-size='110' font-family='Arial, sans-serif' font-weight='bold' text-anchor='middle'%3ECERNE%3C/text%3E%3C/svg%3E" />
+    <!-- Ícones PWA (Arquivos da pasta public) -->
+    <link rel="icon" type="image/png" href="/android-chrome-192x192.png" />
+    <link rel="apple-touch-icon" href="/android-chrome-192x192.png" />
 
-    <!-- Manifesto Web App (Inline para Android) -->
-    <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Cerne%20KPI%20Tracker%22%2C%22short_name%22%3A%22Cerne%20KPI%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22theme_color%22%3A%22%23651830%22%2C%22background_color%22%3A%22%23ffffff%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%253Csvg%20viewBox%3D%270%200%20512%20512%27%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%253E%253Crect%20width%3D%27512%27%20height%3D%27512%27%20fill%3D%27%2523651830%27%2F%253E%253Cpath%20d%3D%27M0%200L140%200L0%20140Z%27%20fill%3D%27%25238e1c3e%27%2F%253E%253Ctext%20x%3D%2750%2525%27%20y%3D%2755%2525%27%20fill%3D%27white%27%20font-size%3D%27110%27%20font-family%3D%27Arial%2C%20sans-serif%27%20font-weight%3D%27bold%27%20text-anchor%3D%27middle%27%253ECERNE%253C%2Ftext%253E%253C%2Fsvg%253E%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%7D%5D%7D" />
+    <!-- O Manifesto agora é injetado automaticamente pelo vite-plugin-pwa, removemos o manual -->
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -50,20 +47,18 @@
     <style>
       body {
         font-family: 'Inter', sans-serif;
-        overflow-x: hidden; /* Trava o enquadramento horizontal da página */
-        overscroll-behavior-y: none; /* Evita o efeito elástico no iOS ao rolar a página inteira */
+        overflow-x: hidden;
+        overscroll-behavior-y: none;
       }
       
-      /* Utilitário para esconder a barra de rolagem mas permitir o scroll (Estilo App Nativo) */
       .no-scrollbar::-webkit-scrollbar {
           display: none;
       }
       .no-scrollbar {
-          -ms-overflow-style: none;  /* IE and Edge */
-          scrollbar-width: none;  /* Firefox */
+          -ms-overflow-style: none;
+          scrollbar-width: none;
       }
       
-      /* Estilos para rolagem suave e customizada */
       .custom-scrollbar::-webkit-scrollbar {
         width: 6px;
         height: 6px;
@@ -96,7 +91,10 @@
     "firebase/app": "https://esm.sh/firebase@10.13.1/app",
     "firebase/firestore": "https://esm.sh/firebase@10.13.1/firestore",
     "firebase/auth": "https://esm.sh/firebase@10.13.1/auth",
-    "firebase/": "https://esm.sh/firebase@10.13.1/"
+    "firebase/": "https://esm.sh/firebase@10.13.1/",
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "vite-plugin-pwa": "https://esm.sh/vite-plugin-pwa@^1.2.0"
   }
 }
 </script>
