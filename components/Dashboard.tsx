@@ -83,36 +83,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
         timeByDiscipline[project.discipline].count += 1;
       }
 
-      // CORREÇÃO: Cálculo estrito do tempo de feedback do cliente
-      // Considera apenas projetos com ciclo de feedback fechado (Aprovado ou Reprovado) e datas válidas
-      if (project.sendDate && project.feedbackDate && (project.status === Status.APPROVED || project.status === Status.REJECTED)) {
-          const send = parseISO(project.sendDate);
-          const feedback = parseISO(project.feedbackDate);
-
-          if (isValid(send) && isValid(feedback) && feedback >= send) {
-             const businessDays = differenceInBusinessDays(feedback, send);
-             
-             let holidaysOnWeekdays = 0;
-             holidays.forEach(h => {
-                const hDate = parseISO(h);
-                if (isValid(hDate) && isWithinInterval(hDate, { start: send, end: feedback })) {
-                    if (!isWeekend(hDate)) {
-                        holidaysOnWeekdays++;
-                    }
-                }
-             });
-
-             const actualBlockedDays = Math.max(0, businessDays - holidaysOnWeekdays);
-
-             // Filtro de sanidade: ignora valores absurdos (> 5 anos) que indicam erro de cadastro de data
-             if (actualBlockedDays < 1825) {
-                 if (!blockedByClient[project.client]) {
-                     blockedByClient[project.client] = { totalDays: 0, count: 0 };
-                 }
-                 blockedByClient[project.client].totalDays += actualBlockedDays;
-                 blockedByClient[project.client].count += 1;
-             }
-          }
+      if (project.blockedDays >= 0) {
+        if (!blockedByClient[project.client]) {
+            blockedByClient[project.client] = { totalDays: 0, count: 0 };
+        }
+        blockedByClient[project.client].totalDays += project.blockedDays;
+        blockedByClient[project.client].count += 1;
       }
 
       const baseName = getProjectBaseName(project.filename);
@@ -155,7 +131,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
     const blockedData = Object.keys(blockedByClient).map(c => ({
       name: c,
       days: blockedByClient[c].count ? Number((blockedByClient[c].totalDays / blockedByClient[c].count).toFixed(1)) : 0
-    })).filter(d => d.days >= 0); // Permite 0 dias, mas filtra negativos se existirem
+    })).filter(d => d.days > 0);
 
     const fttData = Object.keys(fttByDiscipline).map(d => ({
       name: d,
@@ -293,9 +269,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
           </div>
 
           <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200">
-            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4">Média de Feedback (Dias Úteis)</h3>
+            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4">Média de Tempo Bloqueado</h3>
             <div className="h-60">
-            {stats.blockedData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                 <PieChart>
                   <Pie data={stats.blockedData} cx="50%" cy="50%" innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="days">
@@ -303,15 +278,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value: number) => [`${value} dias (média)`, 'Tempo de Resposta']} contentStyle={{ backgroundColor: tooltipBg, color: tooltipText, border: isDarkMode ? '1px solid #475569' : 'none' }} itemStyle={{ color: tooltipText }} />
+                  <Tooltip formatter={(value: number) => [`${value} dias (média)`, 'Bloqueado']} contentStyle={{ backgroundColor: tooltipBg, color: tooltipText, border: isDarkMode ? '1px solid #475569' : 'none' }} itemStyle={{ color: tooltipText }} />
                   <Legend verticalAlign="bottom" height={36} iconSize={10} fontSize={10}/>
                 </PieChart>
               </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex items-center justify-center text-slate-400 text-sm italic text-center px-4">
-                  Sem dados de feedback concluído (Aprovado/Reprovado) para o filtro atual.
-                </div>
-              )}
             </div>
           </div>
 
