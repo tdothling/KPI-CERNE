@@ -14,12 +14,28 @@ const isDbActive = () => {
     return true;
 };
 
+// Security Hardening: Verificação estrita
 const checkAuth = () => {
-    if (!auth || !auth.currentUser) {
-        alert("Acesso Negado: Você precisa estar logado para realizar esta ação.");
+    if (!auth) {
+        console.error("Security Error: Auth service not initialized.");
+        return false;
+    }
+    if (!auth.currentUser) {
+        console.warn("Security Alert: Tentativa de escrita não autorizada bloqueada.");
         return false;
     }
     return true;
+};
+
+// Security Helper: Remove campos undefined que podem quebrar o Firestore ou causar inconsistência
+const sanitizeData = (data: any) => {
+    const clean: any = {};
+    Object.keys(data).forEach(key => {
+        if (data[key] !== undefined) {
+            clean[key] = data[key];
+        }
+    });
+    return clean;
 };
 
 export const subscribeToProjects = (callback: (data: ProjectFile[]) => void) => {
@@ -38,25 +54,25 @@ export const subscribeToProjects = (callback: (data: ProjectFile[]) => void) => 
 };
 
 export const addProject = async (project: Omit<ProjectFile, 'id'>) => {
-  if (!isDbActive() || !checkAuth()) return;
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
   try {
     const { id, ...cleanProject } = project as any;
-    await addDoc(collection(db, COLL_PROJECTS), cleanProject);
-  } catch (e) { console.error("Erro ao adicionar projeto:", e); }
+    await addDoc(collection(db, COLL_PROJECTS), sanitizeData(cleanProject));
+  } catch (e) { console.error("Erro ao adicionar projeto:", e); throw e; }
 };
 
 export const updateProjectInDb = async (project: ProjectFile) => {
-  if (!isDbActive() || !checkAuth()) return;
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
   try {
     const { id, ...data } = project;
     const docRef = doc(db, COLL_PROJECTS, id);
-    await updateDoc(docRef, data);
-  } catch (e) { console.error("Erro ao atualizar projeto:", e); }
+    await updateDoc(docRef, sanitizeData(data));
+  } catch (e) { console.error("Erro ao atualizar projeto:", e); throw e; }
 };
 
 export const deleteProjectFromDb = async (id: string) => {
-  if (!isDbActive() || !checkAuth()) return;
-  try { await deleteDoc(doc(db, COLL_PROJECTS, id)); } catch (e) { console.error("Erro ao excluir projeto:", e); }
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+  try { await deleteDoc(doc(db, COLL_PROJECTS, id)); } catch (e) { console.error("Erro ao excluir projeto:", e); throw e; }
 };
 
 export const subscribeToMaterials = (callback: (data: MaterialDoc[]) => void) => {
@@ -75,25 +91,25 @@ export const subscribeToMaterials = (callback: (data: MaterialDoc[]) => void) =>
 };
 
 export const addMaterial = async (material: Omit<MaterialDoc, 'id'>) => {
-  if (!isDbActive() || !checkAuth()) return;
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
   try {
      const { id, ...cleanMaterial } = material as any;
-    await addDoc(collection(db, COLL_MATERIALS), cleanMaterial);
-  } catch (e) { console.error("Erro ao adicionar material:", e); }
+    await addDoc(collection(db, COLL_MATERIALS), sanitizeData(cleanMaterial));
+  } catch (e) { console.error("Erro ao adicionar material:", e); throw e; }
 };
 
 export const updateMaterialInDb = async (material: MaterialDoc) => {
-  if (!isDbActive() || !checkAuth()) return;
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
   try {
     const { id, ...data } = material;
     const docRef = doc(db, COLL_MATERIALS, id);
-    await updateDoc(docRef, data);
-  } catch (e) { console.error("Erro ao atualizar material:", e); }
+    await updateDoc(docRef, sanitizeData(data));
+  } catch (e) { console.error("Erro ao atualizar material:", e); throw e; }
 };
 
 export const deleteMaterialFromDb = async (id: string) => {
-  if (!isDbActive() || !checkAuth()) return;
-  try { await deleteDoc(doc(db, COLL_MATERIALS, id)); } catch (e) { console.error("Erro ao excluir material:", e); }
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+  try { await deleteDoc(doc(db, COLL_MATERIALS, id)); } catch (e) { console.error("Erro ao excluir material:", e); throw e; }
 };
 
 export const subscribeToPurchases = (callback: (data: PurchaseDoc[]) => void) => {
@@ -112,25 +128,25 @@ export const subscribeToPurchases = (callback: (data: PurchaseDoc[]) => void) =>
 };
 
 export const addPurchase = async (purchase: Omit<PurchaseDoc, 'id'>) => {
-  if (!isDbActive() || !checkAuth()) return;
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
   try {
     const { id, ...cleanPurchase } = purchase as any;
-    await addDoc(collection(db, COLL_PURCHASES), cleanPurchase);
-  } catch (e) { console.error("Erro ao adicionar compra:", e); }
+    await addDoc(collection(db, COLL_PURCHASES), sanitizeData(cleanPurchase));
+  } catch (e) { console.error("Erro ao adicionar compra:", e); throw e; }
 };
 
 export const updatePurchaseInDb = async (purchase: PurchaseDoc) => {
-  if (!isDbActive() || !checkAuth()) return;
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
   try {
     const { id, ...data } = purchase;
     const docRef = doc(db, COLL_PURCHASES, id);
-    await updateDoc(docRef, data);
-  } catch (e) { console.error("Erro ao atualizar compra:", e); }
+    await updateDoc(docRef, sanitizeData(data));
+  } catch (e) { console.error("Erro ao atualizar compra:", e); throw e; }
 };
 
 export const deletePurchaseFromDb = async (id: string) => {
-  if (!isDbActive() || !checkAuth()) return;
-  try { await deleteDoc(doc(db, COLL_PURCHASES, id)); } catch (e) { console.error("Erro ao excluir compra:", e); }
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+  try { await deleteDoc(doc(db, COLL_PURCHASES, id)); } catch (e) { console.error("Erro ao excluir compra:", e); throw e; }
 };
 
 export const subscribeToClients = (callback: (data: ClientDoc[]) => void) => {
@@ -149,25 +165,25 @@ export const subscribeToClients = (callback: (data: ClientDoc[]) => void) => {
 };
 
 export const addClient = async (client: Omit<ClientDoc, 'id'>) => {
-  if (!isDbActive() || !checkAuth()) return;
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
   try {
     const { id, ...cleanClient } = client as any;
-    await addDoc(collection(db, COLL_CLIENTS), cleanClient);
-  } catch (e) { console.error("Erro ao adicionar cliente:", e); }
+    await addDoc(collection(db, COLL_CLIENTS), sanitizeData(cleanClient));
+  } catch (e) { console.error("Erro ao adicionar cliente:", e); throw e; }
 };
 
 export const updateClientInDb = async (client: ClientDoc) => {
-  if (!isDbActive() || !checkAuth()) return;
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
   try {
     const { id, ...data } = client;
     const docRef = doc(db, COLL_CLIENTS, id);
-    await updateDoc(docRef, data);
-  } catch (e) { console.error("Erro ao atualizar cliente:", e); }
+    await updateDoc(docRef, sanitizeData(data));
+  } catch (e) { console.error("Erro ao atualizar cliente:", e); throw e; }
 };
 
 export const deleteClientFromDb = async (id: string) => {
-  if (!isDbActive() || !checkAuth()) return;
-  try { await deleteDoc(doc(db, COLL_CLIENTS, id)); } catch (e) { console.error("Erro ao excluir cliente:", e); }
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+  try { await deleteDoc(doc(db, COLL_CLIENTS, id)); } catch (e) { console.error("Erro ao excluir cliente:", e); throw e; }
 };
 
 export const subscribeToHolidays = (callback: (holidays: string[]) => void) => {
@@ -185,8 +201,8 @@ export const subscribeToHolidays = (callback: (holidays: string[]) => void) => {
 };
 
 export const saveHolidaysToDb = async (holidays: string[]) => {
-    if (!isDbActive() || !checkAuth()) return;
-    try { await setDoc(doc(db, COLL_HOLIDAYS, "holidays"), { dates: holidays }); } catch (e) { console.error("Erro ao salvar feriados:", e); }
+    if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+    try { await setDoc(doc(db, COLL_HOLIDAYS, "holidays"), { dates: holidays }); } catch (e) { console.error("Erro ao salvar feriados:", e); throw e; }
 };
 
 export const getAppConfig = async () => {

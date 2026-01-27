@@ -1,6 +1,5 @@
-import { GoogleGenAI, Type } from "@google/genai";
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+import { functions } from "../firebase";
+import { httpsCallable } from "firebase/functions";
 
 interface ParsedFile {
   filename: string;
@@ -10,50 +9,39 @@ interface ParsedFile {
 export const predictClientsFromFilenames = async (filenames: string[]): Promise<ParsedFile[]> => {
   if (filenames.length === 0) return [];
 
-  const prompt = `
-    Analyze the following engineering filenames and deduce the likely Client name.
-    
-    The Client name should be short and derived from the project code or prefix if visible (e.g., "PRJ-01" -> "PRJ", "ClientA-Arch" -> "ClientA", "2024-Google-Office" -> "Google"). 
-    If no client pattern is found or it looks generic, use "Geral".
+  // Mantemos o limite de arquivos para economizar banda e processamento no backend
+  const limitedFilenames = filenames.slice(0, 50);
 
-    Return a JSON array of objects with "filename" and "client".
-
-    Filenames:
-    ${filenames.join('\n')}
-  `;
+  // Verificação de segurança: Se o Firebase Functions não carregou, falha segura.
+  if (!functions) {
+      console.error("Security Alert: Firebase Functions service not initialized.");
+      return limitedFilenames.map(f => ({ filename: f, client: "Geral" }));
+  }
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              filename: { type: Type.STRING },
-              client: { type: Type.STRING }
-            },
-            required: ["filename", "client"]
-          }
-        }
-      }
-    });
-
-    const text = response.text;
-    if (!text) return filenames.map(f => ({ filename: f, client: "Geral" }));
+    // SECURITY FIX: Chamada Backend-for-Frontend (BFF)
+    // A chave da API agora reside apenas no servidor do Firebase, inacessível ao cliente.
+    // Invocamos a função 'analyzeFilenames' que deve estar implantada no seu Cloud Functions.
+    const analyzeFilenames = httpsCallable(functions, 'analyzeFilenames');
     
-    const data = JSON.parse(text) as ParsedFile[];
-    return data;
+    const response = await analyzeFilenames({ filenames: limitedFilenames });
+    
+    const data = response.data as ParsedFile[];
+    
+    // Validação básica do retorno
+    if (Array.isArray(data)) {
+        return data;
+    }
+    
+    console.warn("Formato de resposta inesperado do backend.");
+    return limitedFilenames.map(f => ({ filename: f, client: "Geral" }));
 
   } catch (error) {
-    console.error("Gemini parsing error:", error);
-    // Fallback if AI fails
-    return filenames.map(name => ({
+    console.error("Erro seguro na chamada da IA (Backend):", error);
+    // Fallback silencioso em caso de erro no servidor
+    return limitedFilenames.map(name => ({
       filename: name,
-      client: "Geral" // Default fallback
+      client: "Geral"
     }));
   }
 };

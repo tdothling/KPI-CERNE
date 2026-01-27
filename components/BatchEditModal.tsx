@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { ProjectFile, Discipline, Status } from '../types';
-import { X, Search, CheckSquare, Square, AlertCircle, CheckCircle2, Send, BadgeCheck, ThumbsDown, ArrowRight } from 'lucide-react';
+import { X, Search, CheckSquare, Square, AlertCircle, CheckCircle2, Send, BadgeCheck, ThumbsDown, ArrowRight, Filter, Layers, Users, GitBranch } from 'lucide-react';
 import { format, parseISO, differenceInBusinessDays, isValid, isWeekend, isWithinInterval } from 'date-fns';
 
 interface BatchEditModalProps {
@@ -22,6 +22,11 @@ const EDITABLE_FIELDS: { key: keyof ProjectFile; label: string; type: 'text' | '
   { key: 'feedbackDate', label: 'Data Feedback', type: 'date' },
   { key: 'blockedDays', label: 'Dias Bloqueados', type: 'number' },
 ];
+
+const getRevisionNumber = (filename: string): number => {
+  const match = filename.match(/\[R(\d+)\]/);
+  return match ? parseInt(match[1], 10) : 0;
+};
 
 const calculateBusinessDaysWithHolidays = (start: Date, end: Date, holidays: string[]) => {
     let days = differenceInBusinessDays(end, start);
@@ -48,6 +53,7 @@ const formatDate = (dateStr: string) => {
 
 type Mode = 'EDIT' | 'WORKFLOW';
 type WorkflowAction = 'COMPLETE' | 'SEND' | 'APPROVE' | 'REJECT';
+type RevisionFilter = 'ALL' | 'R0' | 'REVISIONS';
 
 export const BatchEditModal: React.FC<BatchEditModalProps> = ({ projects, onClose, onApply, onWorkflow, holidays }) => {
   const [mode, setMode] = useState<Mode>('EDIT');
@@ -62,18 +68,39 @@ export const BatchEditModal: React.FC<BatchEditModalProps> = ({ projects, onClos
 
   // Selection State
   const [searchFilter, setSearchFilter] = useState('');
+  const [filterClient, setFilterClient] = useState<string>('ALL');
+  const [filterDiscipline, setFilterDiscipline] = useState<string>('ALL');
+  const [filterRevision, setFilterRevision] = useState<RevisionFilter>('ALL');
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Helper to determine active field configuration
   const fieldConfig = EDITABLE_FIELDS.find(f => f.key === selectedField)!;
 
-  // Filter projects based on search text
+  const uniqueClients = useMemo(() => {
+    const clients = new Set(projects.map(p => p.client));
+    return Array.from(clients).sort();
+  }, [projects]);
+
+  // Filter projects based on search text and dropdowns
   const filteredProjects = useMemo(() => {
-    return projects.filter(p => 
-      p.filename.toLowerCase().includes(searchFilter.toLowerCase()) || 
-      p.client.toLowerCase().includes(searchFilter.toLowerCase())
-    );
-  }, [projects, searchFilter]);
+    return projects.filter(p => {
+      const matchesSearch = 
+        p.filename.toLowerCase().includes(searchFilter.toLowerCase()) || 
+        p.client.toLowerCase().includes(searchFilter.toLowerCase()) ||
+        (p.base && p.base.toLowerCase().includes(searchFilter.toLowerCase()));
+
+      const matchesClient = filterClient === 'ALL' || p.client === filterClient;
+      const matchesDiscipline = filterDiscipline === 'ALL' || p.discipline === filterDiscipline;
+      
+      let matchesRevision = true;
+      const revNum = getRevisionNumber(p.filename);
+      if (filterRevision === 'R0') matchesRevision = revNum === 0;
+      if (filterRevision === 'REVISIONS') matchesRevision = revNum > 0;
+
+      return matchesSearch && matchesClient && matchesDiscipline && matchesRevision;
+    });
+  }, [projects, searchFilter, filterClient, filterDiscipline, filterRevision]);
 
   // Toggle selection logic
   const toggleSelect = (id: string) => {
@@ -121,22 +148,12 @@ export const BatchEditModal: React.FC<BatchEditModalProps> = ({ projects, onClos
     onApply(Array.from(selectedIds), selectedField, newValue);
     
     // AUTO-UPDATE STATUS FOR BATCH DATE EDITS
-    // If a date field was changed, we must re-evaluate status for all selected projects
     if (['startDate', 'endDate', 'sendDate', 'feedbackDate'].includes(selectedField)) {
-        // We need to trigger status updates for these IDs. 
-        // Since onApply handles one field at a time, we iterate to update status based on the new state
-        // This relies on the parent component's handleBatchUpdate being smart OR we send a status update here.
-        // Simplest way: The Parent Component (App.tsx) handleBatchUpdate logic handles side effects, 
-        // OR we manually call onApply for 'status' here.
-        
-        // Let's do it here by calculating the derived status for each project
         const projectsToUpdate = projects.filter(p => selectedIds.has(p.id));
         
         projectsToUpdate.forEach(project => {
-            // Construct hypothetical updated project
             const updated = { ...project, [selectedField]: newValue };
             
-            // Auto-calculate blocked days logic
             if (selectedField === 'sendDate' || selectedField === 'feedbackDate') {
                 if (updated.sendDate && updated.feedbackDate) {
                     const send = parseISO(updated.sendDate);
@@ -161,10 +178,9 @@ export const BatchEditModal: React.FC<BatchEditModalProps> = ({ projects, onClos
             } else if (updated.startDate) {
                 newStatus = Status.IN_PROGRESS;
             } else {
-                newStatus = Status.IN_PROGRESS; // Changed from TODO
+                newStatus = Status.IN_PROGRESS; 
             }
 
-            // Apply status update if it changed
             if (newStatus !== project.status) {
                 onApply([project.id], 'status', newStatus);
             }
@@ -319,7 +335,7 @@ export const BatchEditModal: React.FC<BatchEditModalProps> = ({ projects, onClos
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-4xl w-full flex flex-col max-h-[90vh] overflow-hidden border dark:border-slate-700">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-5xl w-full flex flex-col max-h-[90vh] overflow-hidden border dark:border-slate-700">
         
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-700/50">
@@ -394,19 +410,64 @@ export const BatchEditModal: React.FC<BatchEditModalProps> = ({ projects, onClos
           {/* Right: Selection */}
           <div className="w-full md:w-2/3 flex flex-col bg-slate-50 dark:bg-slate-900">
             
-            {/* Filter Bar */}
+            {/* Advanced Filters */}
+            <div className="p-3 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
+                 <div className="flex items-center gap-2 mb-2 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                    <Filter size={12} /> Filtros Rápidos
+                 </div>
+                 <div className="grid grid-cols-3 gap-2">
+                    <div className="relative">
+                        <Users size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        <select 
+                            value={filterClient} 
+                            onChange={(e) => setFilterClient(e.target.value)}
+                            className="w-full pl-8 pr-2 py-1.5 text-xs border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-brand-500 appearance-none cursor-pointer"
+                        >
+                            <option value="ALL">Todos Clientes</option>
+                            {uniqueClients.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                    </div>
+
+                    <div className="relative">
+                        <Layers size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        <select 
+                            value={filterDiscipline} 
+                            onChange={(e) => setFilterDiscipline(e.target.value)}
+                            className="w-full pl-8 pr-2 py-1.5 text-xs border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-brand-500 appearance-none cursor-pointer"
+                        >
+                            <option value="ALL">Todas Disciplinas</option>
+                            {Object.values(Discipline).map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                    </div>
+
+                    <div className="relative">
+                        <GitBranch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        <select 
+                            value={filterRevision} 
+                            onChange={(e) => setFilterRevision(e.target.value as RevisionFilter)}
+                            className="w-full pl-8 pr-2 py-1.5 text-xs border border-slate-300 dark:border-slate-600 rounded-md bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-brand-500 appearance-none cursor-pointer"
+                        >
+                            <option value="ALL">Todas Versões</option>
+                            <option value="R0">Apenas R0</option>
+                            <option value="REVISIONS">Apenas Revisões (R1+)</option>
+                        </select>
+                    </div>
+                 </div>
+            </div>
+
+            {/* Search Bar */}
             <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center space-x-3 bg-white dark:bg-slate-800">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                 <input 
                   type="text" 
-                  placeholder="Filtrar por nome ou cliente..." 
+                  placeholder="Buscar arquivo..." 
                   value={searchFilter}
                   onChange={(e) => setSearchFilter(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-slate-200 dark:border-slate-600 rounded-lg focus:outline-none focus:border-brand-500 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
                 />
               </div>
-              <div className="flex items-center space-x-2 text-sm text-slate-600 dark:text-slate-300 font-medium">
+              <div className="flex items-center space-x-2 text-sm text-slate-600 dark:text-slate-300 font-medium whitespace-nowrap">
                  <span>{selectedIds.size} selecionados</span>
               </div>
             </div>
@@ -430,7 +491,7 @@ export const BatchEditModal: React.FC<BatchEditModalProps> = ({ projects, onClos
             {/* Scrollable List */}
             <div className="flex-1 overflow-y-auto p-2 space-y-1">
               {filteredProjects.length === 0 ? (
-                <div className="text-center py-10 text-slate-400">Nenhum arquivo encontrado.</div>
+                <div className="text-center py-10 text-slate-400">Nenhum arquivo encontrado com os filtros atuais.</div>
               ) : (
                 filteredProjects.map(project => (
                   <div 
@@ -455,7 +516,7 @@ export const BatchEditModal: React.FC<BatchEditModalProps> = ({ projects, onClos
                         <span>{project.discipline}</span>
                       </div>
                     </div>
-                    <div className="text-xs font-semibold px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                    <div className="text-xs font-semibold px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 whitespace-nowrap">
                       {mode === 'EDIT' ? String(project[selectedField] || '-') : project.status}
                     </div>
                   </div>

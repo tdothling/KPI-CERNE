@@ -72,6 +72,19 @@ const generateRevisionFilename = (name: string): string => {
   }
 };
 
+// Security: Whitelist de extensões permitidas
+const ALLOWED_EXTENSIONS = ['.dwg', '.rvt', '.pln', '.pdf', '.dxf', '.csv', '.xlsx', '.xls'];
+// Security: Verificação básica de arquivo
+const validateFile = (file: File): boolean => {
+    const lowerName = file.name.toLowerCase();
+    const hasValidExt = ALLOWED_EXTENSIONS.some(ext => lowerName.endsWith(ext));
+    if (!hasValidExt) {
+        console.warn(`Arquivo bloqueado (extensão não permitida): ${file.name}`);
+        return false;
+    }
+    return true;
+};
+
 type Tab = 'dashboard' | 'timeline' | 'projects' | 'materials' | 'purchases';
 type ImportType = 'PROJECT' | 'MATERIAL_LIST';
 
@@ -262,44 +275,62 @@ export default function App() {
         finalBaseName = uploadBase.trim() || 'Geral';
     }
 
-    if (importType === 'PROJECT') {
-        Array.from(files).forEach((f: any) => {
-            let discipline = uploadDiscipline;
-            if (isFolderUpload && f.webkitRelativePath) {
-                const detected = detectDiscipline(f.webkitRelativePath);
-                if (detected) discipline = detected;
-            }
+    const validFiles = Array.from(files).filter(validateFile);
+    
+    if (validFiles.length < files.length) {
+        alert(`${files.length - validFiles.length} arquivos foram ignorados por terem extensões não permitidas.`);
+    }
 
-            addProject({
-                filename: f.name,
-                client: finalClientName,
-                base: finalBaseName,
-                discipline: discipline, 
-                status: Status.IN_PROGRESS,
-                startDate: new Date().toISOString().split('T')[0],
-                endDate: '',
-                sendDate: '',
-                feedbackDate: '',
-                blockedDays: 0,
-                revisions: []
+    if (validFiles.length === 0) {
+        event.target.value = '';
+        return;
+    }
+
+    try {
+        if (importType === 'PROJECT') {
+            const promises = validFiles.map(async (f: any) => {
+                let discipline = uploadDiscipline;
+                if (isFolderUpload && f.webkitRelativePath) {
+                    const detected = detectDiscipline(f.webkitRelativePath);
+                    if (detected) discipline = detected;
+                }
+
+                return addProject({
+                    filename: f.name,
+                    client: finalClientName,
+                    base: finalBaseName,
+                    discipline: discipline, 
+                    status: Status.IN_PROGRESS,
+                    startDate: new Date().toISOString().split('T')[0],
+                    endDate: '',
+                    sendDate: '',
+                    feedbackDate: '',
+                    blockedDays: 0,
+                    revisions: []
+                });
             });
-        });
-        setActiveTab('projects');
-    } else if (importType === 'MATERIAL_LIST') {
-         Array.from(files).forEach((f: any) => {
-             const metadata = extractMetadataFromMaterialFilename(f.name, finalClientName);
-             addMaterial({
-                 filename: f.name,
-                 client: finalClientName,
-                 base: finalBaseName,
-                 discipline: metadata.discipline,
-                 startDate: new Date().toISOString().split('T')[0],
-                 endDate: '',
-                 status: 'IN_PROGRESS',
-                 revisions: []
+            await Promise.all(promises);
+            setActiveTab('projects');
+        } else if (importType === 'MATERIAL_LIST') {
+             const promises = validFiles.map(async (f: any) => {
+                 const metadata = extractMetadataFromMaterialFilename(f.name, finalClientName);
+                 return addMaterial({
+                     filename: f.name,
+                     client: finalClientName,
+                     base: finalBaseName,
+                     discipline: metadata.discipline,
+                     startDate: new Date().toISOString().split('T')[0],
+                     endDate: '',
+                     status: 'IN_PROGRESS',
+                     revisions: []
+                 });
              });
-         });
-         setActiveTab('materials');
+             await Promise.all(promises);
+             setActiveTab('materials');
+        }
+    } catch (error) {
+        console.error("Erro no upload:", error);
+        alert("Ocorreu um erro ao processar alguns arquivos. Verifique sua conexão e permissões.");
     }
 
     setIsUploadModalOpen(false);
