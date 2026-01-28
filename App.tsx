@@ -96,6 +96,9 @@ export default function App() {
 
   const isReadOnly = !currentUser;
 
+  // Feature Flag: Compras apenas para thiago.dothling
+  const showPurchasesTab = currentUser?.email?.startsWith('thiago.dothling');
+
   useEffect(() => {
     if (!db) {
         setDbConnected(false);
@@ -110,7 +113,13 @@ export default function App() {
     const unsubPurchases = subscribeToPurchases(setPurchases);
     const unsubClients = subscribeToClients(setClients);
     const unsubHolidays = subscribeToHolidays(setHolidays);
-    const unsubAuth = subscribeToAuth(setCurrentUser);
+    const unsubAuth = subscribeToAuth((user) => {
+        setCurrentUser(user);
+        // Se o usuário deslogar ou mudar, e estiver na aba restrita, volta para dashboard
+        if (!user || (user.email && !user.email.startsWith('thiago.dothling') && activeTab === 'purchases')) {
+            setActiveTab('dashboard');
+        }
+    });
 
     return () => {
         unsubProjects();
@@ -597,7 +606,9 @@ export default function App() {
               <button onClick={() => setActiveTab('timeline')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${activeTab === 'timeline' ? 'border-brand-600 text-brand-600 dark:text-brand-400' : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300'}`}><Calendar size={18} /> Cronograma</button>
               <button onClick={() => setActiveTab('projects')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${activeTab === 'projects' ? 'border-brand-600 text-brand-600 dark:text-brand-400' : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300'}`}><List size={18} /> Projetos</button>
               <button onClick={() => setActiveTab('materials')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${activeTab === 'materials' ? 'border-brand-600 text-brand-600 dark:text-brand-400' : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300'}`}><Package size={18} /> Lista de Materiais</button>
-              <button onClick={() => setActiveTab('purchases')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${activeTab === 'purchases' ? 'border-brand-600 text-brand-600 dark:text-brand-400' : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300'}`}><ShoppingCart size={18} /> Compras</button>
+              {showPurchasesTab && (
+                <button onClick={() => setActiveTab('purchases')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${activeTab === 'purchases' ? 'border-brand-600 text-brand-600 dark:text-brand-400' : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300'}`}><ShoppingCart size={18} /> Compras</button>
+              )}
             </nav>
           </div>
 
@@ -620,7 +631,7 @@ export default function App() {
           {activeTab === 'timeline' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectTimeline projects={filteredProjects} holidays={holidays} /></div>}
           {activeTab === 'projects' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectList projects={filteredProjects} onUpdate={updateProject} onDelete={deleteProject} onAddRevision={addProjectRevision} holidays={holidays} readOnly={isReadOnly} /></div>}
           {activeTab === 'materials' && <div className="animate-in fade-in zoom-in-95 duration-200"><MaterialList materials={materials} onUpdate={updateMaterial} onDelete={deleteMaterial} onAddRevision={addMaterialRevision} readOnly={isReadOnly} /></div>}
-          {activeTab === 'purchases' && <div className="animate-in fade-in zoom-in-95 duration-200"><PurchaseList purchases={purchases} onAdd={handleAddPurchase} onUpdate={handleUpdatePurchase} onDelete={handleDeletePurchase} currentUser={currentUser ? formatUsername(currentUser.email) : ''} holidays={holidays} readOnly={isReadOnly} /></div>}
+          {activeTab === 'purchases' && showPurchasesTab && <div className="animate-in fade-in zoom-in-95 duration-200"><PurchaseList purchases={purchases} onAdd={handleAddPurchase} onUpdate={handleUpdatePurchase} onDelete={handleDeletePurchase} currentUser={currentUser ? formatUsername(currentUser.email) : ''} holidays={holidays} readOnly={isReadOnly} /></div>}
         </div>
       </main>
       
@@ -744,18 +755,20 @@ export default function App() {
                     <Download size={18} className="text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" />
                 </button>
 
-                <button onClick={() => handleConfirmExport('PURCHASES')} className="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg group transition-colors">
-                    <div className="flex items-center gap-3">
-                        <div className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 p-2 rounded-lg">
-                            <ShoppingCart size={20} />
+                {showPurchasesTab && (
+                    <button onClick={() => handleConfirmExport('PURCHASES')} className="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg group transition-colors">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 p-2 rounded-lg">
+                                <ShoppingCart size={20} />
+                            </div>
+                            <div className="text-left">
+                                <span className="block font-semibold text-slate-800 dark:text-slate-200">Compras</span>
+                                <span className="text-xs text-slate-500 dark:text-slate-400">Solicitações e Entregas</span>
+                            </div>
                         </div>
-                         <div className="text-left">
-                            <span className="block font-semibold text-slate-800 dark:text-slate-200">Compras</span>
-                            <span className="text-xs text-slate-500 dark:text-slate-400">Solicitações e Entregas</span>
-                        </div>
-                    </div>
-                    <Download size={18} className="text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors" />
-                </button>
+                        <Download size={18} className="text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors" />
+                    </button>
+                )}
             </div>
             
              <div className="mt-6 flex justify-end">
