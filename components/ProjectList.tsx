@@ -1,8 +1,10 @@
-import React, { useState, useMemo, useEffect } from 'react';
+
+import React, { useState, useMemo, useEffect, memo } from 'react';
 import { ProjectFile, Status, Discipline, RevisionReason } from '../types';
-import { differenceInBusinessDays, format, parseISO, isValid, isWeekend, isWithinInterval } from 'date-fns';
-import { Trash2, FileText, GitBranch, History, CornerDownRight, AlertTriangle, Edit2, Save, X, Eye, ArrowUpDown, ArrowUp, ArrowDown, BadgeCheck, Send, CheckSquare, ThumbsDown, List, Search } from 'lucide-react';
+import { format, parseISO, isValid } from 'date-fns';
+import { Trash2, GitBranch, History, CornerDownRight, AlertTriangle, Edit2, Save, X, Eye, ArrowUpDown, ArrowUp, ArrowDown, BadgeCheck, Send, CheckSquare, ThumbsDown, List, Search } from 'lucide-react';
 import { subscribeToClients } from '../services/db';
+import { getProjectBaseName, getRevisionNumber, formatDateDisplay, calculateBusinessDaysWithHolidays, getStatusColor } from '../utils';
 
 interface ProjectListProps {
   projects: ProjectFile[];
@@ -13,10 +15,51 @@ interface ProjectListProps {
   readOnly?: boolean;
 }
 
-const getProjectBaseName = (filename: string): string => { const nameWithoutExt = filename.replace(/\.[^/.]+$/, ""); const match = nameWithoutExt.match(/^(.*?)\s\[R\d+\]$/); return match ? match[1] : nameWithoutExt; };
-const getRevisionNumber = (filename: string): number => { const match = filename.match(/\[R(\d+)\]/); return match ? parseInt(match[1], 10) : 0; };
-const formatDateDisplay = (dateStr: string) => { if (!dateStr) return '-'; const date = parseISO(dateStr); return isValid(date) ? format(date, 'dd/MM/yyyy') : '-'; };
-const calculateBusinessDaysWithHolidays = (start: Date, end: Date, holidays: string[]) => { let days = differenceInBusinessDays(end, start); let holidaysOnWeekdays = 0; holidays.forEach(h => { const hDate = parseISO(h); if (isValid(hDate) && isWithinInterval(hDate, { start, end })) { if (!isWeekend(hDate)) { holidaysOnWeekdays++; } } }); return Math.max(0, days - holidaysOnWeekdays); };
+// Optimization: Memoized Row Component to prevent re-rendering all rows on single update
+const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHistoryProject, setPendingCompletion, setPendingSend, setPendingApproval, setPendingRejection, setActiveRevModal, setDetailsProject, setEditingProject, setProjectToDelete }: any) => {
+    const revNumber = getRevisionNumber(project.filename);
+    const isRevision = revNumber > 0;
+    const currentBase = getProjectBaseName(project.filename);
+    const nextProject = sortedProjects[index + 1];
+    const isLastInGroup = (!nextProject || getProjectBaseName(nextProject.filename) !== currentBase);
+    const canCreateRevision = isLastInGroup || project.status === Status.REJECTED;
+    
+    let feedbackColorClass = "text-slate-600 dark:text-slate-400";
+    if (project.status === Status.APPROVED) feedbackColorClass = "text-emerald-700 dark:text-emerald-400 font-medium";
+    if (project.status === Status.REJECTED) feedbackColorClass = "text-rose-700 dark:text-rose-400 font-medium";
+
+    return (
+        <tr className={`hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors ${isLastInGroup ? 'border-b-4 border-slate-100 dark:border-slate-800' : ''}`}>
+        <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200 border-r border-slate-100 dark:border-slate-700/50"><div className="flex items-center space-x-2 overflow-hidden" title={project.filename}>{isRevision && <CornerDownRight size={14} className="text-slate-400 flex-shrink-0" />}{isRevision ? (<button onClick={() => setViewHistoryProject(project)} className="flex-shrink-0 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-[10px] font-bold px-1.5 py-0.5 rounded cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors" aria-label={`Ver histórico de revisão ${revNumber}`}>R{revNumber}</button>) : (<span className="w-6"></span>)}<span className={`truncate select-all ${isRevision ? 'text-slate-600 dark:text-slate-400 text-sm' : 'text-slate-800 dark:text-slate-200'}`}>{project.filename}</span></div></td>
+        <td className="px-4 py-3 text-slate-600 dark:text-slate-400 truncate max-w-[150px]">{project.client}</td>
+        <td className="px-4 py-3 text-slate-600 dark:text-slate-400 truncate max-w-[100px]">{project.base || '-'}</td>
+        <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{project.discipline}</td>
+        <td className="px-4 py-3"><span className={`px-2 py-1 rounded-full text-xs font-semibold border ${getStatusColor(project.status)}`}>{project.status === Status.DONE ? 'Concluído' : project.status}</span></td>
+        <td className="px-4 py-3 border-l border-slate-100 dark:border-slate-700/50 text-slate-600 dark:text-slate-400 text-xs">{formatDateDisplay(project.startDate)}</td>
+        <td className="px-4 py-3 border-r border-slate-100 dark:border-slate-700/50 text-slate-600 dark:text-slate-400 text-xs">{formatDateDisplay(project.endDate)}</td>
+        <td className="px-4 py-3 border-l border-brand-50 dark:border-brand-900/20 bg-brand-50/30 dark:bg-brand-900/10 text-brand-700 dark:text-brand-400 text-xs font-medium">{formatDateDisplay(project.sendDate)}</td>
+        <td className={`px-4 py-3 border-r border-slate-100 dark:border-slate-900/30 bg-slate-50/30 dark:bg-slate-900/10 text-xs ${feedbackColorClass}`}>{formatDateDisplay(project.feedbackDate)}</td>
+        <td className="px-4 py-3 text-center"><span className="font-mono text-xs text-slate-700 dark:text-slate-300">{project.blockedDays || '-'}</span></td>
+        
+        {!readOnly && (
+            <td className="px-4 py-3"><div className="flex items-center justify-center space-x-2">{project.status === Status.IN_PROGRESS && (<button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingCompletion({ id: project.id, date: today }); }} title="Concluir Execução" aria-label="Concluir Execução" className="p-1.5 bg-violet-50 text-violet-600 hover:bg-violet-100 rounded-md transition-colors border border-violet-200"><CheckSquare size={16} /></button>)}{(project.status === Status.DONE) && (<button onClick={() => { const today = new Date().toISOString().split('T')[0]; const defaultDate = (project.endDate && today > project.endDate) ? today : (project.endDate || today); setPendingSend({ id: project.id, date: defaultDate }); }} title="Registrar Envio ao Cliente" aria-label="Registrar Envio" className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md transition-colors border border-blue-200"><Send size={16} /></button>)}{project.status === Status.WAITING_APPROVAL && (<><button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingApproval({ id: project.id, date: today }); }} title="Aprovar Projeto" aria-label="Aprovar" className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md transition-colors border border-emerald-200"><BadgeCheck size={16} /></button><button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingRejection({ id: project.id, date: today }); }} title="Reprovar Projeto" aria-label="Reprovar" className="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-md transition-colors border border-rose-200"><ThumbsDown size={16} /></button></>)}{canCreateRevision && project.sendDate && project.status !== Status.REVISED && project.status !== Status.WAITING_APPROVAL && (<button onClick={() => setActiveRevModal(project.id)} title={project.status === Status.REJECTED ? "Gerar Nova Revisão (Pós-Reprovação)" : "Gerar Revisão"} aria-label="Gerar Revisão" className={`p-1.5 rounded-md transition-colors border ${project.status === Status.REJECTED ? 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100' : 'text-slate-400 hover:text-brand-600 border-transparent hover:bg-brand-50'}`}><GitBranch size={16} /></button>)}</div></td>
+        )}
+
+        <td className="px-4 py-3 text-right">
+            <div className="flex items-center justify-end space-x-1">
+                <button onClick={() => setDetailsProject(project)} className="p-1.5 text-slate-400 hover:text-violet-500 rounded-full hover:bg-violet-50 transition-colors" aria-label="Ver Detalhes"><Eye size={16} /></button>
+                {!readOnly && (
+                    <>
+                        <button onClick={() => setEditingProject({ ...project })} className="p-1.5 text-slate-400 hover:text-blue-500 rounded-full hover:bg-blue-50 transition-colors" aria-label="Editar"><Edit2 size={16} /></button>
+                        <button onClick={() => setProjectToDelete(project)} className="p-1.5 text-slate-400 hover:text-rose-500 rounded-full hover:bg-rose-50 transition-colors" aria-label="Excluir"><Trash2 size={16} /></button>
+                    </>
+                )}
+            </div>
+        </td>
+        </tr>
+    );
+});
+
 
 type SortKey = keyof ProjectFile | 'blockedDays';
 type SortDirection = 'asc' | 'desc';
@@ -81,7 +124,6 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
       
       let updated = { ...editingProject, [field]: value }; 
       
-      // Auto-calculate blocked days if dates change
       if (field === 'sendDate' || field === 'feedbackDate') {
           if (updated.sendDate && updated.feedbackDate) {
               const send = parseISO(updated.sendDate);
@@ -113,11 +155,10 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
       setEditingProject(updated); 
   };
 
-  const getStatusColor = (status: Status) => { switch(status) { case Status.APPROVED: return 'text-emerald-700 bg-emerald-100 border-emerald-300 dark:bg-emerald-900/40 dark:border-emerald-700 dark:text-emerald-400'; case Status.REJECTED: return 'text-rose-700 bg-rose-100 border-rose-300 dark:bg-rose-900/40 dark:border-rose-700 dark:text-rose-400'; case Status.WAITING_APPROVAL: return 'text-blue-700 bg-blue-100 border-blue-300 dark:bg-blue-900/40 dark:border-blue-700 dark:text-blue-400'; case Status.DONE: return 'text-violet-700 bg-violet-100 border-violet-300 dark:bg-violet-900/40 dark:border-violet-700 dark:text-violet-400'; case Status.IN_PROGRESS: return 'text-brand-700 bg-brand-50 border-brand-200 dark:bg-brand-900/40 dark:border-brand-800 dark:text-brand-400'; case Status.REVISED: return 'text-slate-500 bg-slate-200 border-slate-300 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-400 line-through decoration-slate-400 decoration-2'; default: return 'text-amber-600 bg-amber-50 border-amber-200 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-400'; } };
   const SortIcon = ({ column }: { column: SortKey }) => { if (sortConfig.key !== column) return <ArrowUpDown size={12} className="ml-1 text-slate-300 dark:text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity" />; return sortConfig.direction === 'asc' ? <ArrowUp size={12} className="ml-1 text-brand-600 dark:text-brand-400" /> : <ArrowDown size={12} className="ml-1 text-brand-600 dark:text-brand-400" />; };
   const renderHeader = (label: string, key: SortKey, className: string = "") => ( <th className={`px-4 py-3 cursor-pointer group hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors select-none ${className}`} onClick={() => handleSort(key)}> <div className={`flex items-center ${className.includes('text-right') ? 'justify-end' : className.includes('text-center') ? 'justify-center' : 'justify-start'}`}> {label} <SortIcon column={key} /> </div> </th> );
 
-  if (projects.length === 0) { return ( <div className="animate-in fade-in zoom-in-95 duration-200"> <div className="flex items-center justify-between mb-6"> <div> <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"> <List className="text-brand-600 dark:text-brand-400" /> Carteira de Projetos </h2> <p className="text-sm text-slate-500 dark:text-slate-400">Gerenciamento detalhado de arquivos, status, datas e revisões.</p> </div> </div> <div className="text-center py-20 bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-700"> <FileText className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" /> <h3 className="text-lg text-slate-500 dark:text-slate-400">Nenhum projeto cadastrado</h3> <p className="text-sm text-slate-400 dark:text-slate-500">Importe arquivos ou adicione manualmente.</p> </div> </div> ); }
+  if (projects.length === 0) { return ( <div className="animate-in fade-in zoom-in-95 duration-200"> <div className="flex items-center justify-between mb-6"> <div> <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"> <List className="text-brand-600 dark:text-brand-400" /> Carteira de Projetos </h2> <p className="text-sm text-slate-500 dark:text-slate-400">Gerenciamento detalhado de arquivos, status, datas e revisões.</p> </div> </div> <div className="text-center py-20 bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-700"> <List className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" /> <h3 className="text-lg text-slate-500 dark:text-slate-400">Nenhum projeto cadastrado</h3> <p className="text-sm text-slate-400 dark:text-slate-500">Importe arquivos ou adicione manualmente.</p> </div> </div> ); }
 
   return (
     <div className="animate-in fade-in zoom-in-95 duration-200">
@@ -149,45 +190,31 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-            {sortedProjects.map((project, index) => {
-               const revNumber = getRevisionNumber(project.filename); const isRevision = revNumber > 0; const currentBase = getProjectBaseName(project.filename); const nextProject = sortedProjects[index + 1]; const isLastInGroup = (!nextProject || getProjectBaseName(nextProject.filename) !== currentBase); const canCreateRevision = isLastInGroup || project.status === Status.REJECTED; let feedbackColorClass = "text-slate-600 dark:text-slate-400"; if (project.status === Status.APPROVED) feedbackColorClass = "text-emerald-700 dark:text-emerald-400 font-medium"; if (project.status === Status.REJECTED) feedbackColorClass = "text-rose-700 dark:text-rose-400 font-medium";
-               return (
-              <tr key={project.id} className={`hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors ${isLastInGroup ? 'border-b-4 border-slate-100 dark:border-slate-800' : ''}`}>
-                <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200 border-r border-slate-100 dark:border-slate-700/50"><div className="flex items-center space-x-2 overflow-hidden" title={project.filename}>{isRevision && <CornerDownRight size={14} className="text-slate-400 flex-shrink-0" />}{isRevision ? (<button onClick={() => setViewHistoryProject(project)} className="flex-shrink-0 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-[10px] font-bold px-1.5 py-0.5 rounded cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors" aria-label={`Ver histórico de revisão ${revNumber}`}>R{revNumber}</button>) : (<span className="w-6"></span>)}<span className={`truncate select-all ${isRevision ? 'text-slate-600 dark:text-slate-400 text-sm' : 'text-slate-800 dark:text-slate-200'}`}>{project.filename}</span></div></td>
-                <td className="px-4 py-3 text-slate-600 dark:text-slate-400 truncate max-w-[150px]">{project.client}</td>
-                <td className="px-4 py-3 text-slate-600 dark:text-slate-400 truncate max-w-[100px]">{project.base || '-'}</td>
-                <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{project.discipline}</td>
-                <td className="px-4 py-3"><span className={`px-2 py-1 rounded-full text-xs font-semibold border ${getStatusColor(project.status)}`}>{project.status === Status.DONE ? 'Concluído' : project.status}</span></td>
-                <td className="px-4 py-3 border-l border-slate-100 dark:border-slate-700/50 text-slate-600 dark:text-slate-400 text-xs">{formatDateDisplay(project.startDate)}</td>
-                <td className="px-4 py-3 border-r border-slate-100 dark:border-slate-700/50 text-slate-600 dark:text-slate-400 text-xs">{formatDateDisplay(project.endDate)}</td>
-                <td className="px-4 py-3 border-l border-brand-50 dark:border-brand-900/20 bg-brand-50/30 dark:bg-brand-900/10 text-brand-700 dark:text-brand-400 text-xs font-medium">{formatDateDisplay(project.sendDate)}</td>
-                <td className={`px-4 py-3 border-r border-slate-100 dark:border-slate-900/30 bg-slate-50/30 dark:bg-slate-900/10 text-xs ${feedbackColorClass}`}>{formatDateDisplay(project.feedbackDate)}</td>
-                <td className="px-4 py-3 text-center"><span className="font-mono text-xs text-slate-700 dark:text-slate-300">{project.blockedDays || '-'}</span></td>
-                
-                {!readOnly && (
-                    <td className="px-4 py-3"><div className="flex items-center justify-center space-x-2">{project.status === Status.IN_PROGRESS && (<button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingCompletion({ id: project.id, date: today }); }} title="Concluir Execução" aria-label="Concluir Execução" className="p-1.5 bg-violet-50 text-violet-600 hover:bg-violet-100 rounded-md transition-colors border border-violet-200"><CheckSquare size={16} /></button>)}{(project.status === Status.DONE) && (<button onClick={() => { const today = new Date().toISOString().split('T')[0]; const defaultDate = (project.endDate && today > project.endDate) ? today : (project.endDate || today); setPendingSend({ id: project.id, date: defaultDate }); }} title="Registrar Envio ao Cliente" aria-label="Registrar Envio" className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md transition-colors border border-blue-200"><Send size={16} /></button>)}{project.status === Status.WAITING_APPROVAL && (<><button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingApproval({ id: project.id, date: today }); }} title="Aprovar Projeto" aria-label="Aprovar" className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md transition-colors border border-emerald-200"><BadgeCheck size={16} /></button><button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingRejection({ id: project.id, date: today }); }} title="Reprovar Projeto" aria-label="Reprovar" className="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-md transition-colors border border-rose-200"><ThumbsDown size={16} /></button></>)}{canCreateRevision && project.sendDate && project.status !== Status.REVISED && project.status !== Status.WAITING_APPROVAL && (<button onClick={() => setActiveRevModal(project.id)} title={project.status === Status.REJECTED ? "Gerar Nova Revisão (Pós-Reprovação)" : "Gerar Revisão"} aria-label="Gerar Revisão" className={`p-1.5 rounded-md transition-colors border ${project.status === Status.REJECTED ? 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100' : 'text-slate-400 hover:text-brand-600 border-transparent hover:bg-brand-50'}`}><GitBranch size={16} /></button>)}</div></td>
-                )}
-
-                <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end space-x-1">
-                        <button onClick={() => setDetailsProject(project)} className="p-1.5 text-slate-400 hover:text-violet-500 rounded-full hover:bg-violet-50 transition-colors" aria-label="Ver Detalhes"><Eye size={16} /></button>
-                        {!readOnly && (
-                            <>
-                                <button onClick={() => setEditingProject({ ...project })} className="p-1.5 text-slate-400 hover:text-blue-500 rounded-full hover:bg-blue-50 transition-colors" aria-label="Editar"><Edit2 size={16} /></button>
-                                <button onClick={() => setProjectToDelete(project)} className="p-1.5 text-slate-400 hover:text-rose-500 rounded-full hover:bg-rose-50 transition-colors" aria-label="Excluir"><Trash2 size={16} /></button>
-                            </>
-                        )}
-                    </div>
-                </td>
-              </tr>
-            );
-            })}
+            {sortedProjects.map((project, index) => (
+                <ProjectRow 
+                    key={project.id}
+                    project={project}
+                    index={index}
+                    sortedProjects={sortedProjects}
+                    readOnly={readOnly}
+                    setViewHistoryProject={setViewHistoryProject}
+                    setPendingCompletion={setPendingCompletion}
+                    setPendingSend={setPendingSend}
+                    setPendingApproval={setPendingApproval}
+                    setPendingRejection={setPendingRejection}
+                    setActiveRevModal={setActiveRevModal}
+                    setDetailsProject={setDetailsProject}
+                    setEditingProject={setEditingProject}
+                    setProjectToDelete={setProjectToDelete}
+                />
+            ))}
              {sortedProjects.length === 0 && (<tr><td colSpan={readOnly ? 11 : 13} className="px-6 py-10 text-center text-slate-400 italic">Nenhum registro encontrado.</td></tr>)}
           </tbody>
         </table>
       </div>
       </div>
       
+      {/* Modals remain mostly unchanged but using utils/functions from props */}
       {editingProject && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-2xl w-full p-6 border dark:border-slate-700 flex flex-col max-h-[90vh] overflow-y-auto">

@@ -1,8 +1,10 @@
+
 import React, { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { ProjectFile, Discipline, Status, MaterialDoc } from '../types';
-import { differenceInBusinessDays, parseISO, isWeekend, isWithinInterval, isValid } from 'date-fns';
+import { parseISO, isValid, isWeekend, isWithinInterval } from 'date-fns';
 import { LayoutDashboard } from 'lucide-react';
+import { getProjectBaseName, getRevisionNumber, calculateBusinessDaysWithHolidays } from '../utils';
 
 interface DashboardProps {
   data: ProjectFile[];
@@ -23,17 +25,6 @@ const DISCIPLINE_COLORS: Record<string, string> = {
   [Discipline.SPDA]: '#ef4444',        
   [Discipline.HVAC]: '#10b981',        
   [Discipline.OTHER]: '#f472b6',       
-};
-
-const getProjectBaseName = (filename: string): string => {
-  const nameWithoutExt = filename.replace(/\.[^/.]+$/, "");
-  const match = nameWithoutExt.match(/^(.*?)\s\[R\d+\]$/);
-  return match ? match[1] : nameWithoutExt;
-};
-
-const getRevisionNumber = (filename: string): number => {
-    const match = filename.match(/\[R(\d+)\]/);
-    return match ? parseInt(match[1], 10) : 0;
 };
 
 export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDarkMode = false, holidays }) => {
@@ -61,18 +52,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
             end = new Date();
         }
         if (end < start) end = start;
-        const businessDays = differenceInBusinessDays(end, start) + 1;
-        let holidaysOnWeekdays = 0;
-        holidays.forEach(h => {
-            const hDate = parseISO(h);
-            if (isValid(hDate) && isWithinInterval(hDate, { start, end })) {
-                if (!isWeekend(hDate)) {
-                    holidaysOnWeekdays++;
-                }
-            }
-        });
-        const totalDays = Math.max(0, businessDays - holidaysOnWeekdays);
-        duration = totalDays;
+        duration = calculateBusinessDaysWithHolidays(start, end, holidays);
       }
 
       if (!timeByDiscipline[project.discipline]) {

@@ -1,7 +1,9 @@
+
 import React, { useState, useMemo } from 'react';
 import { ProjectFile, Discipline, Status } from '../types';
 import { X, Search, CheckSquare, Square, AlertCircle, CheckCircle2, Send, BadgeCheck, ThumbsDown, ArrowRight, Filter, Layers, Users, GitBranch } from 'lucide-react';
-import { format, parseISO, differenceInBusinessDays, isValid, isWeekend, isWithinInterval } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
+import { getRevisionNumber, calculateBusinessDaysWithHolidays } from '../utils';
 
 interface BatchEditModalProps {
   projects: ProjectFile[];
@@ -22,34 +24,6 @@ const EDITABLE_FIELDS: { key: keyof ProjectFile; label: string; type: 'text' | '
   { key: 'feedbackDate', label: 'Data Feedback', type: 'date' },
   { key: 'blockedDays', label: 'Dias Bloqueados', type: 'number' },
 ];
-
-const getRevisionNumber = (filename: string): number => {
-  const match = filename.match(/\[R(\d+)\]/);
-  return match ? parseInt(match[1], 10) : 0;
-};
-
-const calculateBusinessDaysWithHolidays = (start: Date, end: Date, holidays: string[]) => {
-    let days = differenceInBusinessDays(end, start);
-    let holidaysOnWeekdays = 0;
-    holidays.forEach(h => {
-        const hDate = parseISO(h);
-        if (isValid(hDate) && isWithinInterval(hDate, { start, end })) {
-            if (!isWeekend(hDate)) {
-                holidaysOnWeekdays++;
-            }
-        }
-    });
-    return Math.max(0, days - holidaysOnWeekdays);
-};
-
-const formatDate = (dateStr: string) => {
-  if (!dateStr) return '-';
-  try {
-    return format(parseISO(dateStr), 'dd/MM/yyyy');
-  } catch (e) {
-    return dateStr;
-  }
-};
 
 type Mode = 'EDIT' | 'WORKFLOW';
 type WorkflowAction = 'COMPLETE' | 'SEND' | 'APPROVE' | 'REJECT';

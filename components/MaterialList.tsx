@@ -1,8 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
+
+import React, { useState, useMemo, useEffect, memo } from 'react';
 import { Trash2, Edit2, Package, Search, Save, X, FileText, CheckCircle2, Clock, CheckSquare, GitBranch, CornerDownRight } from 'lucide-react';
 import { Discipline, RevisionReason, MaterialDoc } from '../types';
-import { format, parseISO, isValid } from 'date-fns';
 import { subscribeToClients } from '../services/db';
+import { getProjectBaseName, getRevisionNumber, formatDateDisplay } from '../utils';
 
 interface MaterialListProps {
     materials: MaterialDoc[];
@@ -12,8 +13,39 @@ interface MaterialListProps {
     readOnly?: boolean;
 }
 
-const getMaterialBaseName = (filename: string): string => { const nameWithoutExt = filename.replace(/\.[^/.]+$/, ""); const match = nameWithoutExt.match(/^(.*?)\s\[R\d+\]$/); return match ? match[1] : nameWithoutExt; };
-const getRevisionNumber = (filename: string): number => { const match = filename.match(/\[R(\d+)\]/); return match ? parseInt(match[1], 10) : 0; };
+// Optimization: Memoized Row Component
+const MaterialRow = memo(({ doc, readOnly, setPendingCompletion, handleOpenRevisionModal, handleOpenEditModal, handleDelete }: any) => {
+    const revNum = getRevisionNumber(doc.filename); 
+    const isRevision = revNum > 0;
+    
+    return (
+        <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
+          <td className="px-6 py-4 font-medium text-slate-800 dark:text-slate-200"><div className="flex items-center gap-2">{isRevision && <CornerDownRight size={14} className="text-slate-400" />}<FileText size={16} className="text-slate-400" /><span className={doc.status === 'REVISED' ? 'line-through text-slate-400' : ''}>{doc.filename}</span></div></td>
+          <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{doc.client}</td>
+          <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{doc.base || '-'}</td>
+          <td className="px-6 py-4 text-slate-600 dark:text-slate-400"><span className="bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded text-xs">{doc.discipline}</span></td>
+          <td className="px-6 py-4 text-slate-600 dark:text-slate-400 text-xs">{formatDateDisplay(doc.startDate)}</td>
+          <td className="px-6 py-4 text-slate-600 dark:text-slate-400 text-xs">{formatDateDisplay(doc.endDate)}</td>
+          <td className="px-6 py-4"><span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${doc.status === 'DONE' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-400' : doc.status === 'REVISED' ? 'text-slate-500 bg-slate-200 border-slate-300 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-400 line-through decoration-slate-400 decoration-2' : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-400'}`}>{doc.status === 'DONE' && <CheckCircle2 size={12} />}{doc.status === 'IN_PROGRESS' && <Clock size={12} />}{doc.status === 'DONE' ? 'Concluído' : doc.status === 'REVISED' ? 'Revisado' : 'Em Elaboração'}</span></td>
+          {!readOnly && (
+            <td className="px-6 py-4 text-center">
+                <div className="flex items-center justify-center gap-2">
+                {doc.status === 'IN_PROGRESS' && (<button onClick={() => setPendingCompletion({ id: doc.id, date: new Date().toISOString().split('T')[0] })} title="Concluir Lista" aria-label="Concluir Lista" className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md transition-colors border border-emerald-200"><CheckSquare size={16} /></button>)}
+                {doc.status !== 'REVISED' && (<button onClick={() => handleOpenRevisionModal(doc)} title="Gerar Revisão" aria-label="Gerar Revisão" className="p-1.5 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-brand-600 rounded-md transition-colors border border-slate-200"><GitBranch size={16} /></button>)}
+                </div>
+            </td>
+          )}
+          {!readOnly && (
+            <td className="px-6 py-4 text-right">
+                <div className="flex items-center justify-end space-x-2">
+                <button onClick={() => handleOpenEditModal(doc)} className="p-1.5 text-slate-400 hover:text-brand-600 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" aria-label="Editar"><Edit2 size={16} /></button>
+                <button onClick={() => handleDelete(doc.id)} className="p-1.5 text-slate-400 hover:text-rose-600 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" aria-label="Excluir"><Trash2 size={16} /></button>
+                </div>
+            </td>
+          )}
+        </tr>
+      );
+});
 
 export const MaterialList: React.FC<MaterialListProps> = ({ materials, onUpdate, onDelete, onAddRevision, readOnly = false }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -48,7 +80,7 @@ export const MaterialList: React.FC<MaterialListProps> = ({ materials, onUpdate,
   const filteredDocs = useMemo(() => {
     const filtered = materials.filter(doc => doc.client.toLowerCase().includes(search.toLowerCase()) || doc.filename.toLowerCase().includes(search.toLowerCase()) || doc.discipline.toLowerCase().includes(search.toLowerCase()) || (doc.base && doc.base.toLowerCase().includes(search.toLowerCase())));
     const groups: Record<string, MaterialDoc[]> = {};
-    filtered.forEach(doc => { const base = getMaterialBaseName(doc.filename).toLowerCase(); if (!groups[base]) groups[base] = []; groups[base].push(doc); });
+    filtered.forEach(doc => { const base = getProjectBaseName(doc.filename).toLowerCase(); if (!groups[base]) groups[base] = []; groups[base].push(doc); });
     Object.values(groups).forEach(group => { group.sort((a, b) => getRevisionNumber(a.filename) - getRevisionNumber(b.filename)); });
     const sortedGroups = Object.values(groups).sort((a, b) => { return a[0].filename.localeCompare(b[0].filename); });
     return sortedGroups.flat();
@@ -60,7 +92,6 @@ export const MaterialList: React.FC<MaterialListProps> = ({ materials, onUpdate,
   const handleConfirmCompletion = () => { if (!pendingCompletion) return; const doc = materials.find(d => d.id === pendingCompletion.id); if(doc) { if (doc.startDate && pendingCompletion.date < doc.startDate) { alert("A data de conclusão não pode ser anterior ao início."); } else { onUpdate({ ...doc, status: 'DONE', endDate: pendingCompletion.date }); } } setPendingCompletion(null); };
   const handleOpenRevisionModal = (doc: MaterialDoc) => { setActiveRevModal(doc.id); setRevReason(RevisionReason.INTERNAL_ERROR); setRevComment(''); };
   const handleConfirmRevision = () => { if (!activeRevModal) return; onAddRevision(activeRevModal, revReason, revComment); setActiveRevModal(null); };
-  const formatDateDisplay = (dateStr: string) => { if (!dateStr) return '-'; const date = parseISO(dateStr); return isValid(date) ? format(date, 'dd/MM/yyyy') : '-'; };
 
   return (
     <div className="animate-in fade-in zoom-in-95 duration-200">
@@ -93,36 +124,17 @@ export const MaterialList: React.FC<MaterialListProps> = ({ materials, onUpdate,
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-              {filteredDocs.map(doc => {
-                 const revNum = getRevisionNumber(doc.filename); const isRevision = revNum > 0;
-                 return (
-                <tr key={doc.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
-                  <td className="px-6 py-4 font-medium text-slate-800 dark:text-slate-200"><div className="flex items-center gap-2">{isRevision && <CornerDownRight size={14} className="text-slate-400" />}<FileText size={16} className="text-slate-400" /><span className={doc.status === 'REVISED' ? 'line-through text-slate-400' : ''}>{doc.filename}</span></div></td>
-                  <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{doc.client}</td>
-                  <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{doc.base || '-'}</td>
-                  <td className="px-6 py-4 text-slate-600 dark:text-slate-400"><span className="bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded text-xs">{doc.discipline}</span></td>
-                  <td className="px-6 py-4 text-slate-600 dark:text-slate-400 text-xs">{formatDateDisplay(doc.startDate)}</td>
-                  <td className="px-6 py-4 text-slate-600 dark:text-slate-400 text-xs">{formatDateDisplay(doc.endDate)}</td>
-                  <td className="px-6 py-4"><span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${doc.status === 'DONE' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-400' : doc.status === 'REVISED' ? 'text-slate-500 bg-slate-200 border-slate-300 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-400 line-through decoration-slate-400 decoration-2' : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-400'}`}>{doc.status === 'DONE' && <CheckCircle2 size={12} />}{doc.status === 'IN_PROGRESS' && <Clock size={12} />}{doc.status === 'DONE' ? 'Concluído' : doc.status === 'REVISED' ? 'Revisado' : 'Em Elaboração'}</span></td>
-                  {!readOnly && (
-                    <td className="px-6 py-4 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                        {doc.status === 'IN_PROGRESS' && (<button onClick={() => setPendingCompletion({ id: doc.id, date: new Date().toISOString().split('T')[0] })} title="Concluir Lista" aria-label="Concluir Lista" className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md transition-colors border border-emerald-200"><CheckSquare size={16} /></button>)}
-                        {doc.status !== 'REVISED' && (<button onClick={() => handleOpenRevisionModal(doc)} title="Gerar Revisão" aria-label="Gerar Revisão" className="p-1.5 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-brand-600 rounded-md transition-colors border border-slate-200"><GitBranch size={16} /></button>)}
-                        </div>
-                    </td>
-                  )}
-                  {!readOnly && (
-                    <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end space-x-2">
-                        <button onClick={() => handleOpenEditModal(doc)} className="p-1.5 text-slate-400 hover:text-brand-600 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" aria-label="Editar"><Edit2 size={16} /></button>
-                        <button onClick={() => handleDelete(doc.id)} className="p-1.5 text-slate-400 hover:text-rose-600 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" aria-label="Excluir"><Trash2 size={16} /></button>
-                        </div>
-                    </td>
-                  )}
-                </tr>
-              );
-              })}
+              {filteredDocs.map(doc => (
+                 <MaterialRow 
+                    key={doc.id}
+                    doc={doc}
+                    readOnly={readOnly}
+                    setPendingCompletion={setPendingCompletion}
+                    handleOpenRevisionModal={handleOpenRevisionModal}
+                    handleOpenEditModal={handleOpenEditModal}
+                    handleDelete={handleDelete}
+                 />
+              ))}
               {filteredDocs.length === 0 && (<tr><td colSpan={readOnly ? 7 : 9} className="px-6 py-10 text-center text-slate-400 italic">Nenhum registro encontrado.</td></tr>)}
             </tbody>
           </table>

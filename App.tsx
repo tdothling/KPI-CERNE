@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { ProjectFile, Discipline, Status, RevisionReason, DateFilterType, MaterialDoc, PurchaseDoc, ClientDoc, SiteType } from './types';
 import { Dashboard } from './components/Dashboard';
@@ -23,17 +24,6 @@ const CerneLogo = () => (
     <text x="70" y="28" fill="white" fontSize="24" fontFamily="Arial, sans-serif" fontWeight="bold" textAnchor="middle" letterSpacing="2">CERNE</text>
   </svg>
 );
-
-const getProjectBaseName = (filename: string): string => {
-  const nameWithoutExt = filename.replace(/\.[^/.]+$/, "");
-  const match = nameWithoutExt.match(/^(.*?)\s\[R\d+\]$/);
-  return match ? match[1] : nameWithoutExt;
-};
-
-const getRevisionNumber = (filename: string): number => {
-  const match = filename.match(/\[R(\d+)\]/);
-  return match ? parseInt(match[1], 10) : 0;
-};
 
 const detectDiscipline = (text: string): Discipline | null => {
   const normalized = text.toLowerCase();
