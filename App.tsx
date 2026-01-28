@@ -481,16 +481,18 @@ export default function App() {
               {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
             </button>
 
-             {/* SERVER SIDE FILTER BUTTON */}
-             <button 
-                onClick={() => setIsFilterModalOpen(true)}
-                className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg border transition-all ${projectFilter.isActive ? 'bg-brand-50 border-brand-200 text-brand-700 dark:bg-brand-900/20 dark:border-brand-800 dark:text-brand-400' : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}
-                title="Filtro Avançado (Banco de Dados)"
-             >
-                <Search className="w-4 h-4" />
-                <span className="text-sm font-medium hidden md:inline">Busca Avançada</span>
-                {projectFilter.isActive && <span className="flex h-2 w-2 rounded-full bg-brand-500"></span>}
-             </button>
+             {/* SERVER SIDE FILTER BUTTON - Somente visível na aba Projects */}
+             {activeTab === 'projects' && (
+                <button 
+                    onClick={() => setIsFilterModalOpen(true)}
+                    className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg border transition-all ${projectFilter.isActive ? 'bg-brand-50 border-brand-200 text-brand-700 dark:bg-brand-900/20 dark:border-brand-800 dark:text-brand-400' : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}
+                    title="Filtro Avançado (Banco de Dados)"
+                >
+                    <Search className="w-4 h-4" />
+                    <span className="text-sm font-medium hidden md:inline">Busca Avançada</span>
+                    {projectFilter.isActive && <span className="flex h-2 w-2 rounded-full bg-brand-500"></span>}
+                </button>
+             )}
 
              <div className="hidden md:flex items-center space-x-2 bg-slate-100 dark:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600">
               <Filter className="w-4 h-4 text-brand-600 dark:text-brand-400" aria-hidden="true" />
@@ -501,9 +503,13 @@ export default function App() {
 
             {!isReadOnly && (
               <>
-                <button onClick={() => setIsHolidayManagerOpen(true)} className="p-2 text-slate-500 hover:text-brand-600 dark:text-slate-400 dark:hover:text-brand-400 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors relative" aria-label="Gerenciar Feriados">
-                    <CalendarDays size={20} />
-                    {holidays.length > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-brand-500 rounded-full"></span>}
+                <button onClick={() => setIsHolidayManagerOpen(true)} className="flex bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-lg text-sm font-medium transition-colors items-center space-x-2 border border-slate-200 dark:border-slate-600 relative" title="Gerenciar Dias Não Úteis">
+                    <CalendarDays className="w-4 h-4" />
+                    <span className="hidden lg:inline">Feriados</span>
+                    {holidays.length > 0 && <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-brand-500"></span>
+                    </span>}
                 </button>
 
                 <button onClick={() => setIsBatchEditOpen(true)} className="hidden md:flex bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors items-center space-x-2 border border-slate-200 dark:border-slate-600">
