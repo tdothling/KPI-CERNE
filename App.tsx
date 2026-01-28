@@ -530,10 +530,12 @@ export default function App() {
 
             {!isReadOnly && (
               <>
-                <button onClick={() => setIsHolidayManagerOpen(true)} className="flex bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-lg text-sm font-medium transition-colors items-center space-x-2 border border-slate-200 dark:border-slate-600 relative" title="Gerenciar Dias Não Úteis">
-                    <CalendarDays className="w-4 h-4" />
-                    <span className="hidden lg:inline">Feriados</span>
-                </button>
+                {activeTab !== 'dashboard' && (
+                    <button onClick={() => setIsHolidayManagerOpen(true)} className="flex bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-lg text-sm font-medium transition-colors items-center space-x-2 border border-slate-200 dark:border-slate-600 relative" title="Gerenciar Dias Não Úteis">
+                        <CalendarDays className="w-4 h-4" />
+                        <span className="hidden lg:inline">Feriados</span>
+                    </button>
+                )}
 
                 {activeTab === 'projects' && (
                   <button onClick={() => setIsBatchEditOpen(true)} className="hidden md:flex bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors items-center space-x-2 border border-slate-200 dark:border-slate-600">
@@ -549,22 +551,28 @@ export default function App() {
                   </button>
                 )}
 
-                <button onClick={() => setIsClientManagerOpen(true)} className="hidden md:flex bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors items-center space-x-2 border border-slate-200 dark:border-slate-600">
-                  <HardHat className="w-4 h-4" />
-                  <span>Registro de Obra</span>
-                </button>
+                {activeTab !== 'dashboard' && (
+                    <button onClick={() => setIsClientManagerOpen(true)} className="hidden md:flex bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors items-center space-x-2 border border-slate-200 dark:border-slate-600">
+                    <HardHat className="w-4 h-4" />
+                    <span>Registro de Obra</span>
+                    </button>
+                )}
                 
-                <button onClick={handleOpenUploadModal} disabled={!dbConnected} className="bg-brand-700 hover:bg-brand-800 disabled:bg-slate-400 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm">
-                  <UploadCloud className="w-4 h-4" />
-                  <span className="hidden sm:inline">Importar</span>
-                </button>
+                {activeTab !== 'dashboard' && (
+                    <button onClick={handleOpenUploadModal} disabled={!dbConnected} className="bg-brand-700 hover:bg-brand-800 disabled:bg-slate-400 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm">
+                    <UploadCloud className="w-4 h-4" />
+                    <span className="hidden sm:inline">Importar</span>
+                    </button>
+                )}
               </>
             )}
 
-             <button onClick={handleExportCSV} className="hidden md:flex bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-lg text-sm font-medium transition-colors items-center space-x-2 border border-slate-200 dark:border-slate-600">
-              <Download className="w-4 h-4" />
-              <span className="hidden lg:inline">Exportar</span>
-            </button>
+             {activeTab !== 'dashboard' && (
+                <button onClick={handleExportCSV} className="hidden md:flex bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-lg text-sm font-medium transition-colors items-center space-x-2 border border-slate-200 dark:border-slate-600">
+                <Download className="w-4 h-4" />
+                <span className="hidden lg:inline">Exportar</span>
+                </button>
+             )}
             
             <input type="file" multiple className="hidden" ref={fileInputRef} onChange={handleFilesSelected} {...({ webkitdirectory: isFolderUpload ? "" : undefined } as any)} accept={isFolderUpload ? undefined : (importType === 'PROJECT' ? ".dwg,.rvt,.pln,.pdf,.dxf,.csv" : ".xlsx,.xls,.csv")} />
           </div>
