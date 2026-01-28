@@ -512,10 +512,12 @@ export default function App() {
                     </span>}
                 </button>
 
-                <button onClick={() => setIsBatchEditOpen(true)} className="hidden md:flex bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors items-center space-x-2 border border-slate-200 dark:border-slate-600">
-                  <Layers className="w-4 h-4" />
-                  <span>Edição em Lote</span>
-                </button>
+                {activeTab === 'projects' && (
+                  <button onClick={() => setIsBatchEditOpen(true)} className="hidden md:flex bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors items-center space-x-2 border border-slate-200 dark:border-slate-600">
+                    <Layers className="w-4 h-4" />
+                    <span>Edição em Lote</span>
+                  </button>
+                )}
 
                 <button onClick={() => setIsClientManagerOpen(true)} className="hidden md:flex bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors items-center space-x-2 border border-slate-200 dark:border-slate-600">
                   <HardHat className="w-4 h-4" />
