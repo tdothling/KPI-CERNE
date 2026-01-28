@@ -5,6 +5,7 @@ import { Dashboard } from './components/Dashboard';
 import { ProjectList } from './components/ProjectList';
 import { ProjectTimeline } from './components/ProjectTimeline';
 import { BatchEditModal } from './components/BatchEditModal';
+import { MaterialBatchEditModal } from './components/MaterialBatchEditModal';
 import { HolidayManagerModal } from './components/HolidayManagerModal';
 import { ClientManagerModal } from './components/ClientManagerModal';
 import { DateRangeFilter } from './components/DateRangeFilter';
@@ -145,6 +146,7 @@ export default function App() {
   const shouldShowBaseInput = !selectedUploadClientDoc || selectedUploadClientDoc.type === SiteType.OPERATIONAL_BASE;
 
   const [isBatchEditOpen, setIsBatchEditOpen] = useState(false);
+  const [isMaterialBatchEditOpen, setIsMaterialBatchEditOpen] = useState(false);
   const [isHolidayManagerOpen, setIsHolidayManagerOpen] = useState(false);
   const [isClientManagerOpen, setIsClientManagerOpen] = useState(false);
 
@@ -396,6 +398,31 @@ export default function App() {
         if (shouldUpdate) updateProjectInDb(updatedProject);
     });
   };
+  
+  const handleMaterialBatchUpdate = (ids: string[], field: keyof MaterialDoc, value: any) => {
+      ids.forEach(id => {
+        const material = materials.find(m => m.id === id);
+        if (material) {
+            const updatedMaterial = { ...material, [field]: value };
+            updateMaterialInDb(updatedMaterial);
+        }
+    });
+  };
+  
+  const handleMaterialBatchWorkflow = (ids: string[], action: 'COMPLETE', date: string) => {
+      ids.forEach(id => {
+        const material = materials.find(m => m.id === id);
+        if (!material) return;
+        
+        let updatedMaterial = { ...material };
+        if (action === 'COMPLETE') { 
+            updatedMaterial.status = 'DONE'; 
+            updatedMaterial.endDate = date; 
+            updateMaterialInDb(updatedMaterial); 
+        }
+    });
+  };
+
   const handleUpdateHolidays = (newHolidays: string[]) => saveHolidaysToDb(newHolidays);
   
   const handleExportCSV = () => setIsExportModalOpen(true);
@@ -506,14 +533,17 @@ export default function App() {
                 <button onClick={() => setIsHolidayManagerOpen(true)} className="flex bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-lg text-sm font-medium transition-colors items-center space-x-2 border border-slate-200 dark:border-slate-600 relative" title="Gerenciar Dias Não Úteis">
                     <CalendarDays className="w-4 h-4" />
                     <span className="hidden lg:inline">Feriados</span>
-                    {holidays.length > 0 && <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-brand-500"></span>
-                    </span>}
                 </button>
 
                 {activeTab === 'projects' && (
                   <button onClick={() => setIsBatchEditOpen(true)} className="hidden md:flex bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors items-center space-x-2 border border-slate-200 dark:border-slate-600">
+                    <Layers className="w-4 h-4" />
+                    <span>Edição em Lote</span>
+                  </button>
+                )}
+
+                {activeTab === 'materials' && (
+                  <button onClick={() => setIsMaterialBatchEditOpen(true)} className="hidden md:flex bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors items-center space-x-2 border border-slate-200 dark:border-slate-600">
                     <Layers className="w-4 h-4" />
                     <span>Edição em Lote</span>
                   </button>
@@ -740,6 +770,10 @@ export default function App() {
 
       {isBatchEditOpen && (
         <BatchEditModal projects={filteredProjects} onClose={() => setIsBatchEditOpen(false)} onApply={handleBatchUpdate} onWorkflow={handleBatchWorkflow} holidays={holidays} />
+      )}
+      
+      {isMaterialBatchEditOpen && (
+        <MaterialBatchEditModal materials={filteredMaterials} onClose={() => setIsMaterialBatchEditOpen(false)} onApply={handleMaterialBatchUpdate} onWorkflow={handleMaterialBatchWorkflow} />
       )}
 
       {isHolidayManagerOpen && (
