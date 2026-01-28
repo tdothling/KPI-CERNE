@@ -117,16 +117,43 @@ export const deleteProjectFromDb = async (id: string) => {
   try { await deleteDoc(doc(db, COLL_PROJECTS, id)); } catch (e) { console.error("Erro ao excluir projeto:", e); throw e; }
 };
 
-export const subscribeToMaterials = (callback: (data: MaterialDoc[]) => void) => {
+export const subscribeToMaterials = (callback: (data: MaterialDoc[]) => void, filter?: ProjectFilterState) => {
   if (!isDbActive()) return () => {};
-  const q = query(collection(db, COLL_MATERIALS), limit(50));
+  
+  let q;
+
+  // Lógica de Filtro Avançado para Materiais (Idêntica a Projetos)
+  if (filter && filter.isActive) {
+      const constraints: any[] = [];
+      
+      if (filter.clients.length > 0) {
+          const safeClients = filter.clients.slice(0, 10);
+          constraints.push(where("client", "in", safeClients));
+      }
+
+      constraints.push(limit(150)); 
+      q = query(collection(db, COLL_MATERIALS), ...constraints);
+
+  } else {
+      q = query(collection(db, COLL_MATERIALS), limit(50));
+  }
+
   const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
-    const materials: MaterialDoc[] = [];
+    let materials: MaterialDoc[] = [];
     snapshot.forEach((doc) => {
       const data = doc.data();
       if ('id' in data) delete data.id;
       materials.push({ id: doc.id, ...data } as MaterialDoc);
     });
+
+    if (filter && filter.isActive) {
+        if (filter.disciplines.length > 0) {
+            materials = materials.filter(m => filter.disciplines.includes(m.discipline));
+        }
+        // Ordenação por nome do arquivo (padrão comum para listas)
+        materials.sort((a, b) => a.filename.localeCompare(b.filename));
+    }
+
     callback(materials);
   });
   return unsubscribe;

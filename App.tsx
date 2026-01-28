@@ -104,8 +104,8 @@ export default function App() {
 
     // Passamos o filtro para a subscription. Se o filtro mudar, a query muda e recarrega os dados do servidor.
     const unsubProjects = subscribeToProjects(setProjects, projectFilter);
+    const unsubMaterials = subscribeToMaterials(setMaterials, projectFilter);
     
-    const unsubMaterials = subscribeToMaterials(setMaterials);
     const unsubPurchases = subscribeToPurchases(setPurchases);
     const unsubClients = subscribeToClients(setClients);
     const unsubHolidays = subscribeToHolidays(setHolidays);
@@ -481,8 +481,8 @@ export default function App() {
               {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
             </button>
 
-             {/* SERVER SIDE FILTER BUTTON - Somente visível na aba Projects */}
-             {activeTab === 'projects' && (
+             {/* SERVER SIDE FILTER BUTTON - Visível em Projects e Materials */}
+             {(activeTab === 'projects' || activeTab === 'materials') && (
                 <button 
                     onClick={() => setIsFilterModalOpen(true)}
                     className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg border transition-all ${projectFilter.isActive ? 'bg-brand-50 border-brand-200 text-brand-700 dark:bg-brand-900/20 dark:border-brand-800 dark:text-brand-400' : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}
