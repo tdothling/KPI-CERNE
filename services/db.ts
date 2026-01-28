@@ -1,6 +1,7 @@
+
 import { db, auth } from "../firebase";
-import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc, query, orderBy, limit, QuerySnapshot, DocumentData, getDoc } from "firebase/firestore";
-import { ProjectFile, MaterialDoc, PurchaseDoc, ClientDoc } from "../types";
+import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc, query, orderBy, limit, QuerySnapshot, DocumentData, getDoc, where } from "firebase/firestore";
+import { ProjectFile, MaterialDoc, PurchaseDoc, ClientDoc, ProjectFilterState } from "../types";
 
 const COLL_PROJECTS = "projects";
 const COLL_MATERIALS = "materials";
@@ -38,16 +39,57 @@ const sanitizeData = (data: any) => {
     return clean;
 };
 
-export const subscribeToProjects = (callback: (data: ProjectFile[]) => void) => {
+export const subscribeToProjects = (callback: (data: ProjectFile[]) => void, filter?: ProjectFilterState) => {
   if (!isDbActive()) return () => {};
-  const q = query(collection(db, COLL_PROJECTS), limit(50));
+  
+  let q;
+
+  // Lógica de Filtro Avançado (Server-Side)
+  if (filter && filter.isActive) {
+      const constraints: any[] = [];
+      
+      // Filtro de Clientes (Usa operador 'in' para permitir múltipla escolha)
+      if (filter.clients.length > 0) {
+          // Firestore limita o operador 'in' a 10 valores (em versões antigas) ou 30 (novas).
+          // Por segurança e performance, pegamos os primeiros 10 se houver muitos.
+          const safeClients = filter.clients.slice(0, 10);
+          constraints.push(where("client", "in", safeClients));
+      }
+
+      // Nota: Não adicionamos 'discipline' na query do Firestore para evitar erros de índice composto.
+      // O Firestore exige índices específicos para queries com múltiplos campos diferentes.
+      // Estratégia: Filtramos Clientes no Servidor (Redução drástica de leituras) e Disciplinas no Cliente (Memória).
+      
+      // Se tiver filtro, aumentamos o limite para garantir que o usuário ache o que procura,
+      // mas mantemos um teto para segurança de cota.
+      constraints.push(limit(150)); 
+      
+      // Queries com 'where' muitas vezes não suportam 'orderBy' sem índice criado. 
+      // Removemos 'orderBy' aqui e ordenamos no callback.
+      q = query(collection(db, COLL_PROJECTS), ...constraints);
+
+  } else {
+      // Padrão: 50 últimos projetos (Monitoramento Diário)
+      q = query(collection(db, COLL_PROJECTS), limit(50));
+  }
+
   const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
-    const projects: ProjectFile[] = [];
+    let projects: ProjectFile[] = [];
     snapshot.forEach((doc) => {
       const data = doc.data();
       if ('id' in data) delete data.id; 
       projects.push({ id: doc.id, ...data } as ProjectFile);
     });
+
+    // Se estiver filtrando, aplicamos a filtragem de memória secundária (ex: disciplina) e ordenação
+    if (filter && filter.isActive) {
+        if (filter.disciplines.length > 0) {
+            projects = projects.filter(p => filter.disciplines.includes(p.discipline));
+        }
+        // Ordenação manual pois removemos o orderBy da query filtrada
+        projects.sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''));
+    }
+
     callback(projects);
   });
   return unsubscribe;

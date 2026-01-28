@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { ProjectFile, Discipline, Status, RevisionReason, DateFilterType, MaterialDoc, PurchaseDoc, ClientDoc, SiteType } from './types';
+import { ProjectFile, Discipline, Status, RevisionReason, DateFilterType, MaterialDoc, PurchaseDoc, ClientDoc, SiteType, ProjectFilterState } from './types';
 import { Dashboard } from './components/Dashboard';
 import { ProjectList } from './components/ProjectList';
 import { ProjectTimeline } from './components/ProjectTimeline';
@@ -11,7 +11,8 @@ import { DateRangeFilter } from './components/DateRangeFilter';
 import { MaterialList } from './components/MaterialList';
 import { PurchaseList } from './components/PurchaseList';
 import { LoginModal } from './components/LoginModal'; 
-import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Package, FileSpreadsheet, Database, LogIn, LogOut, ShoppingCart, HardHat } from 'lucide-react';
+import { AdvancedFilter } from './components/AdvancedFilter';
+import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Package, FileSpreadsheet, Database, LogIn, LogOut, ShoppingCart, HardHat, Search } from 'lucide-react';
 import { parseISO, isValid, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear, getMonth, setMonth, setDate, endOfDay, format } from 'date-fns';
 import { subscribeToProjects, addProject, updateProjectInDb, deleteProjectFromDb, subscribeToMaterials, addMaterial, updateMaterialInDb, deleteMaterialFromDb, subscribeToPurchases, addPurchase, updatePurchaseInDb, deletePurchaseFromDb, subscribeToClients, addClient, updateClientInDb, deleteClientFromDb, subscribeToHolidays, saveHolidaysToDb } from './services/db';
 import { subscribeToAuth, logoutUser, formatUsername } from './services/auth';
@@ -88,6 +89,10 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   
+  // Advanced Filter State
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [projectFilter, setProjectFilter] = useState<ProjectFilterState>({ clients: [], disciplines: [], isActive: false });
+
   const isReadOnly = !currentUser;
 
   useEffect(() => {
@@ -97,7 +102,9 @@ export default function App() {
     }
     setDbConnected(true);
 
-    const unsubProjects = subscribeToProjects(setProjects);
+    // Passamos o filtro para a subscription. Se o filtro mudar, a query muda e recarrega os dados do servidor.
+    const unsubProjects = subscribeToProjects(setProjects, projectFilter);
+    
     const unsubMaterials = subscribeToMaterials(setMaterials);
     const unsubPurchases = subscribeToPurchases(setPurchases);
     const unsubClients = subscribeToClients(setClients);
@@ -112,9 +119,9 @@ export default function App() {
         unsubHolidays();
         unsubAuth();
     };
-  }, []);
+  }, [projectFilter]); // Re-run effect when filter changes
 
-  const [selectedClient, setSelectedClient] = useState<string>('Todos');
+  const [selectedClient, setSelectedClient] = useState<string>('Todos'); // This is the local UI filter, kept for backward compatibility/quick filter
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   
@@ -177,6 +184,7 @@ export default function App() {
 
   const filteredProjects = useMemo(() => {
     let result = projects;
+    // Local filter (Quick Filter) still applies on top of Server Filter
     if (selectedClient !== 'Todos') {
       result = result.filter(p => p.client === selectedClient);
     }
@@ -473,6 +481,17 @@ export default function App() {
               {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
             </button>
 
+             {/* SERVER SIDE FILTER BUTTON */}
+             <button 
+                onClick={() => setIsFilterModalOpen(true)}
+                className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg border transition-all ${projectFilter.isActive ? 'bg-brand-50 border-brand-200 text-brand-700 dark:bg-brand-900/20 dark:border-brand-800 dark:text-brand-400' : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}
+                title="Filtro Avançado (Banco de Dados)"
+             >
+                <Search className="w-4 h-4" />
+                <span className="text-sm font-medium hidden md:inline">Busca Avançada</span>
+                {projectFilter.isActive && <span className="flex h-2 w-2 rounded-full bg-brand-500"></span>}
+             </button>
+
              <div className="hidden md:flex items-center space-x-2 bg-slate-100 dark:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600">
               <Filter className="w-4 h-4 text-brand-600 dark:text-brand-400" aria-hidden="true" />
               <select value={selectedClient} onChange={(e) => setSelectedClient(e.target.value)} className="bg-transparent text-sm font-medium text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer" aria-label="Filtrar por Cliente">
@@ -559,6 +578,7 @@ export default function App() {
         </div>
       </main>
       
+       {/* ... (Upload Modal and others remain unchanged) ... */}
        {isUploadModalOpen && (
         <div className="fixed inset-0 bg-black/60 dark:bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-md w-full p-6 transform transition-all border dark:border-slate-700">
@@ -699,6 +719,15 @@ export default function App() {
              </div>
           </div>
         </div>
+      )}
+
+      {isFilterModalOpen && (
+        <AdvancedFilter 
+            clients={clients} 
+            currentFilter={projectFilter} 
+            onApplyFilter={setProjectFilter} 
+            onClose={() => setIsFilterModalOpen(false)} 
+        />
       )}
 
       {isBatchEditOpen && (

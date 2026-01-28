@@ -54,6 +54,13 @@ export interface ProjectFile {
   revisions: Revision[];
 }
 
+// Interface para o Filtro Avançado
+export interface ProjectFilterState {
+    clients: string[];
+    disciplines: Discipline[];
+    isActive: boolean;
+}
+
 export type MaterialStatus = 'IN_PROGRESS' | 'DONE' | 'REVISED';
 
 export interface MaterialDoc {
