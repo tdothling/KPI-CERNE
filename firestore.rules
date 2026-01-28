@@ -1,0 +1,60 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- FUNÇÕES AUXILIARES (SEGURANÇA) ---
+
+    // Verifica se o usuário está logado no Firebase Auth
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Verifica se o usuário pertence ao domínio interno da aplicação
+    // Isso impede que alguém use uma chave de API roubada para criar contas em outros domínios
+    function isCerneInternalUser() {
+      return isAuthenticated() && 
+             request.auth.token.email.matches('.*@cerne[.]internal');
+    }
+
+    // --- REGRAS POR COLEÇÃO ---
+
+    // Projetos: Apenas usuários internos podem ler e escrever
+    match /projects/{projectId} {
+      allow read: if isCerneInternalUser();
+      
+      // Validação de escrita: Garante que não sejam enviados dados corrompidos
+      allow create: if isCerneInternalUser() 
+                    && request.resource.data.keys().hasAll(['filename', 'client', 'discipline', 'status'])
+                    && request.resource.data.filename is string
+                    && request.resource.data.client is string;
+                    
+      allow update: if isCerneInternalUser();
+      allow delete: if isCerneInternalUser();
+    }
+
+    // Materiais: Mesma regra de autenticação
+    match /materials/{materialId} {
+      allow read, write: if isCerneInternalUser();
+    }
+
+    // Compras: Mesma regra de autenticação
+    match /purchases/{purchaseId} {
+      allow read, write: if isCerneInternalUser();
+    }
+
+    // Clientes: Mesma regra de autenticação
+    match /clients/{clientId} {
+      allow read, write: if isCerneInternalUser();
+    }
+
+    // Configurações e Feriados: Mesma regra de autenticação
+    match /settings/{document=**} {
+      allow read, write: if isCerneInternalUser();
+    }
+    
+    match /configuration/{document=**} {
+      allow read, write: if isCerneInternalUser();
+    }
+  }
+}
