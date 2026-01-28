@@ -1,7 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { initializeFirestore, persistentLocalCache } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
-import { getFunctions } from "firebase/functions";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDVlKOB6hr2Q_ORpq0A7gWZz6qw2sNo4ds",
@@ -15,7 +14,6 @@ const firebaseConfig = {
 
 let db: any = null;
 let auth: any = null;
-let functions: any = null;
 
 try {
     const app = initializeApp(firebaseConfig);
@@ -26,11 +24,8 @@ try {
     });
 
     auth = getAuth(app);
-    
-    // Inicializa Functions na região padrão (us-central1)
-    functions = getFunctions(app);
 } catch (e) {
     console.error("Erro ao inicializar Firebase:", e);
 }
 
-export { db, auth, functions };
+export { db, auth };
