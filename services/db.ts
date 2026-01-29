@@ -1,6 +1,6 @@
 
 import { db, auth } from "../firebase";
-import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc, query, orderBy, limit, QuerySnapshot, DocumentData, getDoc, where } from "firebase/firestore";
+import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc, query, orderBy, limit, QuerySnapshot, DocumentData, getDoc, getDocs, where } from "firebase/firestore";
 import { ProjectFile, MaterialDoc, PurchaseDoc, ClientDoc, ProjectFilterState } from "../types";
 
 const COLL_PROJECTS = "projects";
@@ -244,10 +244,51 @@ export const addClient = async (client: Omit<ClientDoc, 'id'>) => {
 export const updateClientInDb = async (client: ClientDoc) => {
   if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
   try {
+    // 1. Buscar o cliente atual para verificar mudança de nome
+    const docRef = doc(db, COLL_CLIENTS, client.id);
+    const snapshot = await getDoc(docRef);
+    
+    if (!snapshot.exists()) throw new Error("Cliente não encontrado.");
+    
+    const oldData = snapshot.data() as ClientDoc;
+    const oldName = oldData.name;
+    const newName = client.name;
+
     const { id, ...data } = client;
-    const docRef = doc(db, COLL_CLIENTS, id);
+    
+    // 2. Atualiza o cadastro do cliente
     await updateDoc(docRef, sanitizeData(data));
-  } catch (e) { console.error("Erro ao atualizar cliente:", e); throw e; }
+
+    // 3. Se o nome mudou, atualiza em cascata (Cascading Update) todas as coleções vinculadas
+    if (oldName && newName && oldName !== newName) {
+        console.log(`Iniciando atualização em cascata: ${oldName} -> ${newName}`);
+        
+        // Prepara queries para encontrar documentos com o nome antigo
+        const pQuery = query(collection(db, COLL_PROJECTS), where("client", "==", oldName));
+        const mQuery = query(collection(db, COLL_MATERIALS), where("client", "==", oldName));
+        const cQuery = query(collection(db, COLL_PURCHASES), where("client", "==", oldName));
+
+        // Executa leituras em paralelo
+        const [pSnap, mSnap, cSnap] = await Promise.all([
+            getDocs(pQuery),
+            getDocs(mQuery),
+            getDocs(cQuery)
+        ]);
+
+        const updatePromises: Promise<void>[] = [];
+
+        // Adiciona promessas de atualização para cada documento encontrado
+        pSnap.forEach(d => updatePromises.push(updateDoc(d.ref, { client: newName })));
+        mSnap.forEach(d => updatePromises.push(updateDoc(d.ref, { client: newName })));
+        cSnap.forEach(d => updatePromises.push(updateDoc(d.ref, { client: newName })));
+
+        if (updatePromises.length > 0) {
+            await Promise.all(updatePromises);
+            console.log(`Sucesso: ${updatePromises.length} registros atualizados para o novo nome.`);
+        }
+    }
+
+  } catch (e) { console.error("Erro ao atualizar cliente e vínculos:", e); throw e; }
 };
 
 export const deleteClientFromDb = async (id: string) => {
