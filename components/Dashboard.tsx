@@ -3,7 +3,7 @@ import React, { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { ProjectFile, Discipline, Status, MaterialDoc } from '../types';
 import { parseISO, isValid, isWeekend, isWithinInterval } from 'date-fns';
-import { LayoutDashboard } from 'lucide-react';
+import { LayoutDashboard, FileDown } from 'lucide-react';
 import { getProjectBaseName, getRevisionNumber, calculateBusinessDaysWithHolidays } from '../utils';
 
 interface DashboardProps {
@@ -32,6 +32,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
   const gridColor = isDarkMode ? '#334155' : '#e2e8f0';
   const tooltipBg = isDarkMode ? '#1e293b' : '#ffffff';
   const tooltipText = isDarkMode ? '#f1f5f9' : '#1e293b';
+
+  const handlePrint = () => {
+      // Small trick: temporarily switch off dark mode if on, but for now rely on user choice.
+      // Ideally we should enforce light mode for print via CSS but that needs global state.
+      // For now, we trust the browser print dialog preview.
+      window.print();
+  };
 
   const stats = useMemo(() => {
     const timeByDiscipline: Record<string, { totalDays: number; count: number }> = {};
@@ -176,10 +183,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
            </h2>
            <p className="text-sm text-slate-500 dark:text-slate-400">Visão geral do desempenho, assertividade e volume de projetos.</p>
         </div>
+        <button 
+            onClick={handlePrint}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg transition-colors border border-slate-200 dark:border-slate-700 print:hidden"
+        >
+            <FileDown size={18} />
+            <span className="font-medium">Exportar PDF</span>
+        </button>
       </div>
 
       <div className="space-y-6 mb-8">
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200">
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200 print:break-inside-avoid print:shadow-none print:border-slate-300">
           <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-2">Massa de Projetos (Volume por Cliente e Disciplina)</h3>
           <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Quantidade total de arquivos demandados por cliente, segmentado por disciplina.</p>
           <div className="h-80">
@@ -198,8 +212,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
           </div>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 print:grid-cols-2">
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200 print:break-inside-avoid print:shadow-none print:border-slate-300">
             <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4">Média Execução (Dias Úteis)</h3>
             <div className="h-60">
               <ResponsiveContainer width="100%" height="100%" minWidth={0}>
@@ -218,7 +232,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
             </div>
           </div>
 
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200">
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200 print:break-inside-avoid print:shadow-none print:border-slate-300">
             <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4">Tempo Resposta Cliente</h3>
             <div className="h-60">
               <ResponsiveContainer width="100%" height="100%" minWidth={0}>
@@ -233,7 +247,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
             </div>
           </div>
 
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200">
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200 print:break-inside-avoid print:shadow-none print:border-slate-300">
             <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4">Motivos de Revisão (Recorrência)</h3>
             <div className="h-60">
               {stats.reasonsData.length > 0 ? (
@@ -254,7 +268,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
             </div>
           </div>
 
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200">
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200 print:break-inside-avoid print:shadow-none print:border-slate-300">
             <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4" title="Índice de Aprovação na Primeira Revisão">IAPR (Aprovação Direta)</h3>
             <div className="h-60">
               <ResponsiveContainer width="100%" height="100%" minWidth={0}>
@@ -273,7 +287,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
             </div>
           </div>
 
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200">
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200 print:break-inside-avoid print:shadow-none print:border-slate-300">
              <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4">ICLM (Conclusão de Listas)</h3>
              <div className="h-60 relative flex flex-col items-center justify-center">
                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
