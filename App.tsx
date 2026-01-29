@@ -13,7 +13,7 @@ import { MaterialList } from './components/MaterialList';
 import { PurchaseList } from './components/PurchaseList';
 import { LoginModal } from './components/LoginModal'; 
 import { AdvancedFilter } from './components/AdvancedFilter';
-import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Package, FileSpreadsheet, Database, LogIn, LogOut, ShoppingCart, HardHat, Search } from 'lucide-react';
+import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Package, FileSpreadsheet, Database, LogIn, LogOut, ShoppingCart, HardHat, Search, ChevronDown, CheckSquare, Square } from 'lucide-react';
 import { parseISO, isValid, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear, getMonth, setMonth, setDate, endOfDay, format } from 'date-fns';
 import { subscribeToProjects, addProject, updateProjectInDb, deleteProjectFromDb, subscribeToMaterials, addMaterial, updateMaterialInDb, deleteMaterialFromDb, subscribeToPurchases, addPurchase, updatePurchaseInDb, deletePurchaseFromDb, subscribeToClients, addClient, updateClientInDb, deleteClientFromDb, subscribeToHolidays, saveHolidaysToDb } from './services/db';
 import { subscribeToAuth, logoutUser, formatUsername } from './services/auth';
@@ -132,7 +132,10 @@ export default function App() {
     };
   }, [projectFilter]); // Re-run effect when filter changes
 
-  const [selectedClient, setSelectedClient] = useState<string>('Todos'); // This is the local UI filter, kept for backward compatibility/quick filter
+  // Multi-Select Client Filter State
+  const [selectedClients, setSelectedClients] = useState<string[]>([]); // Empty = All
+  const [isClientFilterOpen, setIsClientFilterOpen] = useState(false);
+  
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   
@@ -196,10 +199,11 @@ export default function App() {
 
   const filteredProjects = useMemo(() => {
     let result = projects;
-    // Local filter (Quick Filter) still applies on top of Server Filter
-    if (selectedClient !== 'Todos') {
-      result = result.filter(p => p.client === selectedClient);
+    // Multi-Select Client Filter
+    if (selectedClients.length > 0) {
+      result = result.filter(p => selectedClients.includes(p.client));
     }
+    
     const dateRange = getFilterDateRange();
     if (dateRange) {
       const { start: filterStart, end: filterEnd } = dateRange;
@@ -216,12 +220,12 @@ export default function App() {
       });
     }
     return result;
-  }, [projects, selectedClient, dateFilterType, referenceDate, customRange]);
+  }, [projects, selectedClients, dateFilterType, referenceDate, customRange]);
 
   const filteredMaterials = useMemo(() => {
     let result = materials;
-    if (selectedClient !== 'Todos') {
-      result = result.filter(m => m.client === selectedClient);
+    if (selectedClients.length > 0) {
+      result = result.filter(m => selectedClients.includes(m.client));
     }
     const dateRange = getFilterDateRange();
     if (dateRange) {
@@ -239,22 +243,32 @@ export default function App() {
       });
     }
     return result;
-  }, [materials, selectedClient, dateFilterType, referenceDate, customRange]);
+  }, [materials, selectedClients, dateFilterType, referenceDate, customRange]);
 
   const filteredPurchases = useMemo(() => {
       let result = purchases;
-      if (selectedClient !== 'Todos') {
-        result = result.filter(p => p.client === selectedClient);
+      if (selectedClients.length > 0) {
+        result = result.filter(p => selectedClients.includes(p.client));
       }
       return result;
-  }, [purchases, selectedClient]);
+  }, [purchases, selectedClients]);
 
   const uniqueClients = useMemo(() => {
     const registeredNames = clients.map(c => c.name);
     const projectClients = new Set(projects.map(p => p.client));
     const merged = new Set([...registeredNames, ...projectClients]);
-    return ['Todos', ...Array.from(merged).sort()];
+    return Array.from(merged).sort();
   }, [clients, projects]);
+
+  const toggleClientSelection = (clientName: string) => {
+      setSelectedClients(prev => {
+          if (prev.includes(clientName)) {
+              return prev.filter(c => c !== clientName);
+          } else {
+              return [...prev, clientName];
+          }
+      });
+  };
 
   const handleOpenUploadModal = () => {
     setIsUploadModalOpen(true);
@@ -484,6 +498,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 pb-20 transition-colors duration-200">
+      {/* Background click handler to close dropdown */}
+      {isClientFilterOpen && <div className="fixed inset-0 z-40 bg-transparent" onClick={() => setIsClientFilterOpen(false)}></div>}
+
       <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-40 transition-colors duration-200">
         <div className="w-full px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3">
@@ -531,17 +548,57 @@ export default function App() {
                 </button>
              )}
 
-             <div className="hidden md:flex items-center space-x-2 bg-slate-100 dark:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600">
-              <Filter className="w-4 h-4 text-brand-600 dark:text-brand-400" aria-hidden="true" />
-              <select value={selectedClient} onChange={(e) => setSelectedClient(e.target.value)} className="bg-transparent text-sm font-medium text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer" aria-label="Filtrar por Cliente">
-                {uniqueClients.map(c => <option key={c} value={c} className="dark:bg-slate-800">{c}</option>)}
-              </select>
-            </div>
+             {/* CLIENT FILTER (MULTI-SELECT) */}
+             <div className="relative z-50">
+                <button 
+                    onClick={() => setIsClientFilterOpen(!isClientFilterOpen)}
+                    className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg border transition-all ${selectedClients.length > 0 ? 'bg-brand-50 border-brand-200 text-brand-700 dark:bg-brand-900/20 dark:border-brand-800 dark:text-brand-400' : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}
+                >
+                    <Filter className="w-4 h-4" />
+                    <span className="text-sm font-medium max-w-[100px] truncate hidden md:inline">
+                        {selectedClients.length === 0 ? 'Todos Clientes' : `${selectedClients.length} Selecionado(s)`}
+                    </span>
+                    <ChevronDown className="w-3 h-3 ml-1" />
+                </button>
+                
+                {isClientFilterOpen && (
+                    <div className="absolute top-full right-0 mt-2 w-64 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 py-2 animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
+                        <div className="px-3 pb-2 mb-2 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Filtrar Clientes</span>
+                            <button 
+                                onClick={() => setSelectedClients([])}
+                                className="text-xs text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300 font-medium"
+                            >
+                                Limpar
+                            </button>
+                        </div>
+                        <div className="max-h-60 overflow-y-auto custom-scrollbar px-1">
+                            {uniqueClients.length === 0 ? (
+                                <div className="px-3 py-2 text-sm text-slate-400 text-center italic">Nenhum cliente disponível</div>
+                            ) : (
+                                uniqueClients.map(client => {
+                                    const isSelected = selectedClients.includes(client);
+                                    return (
+                                        <button
+                                            key={client}
+                                            onClick={() => toggleClientSelection(client)}
+                                            className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-md transition-colors ${isSelected ? 'text-brand-700 dark:text-brand-300 font-medium bg-brand-50 dark:bg-brand-900/20' : 'text-slate-700 dark:text-slate-200'}`}
+                                        >
+                                            {isSelected ? <CheckSquare size={16} className="shrink-0 text-brand-600 dark:text-brand-400" /> : <Square size={16} className="shrink-0 text-slate-300 dark:text-slate-500" />}
+                                            <span className="truncate">{client}</span>
+                                        </button>
+                                    );
+                                })
+                            )}
+                        </div>
+                    </div>
+                )}
+             </div>
 
             {!isReadOnly && (
               <>
                 {activeTab !== 'dashboard' && (
-                    <button onClick={() => setIsHolidayManagerOpen(true)} className="flex bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-lg text-sm font-medium transition-colors items-center space-x-2 border border-slate-200 dark:border-slate-600 relative" title="Gerenciar Dias Não Úteis">
+                    <button onClick={() => setIsHolidayManagerOpen(true)} className="hidden md:flex bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-lg text-sm font-medium transition-colors items-center space-x-2 border border-slate-200 dark:border-slate-600 relative" title="Gerenciar Dias Não Úteis">
                         <CalendarDays className="w-4 h-4" />
                         <span className="hidden lg:inline">Feriados</span>
                     </button>
@@ -614,12 +671,7 @@ export default function App() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto items-end sm:items-center">
-             <div className="md:hidden w-full flex items-center space-x-2 bg-white dark:bg-slate-800 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600">
-                <Filter className="w-4 h-4 text-brand-600 dark:text-brand-400" />
-                <select value={selectedClient} onChange={(e) => setSelectedClient(e.target.value)} className="bg-transparent w-full text-sm font-medium text-slate-700 dark:text-slate-200 focus:outline-none" aria-label="Filtrar por Cliente">
-                  {uniqueClients.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-            </div>
+             
             {!currentUser && ( <button onClick={() => setIsLoginModalOpen(true)} className="md:hidden w-full flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 dark:bg-brand-900/20 dark:hover:bg-brand-900/40 text-brand-700 dark:text-brand-400 px-3 py-2 rounded-lg text-sm font-medium transition-colors border border-brand-100 dark:border-brand-900/30"><LogIn size={16} /><span>Entrar</span></button> )}
             {currentUser && ( <div className="md:hidden w-full flex items-center justify-between bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-lg"><span className="text-sm font-bold text-slate-700 dark:text-slate-200">{formatUsername(currentUser.email)}</span><button onClick={logoutUser} className="text-rose-600 dark:text-rose-400 text-xs font-bold uppercase">Sair</button></div> )}
 
