@@ -398,7 +398,25 @@ export default function App() {
 
   const handleAddClient = (client: Omit<ClientDoc, 'id'>) => addClient(client);
   const handleUpdateClient = (client: ClientDoc) => updateClientInDb(client);
-  const handleDeleteClient = (id: string) => { if(confirm("Excluir cliente?")) deleteClientFromDb(id); };
+  
+  // Referential Integrity Check
+  const handleDeleteClient = (id: string) => { 
+      const clientToDelete = clients.find(c => c.id === id);
+      if (!clientToDelete) return;
+
+      const associatedProjects = projects.filter(p => p.client === clientToDelete.name).length;
+      const associatedMaterials = materials.filter(m => m.client === clientToDelete.name).length;
+      const associatedPurchases = purchases.filter(p => p.client === clientToDelete.name).length;
+
+      if (associatedProjects > 0 || associatedMaterials > 0 || associatedPurchases > 0) {
+          alert(`Não é possível excluir o cliente "${clientToDelete.name}".\n\nExistem registros vinculados:\n- ${associatedProjects} Projetos\n- ${associatedMaterials} Listas de Materiais\n- ${associatedPurchases} Compras\n\nPor favor, exclua ou reatribua esses registros antes de remover o cliente.`);
+          return;
+      }
+
+      if(confirm(`Tem certeza que deseja excluir o cliente "${clientToDelete.name}"?`)) {
+          deleteClientFromDb(id); 
+      }
+  };
 
   const handleBatchUpdate = (ids: string[], field: keyof ProjectFile, value: any) => {
       ids.forEach(id => {

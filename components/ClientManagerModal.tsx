@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { X, Building2, MapPin, Plus, Trash2, Edit2, Save, HardHat } from 'lucide-react';
 import { ClientDoc, SiteType } from '../types';
@@ -17,7 +18,31 @@ export const ClientManagerModal: React.FC<ClientManagerModalProps> = ({ clients,
 
   const resetForm = () => { setFormData({ name: '', location: '', type: SiteType.CONSTRUCTION_SITE, numberOfBases: 0 }); setEditingId(null); };
   const handleEdit = (client: ClientDoc) => { setEditingId(client.id); const { id, ...data } = client; setFormData(data); };
-  const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); if (!formData.name) return; if (editingId) { onUpdateClient({ id: editingId, ...formData }); } else { onAddClient(formData); } resetForm(); };
+  
+  const handleSubmit = (e: React.FormEvent) => { 
+      e.preventDefault(); 
+      if (!formData.name) return; 
+
+      // Validação de Duplicidade
+      const normalizedName = formData.name.trim().toLowerCase();
+      const isDuplicate = clients.some(c => {
+          // Se estiver editando, ignora o próprio ID para não dar falso positivo
+          if (editingId && c.id === editingId) return false;
+          return c.name.trim().toLowerCase() === normalizedName;
+      });
+
+      if (isDuplicate) {
+          alert("Erro: Já existe uma Obra/Cliente cadastrado com este nome.\nPor favor, utilize um nome único.");
+          return;
+      }
+
+      if (editingId) { 
+          onUpdateClient({ id: editingId, ...formData }); 
+      } else { 
+          onAddClient(formData); 
+      } 
+      resetForm(); 
+  };
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
