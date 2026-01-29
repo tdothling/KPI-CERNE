@@ -35,13 +35,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
 
   const stats = useMemo(() => {
     const timeByDiscipline: Record<string, { totalDays: number; count: number }> = {};
-    const blockedByClient: Record<string, { totalDays: number; count: number }> = {};
     const fttByDiscipline: Record<string, { totalGroups: number; successGroups: number }> = {};
+    const clientResponseMap: Record<string, { totalDays: number; count: number }> = {};
     const fileGroups: Record<string, { discipline: string, hasRevisionOrRejection: boolean }> = {};
     const volumeMap: Record<string, any> = {};
     const reasonsMap: Record<string, number> = {};
 
     data.forEach(project => {
+      // 1. Execution Time Calculation
       let duration = 0;
       if (project.startDate && isValid(parseISO(project.startDate))) {
         const start = parseISO(project.startDate);
@@ -63,14 +64,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
         timeByDiscipline[project.discipline].count += 1;
       }
 
-      if (project.blockedDays >= 0) {
-        if (!blockedByClient[project.client]) {
-            blockedByClient[project.client] = { totalDays: 0, count: 0 };
-        }
-        blockedByClient[project.client].totalDays += project.blockedDays;
-        blockedByClient[project.client].count += 1;
+      // 2. Client Response Time (New KPI)
+      // Uses blockedDays which represents (Feedback Date - Send Date) in business days
+      if (project.blockedDays !== undefined && project.blockedDays !== null) {
+          // Only consider valid numeric blocked days and projects that actually have feedback logic applied
+          const days = Number(project.blockedDays);
+          // Check if it has a feedback date or status that implies feedback
+          if (days >= 0 && (project.feedbackDate || project.status === Status.APPROVED || project.status === Status.REJECTED)) {
+              if (!clientResponseMap[project.client]) {
+                  clientResponseMap[project.client] = { totalDays: 0, count: 0 };
+              }
+              clientResponseMap[project.client].totalDays += days;
+              clientResponseMap[project.client].count += 1;
+          }
       }
 
+      // 3. FTT & Groups Logic
       const baseName = getProjectBaseName(project.filename);
       const groupKey = `${project.client}|${project.discipline}|${baseName}`;
 
@@ -86,6 +95,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
          reasonsMap[rev.reason] = (reasonsMap[rev.reason] || 0) + 1;
       });
 
+      // 4. Volume Logic
       if (!volumeMap[project.client]) {
         volumeMap[project.client] = { name: project.client, total: 0 };
       }
@@ -108,10 +118,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
       avgDays: timeByDiscipline[d].count ? Number((timeByDiscipline[d].totalDays / timeByDiscipline[d].count).toFixed(1)) : 0
     }));
 
-    const blockedData = Object.keys(blockedByClient).map(c => ({
-      name: c,
-      days: blockedByClient[c].count ? Number((blockedByClient[c].totalDays / blockedByClient[c].count).toFixed(1)) : 0
-    })).filter(d => d.days > 0);
+    const clientResponseData = Object.keys(clientResponseMap).map(c => ({
+        name: c,
+        avgDays: clientResponseMap[c].count ? Number((clientResponseMap[c].totalDays / clientResponseMap[c].count).toFixed(1)) : 0
+    })).sort((a, b) => b.avgDays - a.avgDays); // Sort descending: Slowest clients first
 
     const fttData = Object.keys(fttByDiscipline).map(d => ({
       name: d,
@@ -126,7 +136,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
 
-    return { executionData, blockedData, fttData, volumeData, reasonsData };
+    return { executionData, fttData, volumeData, reasonsData, clientResponseData };
   }, [data, holidays]);
 
   const materialStats = useMemo(() => {
@@ -209,6 +219,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
           </div>
 
           <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200">
+            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4">Tempo Resposta Cliente</h3>
+            <div className="h-60">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                <BarChart data={stats.clientResponseData} layout="vertical" margin={{ left: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={true} stroke={gridColor} />
+                  <XAxis type="number" unit="d" stroke={axisColor} fontSize={10} />
+                  <YAxis dataKey="name" type="category" width={80} fontSize={10} stroke={axisColor} />
+                  <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ backgroundColor: tooltipBg, color: tooltipText, border: isDarkMode ? '1px solid #475569' : 'none' }} itemStyle={{ color: tooltipText }} labelStyle={{ color: tooltipText }} formatter={(value: number) => [`${value} dias`, 'Média']} />
+                  <Bar dataKey="avgDays" name="Média Dias" radius={[0, 4, 4, 0]} barSize={20} fill="#f59e0b" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200">
             <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4">Motivos de Revisão (Recorrência)</h3>
             <div className="h-60">
               {stats.reasonsData.length > 0 ? (
@@ -244,23 +269,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
                     ))}
                   </Bar>
                 </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200">
-            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4">Média de Tempo Bloqueado</h3>
-            <div className="h-60">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                <PieChart>
-                  <Pie data={stats.blockedData} cx="50%" cy="50%" innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="days">
-                    {stats.blockedData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value: number) => [`${value} dias (média)`, 'Bloqueado']} contentStyle={{ backgroundColor: tooltipBg, color: tooltipText, border: isDarkMode ? '1px solid #475569' : 'none' }} itemStyle={{ color: tooltipText }} />
-                  <Legend verticalAlign="bottom" height={36} iconSize={10} fontSize={10}/>
-                </PieChart>
               </ResponsiveContainer>
             </div>
           </div>
