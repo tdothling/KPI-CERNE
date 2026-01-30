@@ -22,7 +22,8 @@ export const calculateBusinessDaysWithHolidays = (start: Date, end: Date, holida
     if (!isValid(start) || !isValid(end)) return 0;
     if (end < start) return 0;
 
-    let days = differenceInBusinessDays(end, start);
+    // Adicionado + 1 para tornar o cálculo inclusivo (ex: Inicio e Fim no mesmo dia = 1 dia de trabalho)
+    let days = differenceInBusinessDays(end, start) + 1;
     
     // Optimization: Se não houver feriados, retorno rápido
     if (!holidays || holidays.length === 0) return Math.max(0, days);

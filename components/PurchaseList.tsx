@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { PurchaseDoc, PurchaseStatus } from '../types';
 import { Trash2, Edit2, ShoppingCart, Search, Plus, ExternalLink, CheckCircle2, Clock, Truck, XCircle, MapPin, Briefcase, Calendar, ArrowRight, CreditCard, CheckSquare, Eye, X } from 'lucide-react';
@@ -15,7 +16,22 @@ interface PurchaseListProps {
 }
 
 const formatDateDisplay = (dateStr: string) => { if (!dateStr) return '-'; const date = parseISO(dateStr); return isValid(date) ? format(date, 'dd/MM/yyyy') : '-'; };
-const calculateBusinessDays = (start: Date, end: Date, holidays: string[]) => { if (!isValid(start) || !isValid(end)) return 0; if (end < start) return 0; let days = differenceInBusinessDays(end, start); let holidaysOnWeekdays = 0; holidays.forEach(h => { const hDate = parseISO(h); if (isValid(hDate) && isWithinInterval(hDate, { start, end })) { if (!isWeekend(hDate)) { holidaysOnWeekdays++; } } }); return Math.max(0, days - holidaysOnWeekdays); };
+const calculateBusinessDays = (start: Date, end: Date, holidays: string[]) => { 
+    if (!isValid(start) || !isValid(end)) return 0; 
+    if (end < start) return 0; 
+    
+    // Adicionado +1 para tornar inclusivo (igual ao utils.ts)
+    let days = differenceInBusinessDays(end, start) + 1; 
+    
+    let holidaysOnWeekdays = 0; 
+    holidays.forEach(h => { 
+        const hDate = parseISO(h); 
+        if (isValid(hDate) && isWithinInterval(hDate, { start, end })) { 
+            if (!isWeekend(hDate)) { holidaysOnWeekdays++; } 
+        } 
+    }); 
+    return Math.max(0, days - holidaysOnWeekdays); 
+};
 
 export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, onUpdate, onDelete, currentUser, holidays, readOnly = false }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
