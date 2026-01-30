@@ -1,8 +1,10 @@
+
 import React, { useMemo, useState } from 'react';
 import { ProjectFile, Discipline, Status } from '../types';
 import { differenceInCalendarDays, differenceInBusinessDays, format, startOfDay, endOfDay, eachDayOfInterval, min, max, parseISO, isValid, isWeekend, isWithinInterval } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ChevronRight, ChevronDown, Layers, ZoomIn, X, Briefcase, CalendarClock, CalendarRange, CheckCircle2 } from 'lucide-react';
+import { calculateBusinessDaysWithHolidays } from '../utils';
 
 interface ProjectTimelineProps {
   projects: ProjectFile[];
@@ -22,13 +24,6 @@ const DISCIPLINE_COLORS: Record<string, string> = {
 };
 
 const STRIPE_PATTERN_STYLE = { backgroundImage: 'linear-gradient(45deg,rgba(255,255,255,.15) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.15) 50%,rgba(255,255,255,.15) 75%,transparent 75%,transparent)', backgroundSize: '1rem 1rem' };
-
-const calculateDuration = (start: Date, end: Date, holidays: string[]) => {
-    const businessDays = differenceInBusinessDays(end, start) + 1;
-    let holidaysOnWeekdays = 0;
-    holidays.forEach(h => { const hDate = parseISO(h); if (isValid(hDate) && isWithinInterval(hDate, { start, end })) { if (!isWeekend(hDate)) holidaysOnWeekdays++; } });
-    return Math.max(0, businessDays - holidaysOnWeekdays);
-};
 
 const ClientDetailGantt = ({ clientName, projects, holidays, onClose }: { clientName: string, projects: ProjectFile[], holidays: string[], onClose: () => void }) => {
     const [expandedDisciplines, setExpandedDisciplines] = useState<Set<string>>(new Set());
@@ -51,12 +46,17 @@ const ClientDetailGantt = ({ clientName, projects, holidays, onClose }: { client
                 let end = (f.endDate && isValid(parseISO(f.endDate))) ? parseISO(f.endDate) : today;
                 if (end < start) end = start;
                 discDates.push(start, end); allDates.push(start, end);
-                fileRows.push({ id: f.id, type: 'FILE', label: f.filename, discipline: f.discipline, status: f.status, start, end, duration: calculateDuration(start, end, holidays) });
+                // Calcula duração considerando periodos
+                const duration = calculateBusinessDaysWithHolidays(start, end, holidays, f.startPeriod, f.endPeriod || (f.endDate ? 'TARDE' : 'TARDE'));
+                
+                fileRows.push({ id: f.id, type: 'FILE', label: f.filename, discipline: f.discipline, status: f.status, start, end, duration });
             });
             fileRows.sort((a, b) => a.start.getTime() - b.start.getTime());
             if (discDates.length > 0) {
                 const minD = min(discDates); const maxD = max(discDates);
-                rowData.push({ id: `disc-${disc}`, type: 'DISCIPLINE', label: disc, discipline: disc, start: minD, end: maxD, duration: calculateDuration(minD, maxD, holidays), children: fileRows });
+                // Duração do grupo é uma aproximação visual, usamos o cálculo padrão
+                const duration = calculateBusinessDaysWithHolidays(minD, maxD, holidays); 
+                rowData.push({ id: `disc-${disc}`, type: 'DISCIPLINE', label: disc, discipline: disc, start: minD, end: maxD, duration, children: fileRows });
             }
         });
         const gStart = min(allDates); const gEnd = max(allDates);
@@ -153,7 +153,7 @@ export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({ projects, holi
                 let e = today;
                 if (p.endDate && isValid(parseISO(p.endDate))) {
                     e = parseISO(p.endDate);
-                } else if (p.sendDate && isValid(parseISO(p.sendDate))) { // Fallback if no end date but sent
+                } else if (p.sendDate && isValid(parseISO(p.sendDate))) { 
                      e = parseISO(p.sendDate);
                 }
                 
@@ -170,7 +170,8 @@ export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({ projects, holi
         return Object.entries(groups).map(([name, stats]) => ({
             name,
             ...stats,
-            duration: calculateDuration(stats.startDate, stats.endDate, holidays)
+            // Na visão macro, mantemos o cálculo aproximado (inteiro), pois envolve muitos arquivos com períodos diferentes
+            duration: calculateBusinessDaysWithHolidays(stats.startDate, stats.endDate, holidays)
         })).sort((a, b) => b.activeFiles - a.activeFiles);
     }, [projects, holidays]);
 

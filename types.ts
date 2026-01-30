@@ -31,6 +31,7 @@ export enum RevisionReason {
 }
 
 export type DateFilterType = 'ALL' | 'MONTH' | 'QUARTER' | 'SEMESTER' | 'YEAR' | 'CUSTOM';
+export type Period = 'MANHA' | 'TARDE';
 
 export interface Revision {
   id: string;
@@ -46,10 +47,19 @@ export interface ProjectFile {
   base: string; // Nova coluna: Base / Setor / Bloco
   discipline: Discipline;
   status: Status;
+  
   startDate: string; // ISO Date
+  startPeriod?: Period; // Novo
+  
   endDate: string; // ISO Date (Fim da Execução)
+  endPeriod?: Period; // Novo
+
   sendDate: string; // ISO Date (Data de Envio)
+  sendPeriod?: Period; // Novo
+
   feedbackDate: string; // ISO Date (Data de Feedback - Aprovação ou Reprovação)
+  feedbackPeriod?: Period; // Novo
+
   blockedDays: number; // Days waiting for client
   revisions: Revision[];
 }
@@ -69,8 +79,13 @@ export interface MaterialDoc {
   filename: string;
   base: string; // Nova coluna adicionada
   discipline: Discipline;
+  
   startDate: string;
+  startPeriod?: Period; // Novo
+
   endDate: string;
+  endPeriod?: Period; // Novo
+  
   status: MaterialStatus;
   revisions: { id: string; date: string; reason: string; comment: string }[];
 }
@@ -91,8 +106,13 @@ export interface PurchaseDoc {
   base: string; // Para qual base/obra
   application: string; // Qual a aplicação (Ex: Infraestrutura elétrica)
   requester: string; // Quem pediu
+  
   requestDate: string; // Data do pedido
+  requestPeriod?: Period; // Novo
+  
   arrivalDate: string; // Data da chegada (vazio se não chegou)
+  arrivalPeriod?: Period; // Novo
+  
   status: PurchaseStatus;
   link?: string; // Link de referência ou rastreio
   observation?: string;

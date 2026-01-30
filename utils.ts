@@ -1,5 +1,6 @@
 
 import { format, parseISO, isValid, differenceInBusinessDays, isWeekend, isWithinInterval } from 'date-fns';
+import { Period } from './types';
 
 export const getProjectBaseName = (filename: string): string => {
   const nameWithoutExt = filename.replace(/\.[^/.]+$/, "");
@@ -18,28 +19,63 @@ export const formatDateDisplay = (dateStr: string) => {
   return isValid(date) ? format(date, 'dd/MM/yyyy') : '-';
 };
 
-export const calculateBusinessDaysWithHolidays = (start: Date, end: Date, holidays: string[]) => {
+export const calculateBusinessDaysWithHolidays = (
+    start: Date, 
+    end: Date, 
+    holidays: string[], 
+    startPeriod: Period = 'MANHA', 
+    endPeriod: Period = 'TARDE'
+) => {
     if (!isValid(start) || !isValid(end)) return 0;
     if (end < start) return 0;
 
-    // Adicionado + 1 para tornar o cálculo inclusivo (ex: Inicio e Fim no mesmo dia = 1 dia de trabalho)
+    // Cálculo base de dias úteis inteiros (inclusivo)
+    // Ex: Seg a Seg = 1 dia
+    // Ex: Seg a Ter = 2 dias
     let days = differenceInBusinessDays(end, start) + 1;
     
-    // Optimization: Se não houver feriados, retorno rápido
-    if (!holidays || holidays.length === 0) return Math.max(0, days);
-
-    let holidaysOnWeekdays = 0;
-    
-    // Itera apenas sobre feriados relevantes (dentro do intervalo)
-    for (const h of holidays) {
-        const hDate = parseISO(h);
-        if (isValid(hDate) && isWithinInterval(hDate, { start, end })) {
-            if (!isWeekend(hDate)) {
-                holidaysOnWeekdays++;
+    // Subtração de feriados
+    if (holidays && holidays.length > 0) {
+        let holidaysOnWeekdays = 0;
+        // Itera apenas sobre feriados relevantes (dentro do intervalo)
+        for (const h of holidays) {
+            const hDate = parseISO(h);
+            if (isValid(hDate) && isWithinInterval(hDate, { start, end })) {
+                if (!isWeekend(hDate)) {
+                    holidaysOnWeekdays++;
+                }
             }
         }
+        days -= holidaysOnWeekdays;
     }
-    return Math.max(0, days - holidaysOnWeekdays);
+
+    // Se dias base for <= 0 (devido a feriados ou erro), retorna 0
+    if (days <= 0) return 0;
+
+    // Ajuste de Frações de Dia com base no Período
+    // Lógica:
+    // Se começou a TARDE, "perdeu" a manhã do primeiro dia (-0.5)
+    // Se terminou de MANHA, "perdeu" a tarde do último dia (-0.5)
+    
+    let adjustment = 0;
+
+    if (startPeriod === 'TARDE') {
+        adjustment -= 0.5;
+    }
+
+    if (endPeriod === 'MANHA') {
+        adjustment -= 0.5;
+    }
+
+    const finalDays = days + adjustment;
+
+    // Garante que não retorne negativo (ex: começar tarde e terminar manhã do mesmo dia não faz sentido na lógica de business days inclusivos, mas retornamos 0.5 se for mesmo dia)
+    // Correção: Mesmo dia Tarde -> Manhã é impossível cronologicamente, mas Tarde -> Tarde é 0.5.
+    // O differenceInBusinessDays para mesmo dia é 1.
+    // Tarde -> Tarde: 1 - 0.5 (Start PM) - 0 (End PM) = 0.5. Correto.
+    // Manhã -> Manhã: 1 - 0 (Start AM) - 0.5 (End AM) = 0.5. Correto.
+    
+    return Math.max(0, finalDays);
 };
 
 export const getStatusColor = (status: string) => {

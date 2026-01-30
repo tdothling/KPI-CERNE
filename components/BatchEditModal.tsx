@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { ProjectFile, Discipline, Status } from '../types';
+import { ProjectFile, Discipline, Status, Period } from '../types';
 import { X, Search, CheckSquare, Square, AlertCircle, CheckCircle2, Send, BadgeCheck, ThumbsDown, ArrowRight, Filter, Layers, Users, GitBranch } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
 import { getRevisionNumber, calculateBusinessDaysWithHolidays } from '../utils';
@@ -16,7 +16,7 @@ interface BatchEditModalProps {
 // Fields allowed for batch editing
 const EDITABLE_FIELDS: { key: keyof ProjectFile; label: string; type: 'text' | 'number' | 'date' | 'select' | 'enum' }[] = [
   { key: 'client', label: 'Cliente', type: 'text' },
-  { key: 'base', label: 'Base / Setor', type: 'text' }, // New Column
+  { key: 'base', label: 'Base / Setor', type: 'text' }, 
   { key: 'discipline', label: 'Disciplina', type: 'enum' },
   { key: 'startDate', label: 'Data Início', type: 'date' },
   { key: 'endDate', label: 'Data Fim', type: 'date' },
@@ -35,6 +35,7 @@ export const BatchEditModal: React.FC<BatchEditModalProps> = ({ projects, onClos
   // Edit Mode State
   const [selectedField, setSelectedField] = useState<keyof ProjectFile>('client');
   const [newValue, setNewValue] = useState<string>('');
+  const [newPeriod, setNewPeriod] = useState<Period>('MANHA'); // Para campos de data
 
   // Workflow Mode State
   const [selectedAction, setSelectedAction] = useState<WorkflowAction>('COMPLETE');
@@ -105,35 +106,48 @@ export const BatchEditModal: React.FC<BatchEditModalProps> = ({ projects, onClos
       return;
     }
 
-    // --- EDIT MODE VALIDATION START ---
-    if (fieldConfig.type === 'date' && newValue) {
-      const projectsToUpdate = projects.filter(p => selectedIds.has(p.id));
-
-      for (const project of projectsToUpdate) {
-        // Validations omitted for brevity, logic follows same pattern as previous
-        if (selectedField === 'startDate' && project.endDate && newValue > project.endDate) { alert(`Erro: Data Início após Fim em ${project.filename}`); return; }
-        if (selectedField === 'endDate' && project.startDate && newValue < project.startDate) { alert(`Erro: Data Fim antes de Início em ${project.filename}`); return; }
-        // ... other validations
-      }
-    }
-    // --- EDIT MODE VALIDATION END ---
-    
     // Apply the value
     onApply(Array.from(selectedIds), selectedField, newValue);
+    
+    // Se for um campo de data, aplica também o período correspondente
+    if (fieldConfig.type === 'date') {
+        let periodField: keyof ProjectFile | null = null;
+        if (selectedField === 'startDate') periodField = 'startPeriod';
+        if (selectedField === 'endDate') periodField = 'endPeriod';
+        if (selectedField === 'sendDate') periodField = 'sendPeriod';
+        if (selectedField === 'feedbackDate') periodField = 'feedbackPeriod';
+
+        if (periodField) {
+            onApply(Array.from(selectedIds), periodField, newPeriod);
+        }
+    }
     
     // AUTO-UPDATE STATUS FOR BATCH DATE EDITS
     if (['startDate', 'endDate', 'sendDate', 'feedbackDate'].includes(selectedField)) {
         const projectsToUpdate = projects.filter(p => selectedIds.has(p.id));
         
         projectsToUpdate.forEach(project => {
+            // Cria um objeto "futuro" para recalcular
             const updated = { ...project, [selectedField]: newValue };
             
+            // Se estamos editando datas de fluxo, precisamos atualizar o período no objeto temporário
+            if (selectedField === 'startDate') updated.startPeriod = newPeriod;
+            if (selectedField === 'endDate') updated.endPeriod = newPeriod;
+            if (selectedField === 'sendDate') updated.sendPeriod = newPeriod;
+            if (selectedField === 'feedbackDate') updated.feedbackPeriod = newPeriod;
+
             if (selectedField === 'sendDate' || selectedField === 'feedbackDate') {
                 if (updated.sendDate && updated.feedbackDate) {
                     const send = parseISO(updated.sendDate);
                     const feedback = parseISO(updated.feedbackDate);
                     if (isValid(send) && isValid(feedback) && feedback >= send) {
-                        const newBlocked = calculateBusinessDaysWithHolidays(send, feedback, holidays);
+                        const newBlocked = calculateBusinessDaysWithHolidays(
+                            send, 
+                            feedback, 
+                            holidays, 
+                            updated.sendPeriod || 'MANHA', 
+                            updated.feedbackPeriod || 'TARDE'
+                        );
                         if (newBlocked !== project.blockedDays) {
                             onApply([project.id], 'blockedDays', newBlocked);
                         }
@@ -196,12 +210,22 @@ export const BatchEditModal: React.FC<BatchEditModalProps> = ({ projects, onClos
 
     if (fieldConfig.type === 'date') {
       return (
-        <input 
-          type="date" 
-          value={newValue} 
-          onChange={(e) => setNewValue(e.target.value)} 
-          className={`${commonClasses} dark:[color-scheme:dark]`}
-        />
+        <div className="flex gap-2">
+            <input 
+            type="date" 
+            value={newValue} 
+            onChange={(e) => setNewValue(e.target.value)} 
+            className={`${commonClasses} dark:[color-scheme:dark]`}
+            />
+            <select 
+                value={newPeriod} 
+                onChange={(e) => setNewPeriod(e.target.value as Period)}
+                className="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none"
+            >
+                <option value="MANHA">Manhã</option>
+                <option value="TARDE">Tarde</option>
+            </select>
+        </div>
       );
     }
 
@@ -300,7 +324,7 @@ export const BatchEditModal: React.FC<BatchEditModalProps> = ({ projects, onClos
            />
            <div className="flex gap-2 mt-2 bg-slate-100 dark:bg-slate-700/50 p-2 rounded text-xs text-slate-500 dark:text-slate-400">
                <AlertCircle size={14} className="flex-shrink-0 mt-0.5"/>
-               <p>Atenção: A ação será ignorada para arquivos que não cumprirem a ordem cronológica (Ex: Aprovar antes de Enviar).</p>
+               <p>Atenção: Ações em lote assumem o período da TARDE para conclusão.</p>
            </div>
         </div>
       </div>

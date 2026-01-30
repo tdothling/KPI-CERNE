@@ -34,9 +34,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
   const tooltipText = isDarkMode ? '#f1f5f9' : '#1e293b';
 
   const handlePrint = () => {
-      // Small trick: temporarily switch off dark mode if on, but for now rely on user choice.
-      // Ideally we should enforce light mode for print via CSS but that needs global state.
-      // For now, we trust the browser print dialog preview.
       window.print();
   };
 
@@ -49,7 +46,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
     const reasonsMap: Record<string, number> = {};
 
     data.forEach(project => {
-      // 1. Execution Time Calculation
+      // 1. Execution Time Calculation (with Periods)
       let duration = 0;
       if (project.startDate && isValid(parseISO(project.startDate))) {
         const start = parseISO(project.startDate);
@@ -60,7 +57,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
             end = new Date();
         }
         if (end < start) end = start;
-        duration = calculateBusinessDaysWithHolidays(start, end, holidays);
+        
+        // Pass periods to calculation
+        duration = calculateBusinessDaysWithHolidays(
+            start, 
+            end, 
+            holidays, 
+            project.startPeriod, 
+            project.endPeriod || (project.endDate ? 'TARDE' : 'TARDE') // Se não tiver data fim, assume fim do dia de hoje
+        );
       }
 
       if (!timeByDiscipline[project.discipline]) {
@@ -72,11 +77,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
       }
 
       // 2. Client Response Time (New KPI)
-      // Uses blockedDays which represents (Feedback Date - Send Date) in business days
+      // Uses blockedDays which is already calculated with fractional logic in ProjectList or BatchEdit
       if (project.blockedDays !== undefined && project.blockedDays !== null) {
-          // Only consider valid numeric blocked days and projects that actually have feedback logic applied
           const days = Number(project.blockedDays);
-          // Check if it has a feedback date or status that implies feedback
           if (days >= 0 && (project.feedbackDate || project.status === Status.APPROVED || project.status === Status.REJECTED)) {
               if (!clientResponseMap[project.client]) {
                   clientResponseMap[project.client] = { totalDays: 0, count: 0 };
@@ -128,7 +131,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
     const clientResponseData = Object.keys(clientResponseMap).map(c => ({
         name: c,
         avgDays: clientResponseMap[c].count ? Number((clientResponseMap[c].totalDays / clientResponseMap[c].count).toFixed(1)) : 0
-    })).sort((a, b) => b.avgDays - a.avgDays); // Sort descending: Slowest clients first
+    })).sort((a, b) => b.avgDays - a.avgDays); 
 
     const fttData = Object.keys(fttByDiscipline).map(d => ({
       name: d,
