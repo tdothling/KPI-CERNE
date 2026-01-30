@@ -69,12 +69,7 @@ export const calculateBusinessDaysWithHolidays = (
 
     const finalDays = days + adjustment;
 
-    // Garante que não retorne negativo (ex: começar tarde e terminar manhã do mesmo dia não faz sentido na lógica de business days inclusivos, mas retornamos 0.5 se for mesmo dia)
-    // Correção: Mesmo dia Tarde -> Manhã é impossível cronologicamente, mas Tarde -> Tarde é 0.5.
-    // O differenceInBusinessDays para mesmo dia é 1.
-    // Tarde -> Tarde: 1 - 0.5 (Start PM) - 0 (End PM) = 0.5. Correto.
-    // Manhã -> Manhã: 1 - 0 (Start AM) - 0.5 (End AM) = 0.5. Correto.
-    
+    // Garante que não retorne negativo 
     return Math.max(0, finalDays);
 };
 
