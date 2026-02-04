@@ -11,6 +11,11 @@ export enum Discipline {
   OTHER = 'Outros'
 }
 
+export enum ProjectPhase {
+  PRELIMINARY = 'Preliminar',
+  EXECUTIVE = 'Executivo'
+}
+
 export enum Status {
   IN_PROGRESS = 'Em Andamento',
   DONE = 'Execução Concluída', // Alterado de 'Concluído' para ser mais específico
@@ -46,6 +51,7 @@ export interface ProjectFile {
   client: string;
   base: string; // Nova coluna: Base / Setor / Bloco
   discipline: Discipline;
+  phase?: ProjectPhase; // Nova coluna: Fase do Projeto
   status: Status;
   
   startDate: string; // ISO Date
