@@ -25,6 +25,9 @@ const MaterialRow = memo(({ doc, readOnly, setPendingCompletion, handleOpenRevis
         return d;
     };
     
+    // Auto-detect period for completion
+    const currentPeriod: Period = new Date().getHours() < 12 ? 'MANHA' : 'TARDE';
+
     return (
         <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
           <td className="px-6 py-4 font-medium text-slate-800 dark:text-slate-200"><div className="flex items-center gap-2">{isRevision && <CornerDownRight size={14} className="text-slate-400" />}<FileText size={16} className="text-slate-400" /><span className={doc.status === 'REVISED' ? 'line-through text-slate-400' : ''}>{doc.filename}</span></div></td>
@@ -37,7 +40,7 @@ const MaterialRow = memo(({ doc, readOnly, setPendingCompletion, handleOpenRevis
           {!readOnly && (
             <td className="px-6 py-4 text-center">
                 <div className="flex items-center justify-center gap-2">
-                {doc.status === 'IN_PROGRESS' && (<button onClick={() => setPendingCompletion({ id: doc.id, date: new Date().toISOString().split('T')[0], period: 'TARDE' })} title="Concluir Lista" aria-label="Concluir Lista" className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md transition-colors border border-emerald-200"><CheckSquare size={16} /></button>)}
+                {doc.status === 'IN_PROGRESS' && (<button onClick={() => setPendingCompletion({ id: doc.id, date: new Date().toISOString().split('T')[0], period: currentPeriod })} title="Concluir Lista" aria-label="Concluir Lista" className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md transition-colors border border-emerald-200"><CheckSquare size={16} /></button>)}
                 {doc.status !== 'REVISED' && (<button onClick={() => handleOpenRevisionModal(doc)} title="Gerar Revisão" aria-label="Gerar Revisão" className="p-1.5 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-brand-600 rounded-md transition-colors border border-slate-200"><GitBranch size={16} /></button>)}
                 </div>
             </td>
@@ -80,9 +83,9 @@ export const MaterialList: React.FC<MaterialListProps> = ({ materials, onUpdate,
     base: '',
     discipline: Discipline.ARCHITECTURE,
     startDate: '',
-    startPeriod: 'MANHA',
+    startPeriod: new Date().getHours() < 12 ? 'MANHA' : 'TARDE',
     endDate: '',
-    endPeriod: 'TARDE',
+    endPeriod: new Date().getHours() < 12 ? 'MANHA' : 'TARDE',
     status: 'IN_PROGRESS'
   });
 

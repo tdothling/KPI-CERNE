@@ -372,17 +372,21 @@ export default function App() {
 
   const updateProject = (updated: ProjectFile) => updateProjectInDb(updated);
   const deleteProject = (id: string) => { deleteProjectFromDb(id); };
+  
   const addProjectRevision = (id: string, reason: RevisionReason, comment: string) => {
       const originalProject = projects.find(p => p.id === id);
       if (!originalProject) return;
       updateProjectInDb({ ...originalProject, status: Status.REVISED });
       const { id: _, ...projectData } = originalProject;
+      
+      const currentPeriod: Period = new Date().getHours() < 12 ? 'MANHA' : 'TARDE';
+
       addProject({
         ...projectData, 
         filename: generateRevisionFilename(originalProject.filename), 
         status: Status.IN_PROGRESS,
         startDate: new Date().toISOString().split('T')[0], 
-        startPeriod: 'MANHA', // Default for new revision
+        startPeriod: currentPeriod, // Auto-detect period
         endDate: '', sendDate: '', feedbackDate: '', blockedDays: 0, 
         revisions: [{ id: crypto.randomUUID(), date: new Date().toISOString().split('T')[0], reason, comment }]
       });
@@ -399,6 +403,9 @@ export default function App() {
       // O novo arquivo nasce com a data de início igual ao término da fase anterior (ou hoje)
       const newStartDate = original.feedbackDate || original.endDate || new Date().toISOString().split('T')[0];
       
+      // Calculate period for the start of the new phase (Current time)
+      const currentPeriod: Period = new Date().getHours() < 12 ? 'MANHA' : 'TARDE';
+
       // Adiciona sufixo se não houver, para evitar confusão visual
       let newFilename = original.filename;
       if (!newFilename.toLowerCase().includes('exec') && !newFilename.toLowerCase().includes('rev')) {
@@ -419,7 +426,7 @@ export default function App() {
           phase: ProjectPhase.EXECUTIVE,
           status: Status.IN_PROGRESS,
           startDate: newStartDate,
-          startPeriod: 'MANHA', // Reinicia ciclo
+          startPeriod: currentPeriod, // Auto-detect period
           endDate: '',
           sendDate: '',
           feedbackDate: '',
@@ -435,12 +442,15 @@ export default function App() {
       if (!original) return;
       updateMaterialInDb({ ...original, status: 'REVISED' });
       const { id: _, ...materialData } = original;
+      
+      const currentPeriod: Period = new Date().getHours() < 12 ? 'MANHA' : 'TARDE';
+
       addMaterial({
           ...materialData,
           filename: generateRevisionFilename(original.filename),
           status: 'IN_PROGRESS',
           startDate: new Date().toISOString().split('T')[0], endDate: '',
-          startPeriod: 'MANHA',
+          startPeriod: currentPeriod, // Auto-detect period
           revisions: [{ id: crypto.randomUUID(), date: new Date().toISOString().split('T')[0], reason: reason.toString(), comment }]
       });
   };

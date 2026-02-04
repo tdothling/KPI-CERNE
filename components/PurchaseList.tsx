@@ -44,6 +44,9 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, on
   const [pendingBuy, setPendingBuy] = useState<{ id: string, date: string, period: Period } | null>(null);
   const [pendingDelivery, setPendingDelivery] = useState<{ id: string, date: string, period: Period } | null>(null);
 
+  // Auto-detect current period
+  const currentPeriod: Period = new Date().getHours() < 12 ? 'MANHA' : 'TARDE';
+
   const [formData, setFormData] = useState<Omit<PurchaseDoc, 'id'>>({
     description: '',
     client: '',
@@ -51,9 +54,9 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, on
     application: '',
     requester: currentUser || '',
     requestDate: new Date().toISOString().split('T')[0],
-    requestPeriod: 'MANHA',
+    requestPeriod: currentPeriod, // Auto-detect
     arrivalDate: '',
-    arrivalPeriod: 'TARDE',
+    arrivalPeriod: currentPeriod, // Auto-detect
     status: PurchaseStatus.PENDING,
     link: '',
     observation: ''
@@ -71,7 +74,7 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, on
   );
 
   const handleOpenModal = (purchase?: PurchaseDoc) => {
-      if (purchase) { setEditingId(purchase.id); const { id, ...data } = purchase; setFormData(data); } else { setEditingId(null); setFormData({ description: '', client: '', base: '', application: '', requester: currentUser || '', requestDate: new Date().toISOString().split('T')[0], requestPeriod: 'MANHA', arrivalDate: '', arrivalPeriod: 'TARDE', status: PurchaseStatus.PENDING, link: '', observation: '' }); }
+      if (purchase) { setEditingId(purchase.id); const { id, ...data } = purchase; setFormData(data); } else { setEditingId(null); setFormData({ description: '', client: '', base: '', application: '', requester: currentUser || '', requestDate: new Date().toISOString().split('T')[0], requestPeriod: currentPeriod, arrivalDate: '', arrivalPeriod: currentPeriod, status: PurchaseStatus.PENDING, link: '', observation: '' }); }
       setIsModalOpen(true);
   };
 
@@ -142,8 +145,8 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, on
                                 {!readOnly && (
                                     <td className="px-6 py-4 text-center">
                                         <div className="flex items-center justify-center gap-2">
-                                            {p.status === PurchaseStatus.PENDING && <button onClick={() => setPendingBuy({ id: p.id, date: new Date().toISOString().split('T')[0], period: 'TARDE' })} title="Registrar Compra" aria-label="Registrar Compra" className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md transition-colors border border-blue-200"><CreditCard size={16} /></button>}
-                                            {p.status === PurchaseStatus.BOUGHT && <button onClick={() => setPendingDelivery({ id: p.id, date: new Date().toISOString().split('T')[0], period: 'TARDE' })} title="Registrar Chegada (Entrega)" aria-label="Registrar Chegada" className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md transition-colors border border-emerald-200"><CheckSquare size={16} /></button>}
+                                            {p.status === PurchaseStatus.PENDING && <button onClick={() => setPendingBuy({ id: p.id, date: new Date().toISOString().split('T')[0], period: currentPeriod })} title="Registrar Compra" aria-label="Registrar Compra" className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md transition-colors border border-blue-200"><CreditCard size={16} /></button>}
+                                            {p.status === PurchaseStatus.BOUGHT && <button onClick={() => setPendingDelivery({ id: p.id, date: new Date().toISOString().split('T')[0], period: currentPeriod })} title="Registrar Chegada (Entrega)" aria-label="Registrar Chegada" className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md transition-colors border border-emerald-200"><CheckSquare size={16} /></button>}
                                         </div>
                                     </td>
                                 )}
