@@ -17,7 +17,7 @@ interface ProjectListProps {
 }
 
 // Optimization: Memoized Row Component
-const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHistoryProject, setPendingCompletion, setPendingSend, setPendingApproval, setPendingRejection, setActiveRevModal, setDetailsProject, setEditingProject, setProjectToDelete, onPromote }: any) => {
+const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHistoryProject, setPendingCompletion, setPendingSend, setPendingApproval, setPendingRejection, setActiveRevModal, setDetailsProject, setEditingProject, setProjectToDelete, onPromote, executiveExistenceMap }: any) => {
     const revNumber = getRevisionNumber(project.filename);
     const isRevision = revNumber > 0;
     const currentBase = getProjectBaseName(project.filename);
@@ -25,8 +25,20 @@ const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHist
     const isLastInGroup = (!nextProject || getProjectBaseName(nextProject.filename) !== currentBase);
     const canCreateRevision = isLastInGroup || project.status === Status.REJECTED;
     
-    // Check for promotion eligibility: Must be Preliminary, Finished/Approved, and not already promoted (this logic is loose, relies on user discretion or checking if EXEC exists, but for now button visibility is enough)
-    const canPromote = onPromote && project.phase === ProjectPhase.PRELIMINARY && (project.status === Status.DONE || project.status === Status.APPROVED);
+    // Lógica de Promoção:
+    // 1. Deve ser Preliminar
+    // 2. Deve estar Concluído ou Aprovado
+    // 3. NÃO pode existir um Executivo correspondente (verificado via mapa)
+    
+    // Normaliza o nome para verificar no mapa (remove _EXEC se por acaso tiver, e remove espaços)
+    const baseNameKey = getProjectBaseName(project.filename).replace(/_EXEC/i, '').trim().toLowerCase();
+    const uniqueKey = `${project.client}|${project.discipline}|${baseNameKey}`.toLowerCase();
+    const hasExecutiveVersion = executiveExistenceMap.has(uniqueKey);
+
+    const canPromote = onPromote && 
+                       project.phase === ProjectPhase.PRELIMINARY && 
+                       (project.status === Status.DONE || project.status === Status.APPROVED) &&
+                       !hasExecutiveVersion;
 
     let feedbackColorClass = "text-slate-600 dark:text-slate-400";
     if (project.status === Status.APPROVED) feedbackColorClass = "text-emerald-700 dark:text-emerald-400 font-medium";
@@ -131,6 +143,21 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'filename', direction: 'asc', });
   const [revReason, setRevReason] = useState<RevisionReason>(RevisionReason.CLIENT_REQUEST);
   const [revComment, setRevComment] = useState('');
+
+  // Computa o Mapa de Existência de Executivos
+  // Isso escaneia todos os projetos para saber quais já têm fase Executiva
+  // A chave é: Cliente + Disciplina + NomeBaseLimpo (sem _EXEC)
+  const executiveExistenceMap = useMemo(() => {
+      const map = new Set<string>();
+      projects.forEach(p => {
+          if (p.phase === ProjectPhase.EXECUTIVE) {
+              const baseName = getProjectBaseName(p.filename).replace(/_EXEC/i, '').trim().toLowerCase();
+              const key = `${p.client}|${p.discipline}|${baseName}`.toLowerCase();
+              map.add(key);
+          }
+      });
+      return map;
+  }, [projects]);
 
   const sortedProjects = useMemo(() => {
     const filtered = projects.filter(p => p.filename.toLowerCase().includes(search.toLowerCase()) || p.client.toLowerCase().includes(search.toLowerCase()) || p.discipline.toLowerCase().includes(search.toLowerCase()) || (p.base && p.base.toLowerCase().includes(search.toLowerCase())));
@@ -263,6 +290,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                     setEditingProject={setEditingProject}
                     setProjectToDelete={setProjectToDelete}
                     onPromote={onPromote}
+                    executiveExistenceMap={executiveExistenceMap}
                 />
             ))}
              {sortedProjects.length === 0 && (<tr><td colSpan={readOnly ? 11 : 13} className="px-6 py-10 text-center text-slate-400 italic">Nenhum registro encontrado.</td></tr>)}
