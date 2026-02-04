@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { ProjectFile, Discipline, Status, RevisionReason, DateFilterType, MaterialDoc, PurchaseDoc, ClientDoc, SiteType, ProjectFilterState, ProjectPhase } from './types';
+import { ProjectFile, Discipline, Status, RevisionReason, DateFilterType, MaterialDoc, PurchaseDoc, ClientDoc, SiteType, ProjectFilterState, ProjectPhase, Period } from './types';
 import { Dashboard } from './components/Dashboard';
 import { ProjectList } from './components/ProjectList';
 import { ProjectTimeline } from './components/ProjectTimeline';
@@ -312,6 +312,10 @@ export default function App() {
         return;
     }
 
+    // Auto-detect period based on current time
+    const currentHour = new Date().getHours();
+    const autoPeriod: Period = currentHour < 12 ? 'MANHA' : 'TARDE';
+
     try {
         if (importType === 'PROJECT') {
             const promises = validFiles.map(async (f: any) => {
@@ -326,9 +330,10 @@ export default function App() {
                     client: finalClientName,
                     base: finalBaseName,
                     discipline: discipline, 
-                    phase: uploadPhase, // Usa a fase selecionada
+                    phase: uploadPhase, 
                     status: Status.IN_PROGRESS,
                     startDate: new Date().toISOString().split('T')[0],
+                    startPeriod: autoPeriod, // Set automatic period
                     endDate: '',
                     sendDate: '',
                     feedbackDate: '',
@@ -347,6 +352,7 @@ export default function App() {
                      base: finalBaseName,
                      discipline: metadata.discipline,
                      startDate: new Date().toISOString().split('T')[0],
+                     startPeriod: autoPeriod, // Set automatic period
                      endDate: '',
                      status: 'IN_PROGRESS',
                      revisions: []
@@ -376,6 +382,7 @@ export default function App() {
         filename: generateRevisionFilename(originalProject.filename), 
         status: Status.IN_PROGRESS,
         startDate: new Date().toISOString().split('T')[0], 
+        startPeriod: 'MANHA', // Default for new revision
         endDate: '', sendDate: '', feedbackDate: '', blockedDays: 0, 
         revisions: [{ id: crypto.randomUUID(), date: new Date().toISOString().split('T')[0], reason, comment }]
       });
@@ -433,6 +440,7 @@ export default function App() {
           filename: generateRevisionFilename(original.filename),
           status: 'IN_PROGRESS',
           startDate: new Date().toISOString().split('T')[0], endDate: '',
+          startPeriod: 'MANHA',
           revisions: [{ id: crypto.randomUUID(), date: new Date().toISOString().split('T')[0], reason: reason.toString(), comment }]
       });
   };

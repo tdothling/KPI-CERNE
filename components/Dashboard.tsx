@@ -1,8 +1,8 @@
 
 import React, { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { ProjectFile, Discipline, Status, MaterialDoc } from '../types';
-import { parseISO, isValid, isWeekend, isWithinInterval } from 'date-fns';
+import { ProjectFile, Discipline, Status, MaterialDoc, ProjectPhase } from '../types';
+import { parseISO, isValid } from 'date-fns';
 import { LayoutDashboard, FileDown } from 'lucide-react';
 import { getProjectBaseName, getRevisionNumber, calculateBusinessDaysWithHolidays } from '../utils';
 
@@ -12,8 +12,6 @@ interface DashboardProps {
   isDarkMode?: boolean;
   holidays: string[];
 }
-
-const COLORS = ['#8e1c3e', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1', '#14b8a6', '#64748b'];
 
 const DISCIPLINE_COLORS: Record<string, string> = {
   [Discipline.ARCHITECTURE]: '#8e1c3e', 
@@ -38,7 +36,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
   };
 
   const stats = useMemo(() => {
-    const timeByDiscipline: Record<string, { totalDays: number; count: number }> = {};
+    // Structure for Execution Time by Phase
+    const timeByDiscipline: Record<string, { prelimTotal: number; prelimCount: number; execTotal: number; execCount: number }> = {};
+    
     const fttByDiscipline: Record<string, { totalGroups: number; successGroups: number }> = {};
     const clientResponseMap: Record<string, { totalDays: number; count: number }> = {};
     const fileGroups: Record<string, { discipline: string, hasRevisionOrRejection: boolean }> = {};
@@ -46,7 +46,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
     const reasonsMap: Record<string, number> = {};
 
     data.forEach(project => {
-      // 1. Execution Time Calculation (with Periods)
+      // 1. Execution Time Calculation (Split by Phase)
       let duration = 0;
       if (project.startDate && isValid(parseISO(project.startDate))) {
         const start = parseISO(project.startDate);
@@ -58,26 +58,33 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
         }
         if (end < start) end = start;
         
-        // Pass periods to calculation
         duration = calculateBusinessDaysWithHolidays(
             start, 
             end, 
             holidays, 
             project.startPeriod, 
-            project.endPeriod || (project.endDate ? 'TARDE' : 'TARDE') // Se não tiver data fim, assume fim do dia de hoje
+            project.endPeriod || (project.endDate ? 'TARDE' : 'TARDE') 
         );
       }
 
       if (!timeByDiscipline[project.discipline]) {
-        timeByDiscipline[project.discipline] = { totalDays: 0, count: 0 };
+        timeByDiscipline[project.discipline] = { prelimTotal: 0, prelimCount: 0, execTotal: 0, execCount: 0 };
       }
+
       if (project.startDate) { 
-        timeByDiscipline[project.discipline].totalDays += duration;
-        timeByDiscipline[project.discipline].count += 1;
+        // If phase is missing, default to EXECUTIVE for backward compatibility
+        const phase = project.phase || ProjectPhase.EXECUTIVE;
+        
+        if (phase === ProjectPhase.PRELIMINARY) {
+            timeByDiscipline[project.discipline].prelimTotal += duration;
+            timeByDiscipline[project.discipline].prelimCount += 1;
+        } else {
+            timeByDiscipline[project.discipline].execTotal += duration;
+            timeByDiscipline[project.discipline].execCount += 1;
+        }
       }
 
       // 2. Client Response Time (New KPI)
-      // Uses blockedDays which is already calculated with fractional logic in ProjectList or BatchEdit
       if (project.blockedDays !== undefined && project.blockedDays !== null) {
           const days = Number(project.blockedDays);
           if (days >= 0 && (project.feedbackDate || project.status === Status.APPROVED || project.status === Status.REJECTED)) {
@@ -91,7 +98,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
 
       // 3. FTT & Groups Logic
       const baseName = getProjectBaseName(project.filename);
-      const groupKey = `${project.client}|${project.discipline}|${baseName}`;
+      // Group Key includes Phase to separate stats
+      const groupKey = `${project.client}|${project.discipline}|${baseName}|${project.phase || 'EXEC'}`;
 
       if (!fileGroups[groupKey]) {
           fileGroups[groupKey] = { discipline: project.discipline, hasRevisionOrRejection: false };
@@ -125,7 +133,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
 
     const executionData = Object.keys(timeByDiscipline).map(d => ({
       name: d,
-      avgDays: timeByDiscipline[d].count ? Number((timeByDiscipline[d].totalDays / timeByDiscipline[d].count).toFixed(1)) : 0
+      avgPrelim: timeByDiscipline[d].prelimCount ? Number((timeByDiscipline[d].prelimTotal / timeByDiscipline[d].prelimCount).toFixed(1)) : 0,
+      avgExec: timeByDiscipline[d].execCount ? Number((timeByDiscipline[d].execTotal / timeByDiscipline[d].execCount).toFixed(1)) : 0
     }));
 
     const clientResponseData = Object.keys(clientResponseMap).map(c => ({
@@ -217,7 +226,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 print:grid-cols-2">
           <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200 print:break-inside-avoid print:shadow-none print:border-slate-300">
-            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4">Média Execução (Dias Úteis)</h3>
+            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4">Média Execução por Fase (Dias Úteis)</h3>
             <div className="h-60">
               <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                 <BarChart data={stats.executionData}>
@@ -225,11 +234,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
                   <XAxis dataKey="name" fontSize={10} angle={-45} textAnchor="end" height={60} interval={0} stroke={axisColor} />
                   <YAxis unit="d" width={30} fontSize={12} stroke={axisColor} />
                   <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ backgroundColor: tooltipBg, color: tooltipText, border: isDarkMode ? '1px solid #475569' : 'none' }} itemStyle={{ color: tooltipText }} labelStyle={{ color: tooltipText }} />
-                  <Bar dataKey="avgDays" name="Dias Úteis" radius={[4, 4, 0, 0]}>
-                    {stats.executionData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={DISCIPLINE_COLORS[entry.name] || '#8884d8'} />
-                    ))}
-                  </Bar>
+                  <Legend verticalAlign="top" height={36}/>
+                  <Bar dataKey="avgPrelim" name="Preliminar" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="avgExec" name="Executivo" fill="#8e1c3e" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
