@@ -27,7 +27,7 @@ const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHist
     
     // Lógica de Promoção:
     // 1. Deve ser Preliminar
-    // 2. Deve estar Concluído ou Aprovado
+    // 2. Deve estar Concluído, Aguardando Aprovação ou Aprovado (Permite fluxo flexível)
     // 3. NÃO pode existir um Executivo correspondente (verificado via mapa)
     
     // Normaliza o nome para verificar no mapa (remove _EXEC se por acaso tiver, e remove espaços)
@@ -37,7 +37,7 @@ const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHist
 
     const canPromote = onPromote && 
                        project.phase === ProjectPhase.PRELIMINARY && 
-                       (project.status === Status.DONE || project.status === Status.APPROVED) &&
+                       (project.status === Status.DONE || project.status === Status.WAITING_APPROVAL || project.status === Status.APPROVED) &&
                        !hasExecutiveVersion;
 
     let feedbackColorClass = "text-slate-600 dark:text-slate-400";
