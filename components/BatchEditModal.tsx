@@ -14,11 +14,12 @@ interface BatchEditModalProps {
 }
 
 // Fields allowed for batch editing
+// Status removed to prevent inconsistent states (Status without Date)
 const EDITABLE_FIELDS: { key: keyof ProjectFile; label: string; type: 'text' | 'number' | 'date' | 'select' | 'enum' }[] = [
   { key: 'client', label: 'Cliente', type: 'text' },
   { key: 'base', label: 'Base / Setor', type: 'text' }, 
   { key: 'discipline', label: 'Disciplina', type: 'enum' },
-  { key: 'phase', label: 'Fase (Etapa)', type: 'enum' }, // Add phase here
+  { key: 'phase', label: 'Fase (Etapa)', type: 'enum' },
   { key: 'startDate', label: 'Data Início', type: 'date' },
   { key: 'endDate', label: 'Data Fim', type: 'date' },
   { key: 'sendDate', label: 'Data Envio', type: 'date' },
@@ -205,19 +206,6 @@ export const BatchEditModal: React.FC<BatchEditModalProps> = ({ projects, onClos
         >
           <option value="" disabled>Selecione a Fase</option>
           {Object.values(ProjectPhase).map(p => <option key={p} value={p} className="dark:bg-slate-800">{p}</option>)}
-        </select>
-      );
-    }
-
-    if (fieldConfig.key === 'status') {
-      return (
-        <select 
-          value={newValue} 
-          onChange={(e) => setNewValue(e.target.value)} 
-          className={commonClasses}
-        >
-          <option value="" disabled>Selecione o Status</option>
-          {Object.values(Status).map(s => <option key={s} value={s} className="dark:bg-slate-800">{s}</option>)}
         </select>
       );
     }

@@ -54,6 +54,10 @@ const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHist
     // Calculate current period for actions
     const currentPeriod: Period = new Date().getHours() < 12 ? 'MANHA' : 'TARDE';
 
+    // Estado de Inconsistência (Data Faltante)
+    const missingSendDate = (project.status === Status.WAITING_APPROVAL || project.status === Status.APPROVED || project.status === Status.REJECTED) && !project.sendDate;
+    const missingFeedbackDate = (project.status === Status.APPROVED || project.status === Status.REJECTED) && !project.feedbackDate;
+
     return (
         <tr className={`hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors ${isLastInGroup ? 'border-b-4 border-slate-100 dark:border-slate-800' : ''}`}>
         <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200 border-r border-slate-100 dark:border-slate-700/50">
@@ -76,16 +80,25 @@ const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHist
         <td className="px-4 py-3"><span className={`px-2 py-1 rounded-full text-xs font-semibold border ${getStatusColor(project.status)}`}>{project.status === Status.DONE ? 'Concluído' : project.status}</span></td>
         <td className="px-4 py-3 border-l border-slate-100 dark:border-slate-700/50 text-slate-600 dark:text-slate-400 text-xs">{displayDate(project.startDate, project.startPeriod)}</td>
         <td className="px-4 py-3 border-r border-slate-100 dark:border-slate-700/50 text-slate-600 dark:text-slate-400 text-xs">{displayDate(project.endDate, project.endPeriod)}</td>
-        <td className="px-4 py-3 border-l border-brand-50 dark:border-brand-900/20 bg-brand-50/30 dark:bg-brand-900/10 text-brand-700 dark:text-brand-400 text-xs font-medium">{displayDate(project.sendDate, project.sendPeriod)}</td>
-        <td className={`px-4 py-3 border-r border-slate-100 dark:border-slate-900/30 bg-slate-50/30 dark:bg-slate-900/10 text-xs ${feedbackColorClass}`}>{displayDate(project.feedbackDate, project.feedbackPeriod)}</td>
+        <td className="px-4 py-3 border-l border-brand-50 dark:border-brand-900/20 bg-brand-50/30 dark:bg-brand-900/10 text-brand-700 dark:text-brand-400 text-xs font-medium relative">
+            {displayDate(project.sendDate, project.sendPeriod)}
+            {missingSendDate && <AlertTriangle size={14} className="text-amber-500 absolute top-1 right-1" title="Data de Envio Faltante (Corrija agora)" />}
+        </td>
+        <td className={`px-4 py-3 border-r border-slate-100 dark:border-slate-900/30 bg-slate-50/30 dark:bg-slate-900/10 text-xs ${feedbackColorClass} relative`}>
+            {displayDate(project.feedbackDate, project.feedbackPeriod)}
+            {missingFeedbackDate && <AlertTriangle size={14} className="text-amber-500 absolute top-1 right-1" title="Data de Feedback Faltante" />}
+        </td>
         <td className="px-4 py-3 text-center"><span className="font-mono text-xs text-slate-700 dark:text-slate-300">{project.blockedDays || '-'}</span></td>
         
         {!readOnly && (
             <td className="px-4 py-3">
                 <div className="flex items-center justify-center space-x-2">
                     {project.status === Status.IN_PROGRESS && (<button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingCompletion({ id: project.id, date: today, period: currentPeriod }); }} title="Concluir Execução" aria-label="Concluir Execução" className="p-1.5 bg-violet-50 text-violet-600 hover:bg-violet-100 rounded-md transition-colors border border-violet-200"><CheckSquare size={16} /></button>)}
-                    {(project.status === Status.DONE) && (<button onClick={() => { const today = new Date().toISOString().split('T')[0]; const defaultDate = (project.endDate && today > project.endDate) ? today : (project.endDate || today); setPendingSend({ id: project.id, date: defaultDate, period: currentPeriod }); }} title="Registrar Envio ao Cliente" aria-label="Registrar Envio" className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md transition-colors border border-blue-200"><Send size={16} /></button>)}
-                    {project.status === Status.WAITING_APPROVAL && (<><button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingApproval({ id: project.id, date: today, period: currentPeriod }); }} title="Aprovar Projeto" aria-label="Aprovar" className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md transition-colors border border-emerald-200"><BadgeCheck size={16} /></button><button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingRejection({ id: project.id, date: today, period: currentPeriod }); }} title="Reprovar Projeto" aria-label="Reprovar" className="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-md transition-colors border border-rose-200"><ThumbsDown size={16} /></button></>)}
+                    {/* Botão de Envio aparece se estiver Concluído OU se estiver Aguardando Aprovação mas sem data (Correção) */}
+                    {(project.status === Status.DONE || missingSendDate) && (<button onClick={() => { const today = new Date().toISOString().split('T')[0]; const defaultDate = (project.endDate && today > project.endDate) ? today : (project.endDate || today); setPendingSend({ id: project.id, date: defaultDate, period: currentPeriod }); }} title={missingSendDate ? "Corrigir Data de Envio" : "Registrar Envio ao Cliente"} aria-label="Registrar Envio" className={`p-1.5 rounded-md transition-colors border ${missingSendDate ? 'bg-amber-100 text-amber-700 border-amber-300 animate-pulse' : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200'}`}><Send size={16} /></button>)}
+                    
+                    {project.status === Status.WAITING_APPROVAL && !missingSendDate && (<><button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingApproval({ id: project.id, date: today, period: currentPeriod }); }} title="Aprovar Projeto" aria-label="Aprovar" className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md transition-colors border border-emerald-200"><BadgeCheck size={16} /></button><button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingRejection({ id: project.id, date: today, period: currentPeriod }); }} title="Reprovar Projeto" aria-label="Reprovar" className="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-md transition-colors border border-rose-200"><ThumbsDown size={16} /></button></>)}
+                    
                     {canCreateRevision && project.sendDate && project.status !== Status.REVISED && project.status !== Status.WAITING_APPROVAL && (<button onClick={() => setActiveRevModal(project.id)} title={project.status === Status.REJECTED ? "Gerar Nova Revisão (Pós-Reprovação)" : "Gerar Revisão"} aria-label="Gerar Revisão" className={`p-1.5 rounded-md transition-colors border ${project.status === Status.REJECTED ? 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100' : 'text-slate-400 hover:text-brand-600 border-transparent hover:bg-brand-50'}`}><GitBranch size={16} /></button>)}
                     
                     {/* Botão de Promoção para Executivo */}
