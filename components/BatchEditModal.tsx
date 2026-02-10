@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { ProjectFile, Discipline, Status, Period } from '../types';
+import { ProjectFile, Discipline, Status, Period, ProjectPhase } from '../types';
 import { X, Search, CheckSquare, Square, AlertCircle, CheckCircle2, Send, BadgeCheck, ThumbsDown, ArrowRight, Filter, Layers, Users, GitBranch } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
 import { getRevisionNumber, calculateBusinessDaysWithHolidays } from '../utils';
@@ -18,6 +18,7 @@ const EDITABLE_FIELDS: { key: keyof ProjectFile; label: string; type: 'text' | '
   { key: 'client', label: 'Cliente', type: 'text' },
   { key: 'base', label: 'Base / Setor', type: 'text' }, 
   { key: 'discipline', label: 'Disciplina', type: 'enum' },
+  { key: 'phase', label: 'Fase (Etapa)', type: 'enum' }, // Add phase here
   { key: 'startDate', label: 'Data Início', type: 'date' },
   { key: 'endDate', label: 'Data Fim', type: 'date' },
   { key: 'sendDate', label: 'Data Envio', type: 'date' },
@@ -191,6 +192,19 @@ export const BatchEditModal: React.FC<BatchEditModalProps> = ({ projects, onClos
         >
           <option value="" disabled>Selecione a Disciplina</option>
           {Object.values(Discipline).map(d => <option key={d} value={d} className="dark:bg-slate-800">{d}</option>)}
+        </select>
+      );
+    }
+
+    if (fieldConfig.key === 'phase') {
+      return (
+        <select 
+          value={newValue} 
+          onChange={(e) => setNewValue(e.target.value)} 
+          className={commonClasses}
+        >
+          <option value="" disabled>Selecione a Fase</option>
+          {Object.values(ProjectPhase).map(p => <option key={p} value={p} className="dark:bg-slate-800">{p}</option>)}
         </select>
       );
     }
