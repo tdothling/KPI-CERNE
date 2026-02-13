@@ -256,10 +256,18 @@ export default function App() {
 
   const uniqueClients = useMemo(() => {
     const registeredNames = clients.map(c => c.name);
-    const projectClients = new Set(projects.map(p => p.client));
-    const merged = new Set([...registeredNames, ...projectClients]);
+    const projectClients = projects.map(p => p.client);
+    const materialClients = materials.map(m => m.client);
+    const purchaseClients = purchases.map(p => p.client);
+
+    const merged = new Set([
+        ...registeredNames, 
+        ...projectClients,
+        ...materialClients,
+        ...purchaseClients
+    ]);
     return Array.from(merged).sort();
-  }, [clients, projects]);
+  }, [clients, projects, materials, purchases]);
 
   const toggleClientSelection = (clientName: string) => {
       setSelectedClients(prev => {
@@ -578,7 +586,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 pb-20 transition-colors duration-200 print:bg-white print:pb-0 print:h-auto print:min-h-0 print:overflow-visible">
-      {/* ... [Header e Filtros Mantidos Iguais] ... */}
       {isClientFilterOpen && <div className="fixed inset-0 z-40 bg-transparent print:hidden" onClick={() => setIsClientFilterOpen(false)}></div>}
 
       <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-40 transition-colors duration-200 print:hidden">
@@ -755,8 +762,8 @@ export default function App() {
           {activeTab === 'dashboard' && <div className="animate-in fade-in zoom-in-95 duration-200"><Dashboard data={filteredProjects} materials={filteredMaterials} isDarkMode={isDarkMode} holidays={holidays} /></div>}
           {activeTab === 'timeline' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectTimeline projects={filteredProjects} holidays={holidays} /></div>}
           {activeTab === 'projects' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectList projects={filteredProjects} onUpdate={updateProject} onDelete={deleteProject} onAddRevision={addProjectRevision} onPromote={promoteProjectToExecutive} holidays={holidays} readOnly={isReadOnly} /></div>}
-          {activeTab === 'materials' && <div className="animate-in fade-in zoom-in-95 duration-200"><MaterialList materials={materials} onUpdate={updateMaterial} onDelete={deleteMaterial} onAddRevision={addMaterialRevision} readOnly={isReadOnly} /></div>}
-          {activeTab === 'purchases' && showPurchasesTab && <div className="animate-in fade-in zoom-in-95 duration-200"><PurchaseList purchases={purchases} onAdd={handleAddPurchase} onUpdate={handleUpdatePurchase} onDelete={handleDeletePurchase} currentUser={currentUser ? formatUsername(currentUser.email) : ''} holidays={holidays} readOnly={isReadOnly} /></div>}
+          {activeTab === 'materials' && <div className="animate-in fade-in zoom-in-95 duration-200"><MaterialList materials={filteredMaterials} onUpdate={updateMaterial} onDelete={deleteMaterial} onAddRevision={addMaterialRevision} readOnly={isReadOnly} /></div>}
+          {activeTab === 'purchases' && showPurchasesTab && <div className="animate-in fade-in zoom-in-95 duration-200"><PurchaseList purchases={filteredPurchases} onAdd={handleAddPurchase} onUpdate={handleUpdatePurchase} onDelete={handleDeletePurchase} currentUser={currentUser ? formatUsername(currentUser.email) : ''} holidays={holidays} readOnly={isReadOnly} /></div>}
         </div>
       </main>
       
