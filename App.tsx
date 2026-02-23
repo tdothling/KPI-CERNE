@@ -136,6 +136,10 @@ export default function App() {
   const [selectedClients, setSelectedClients] = useState<string[]>([]); // Empty = All
   const [isClientFilterOpen, setIsClientFilterOpen] = useState(false);
   
+  // Multi-Select Discipline Filter State
+  const [selectedDisciplines, setSelectedDisciplines] = useState<Discipline[]>([]); // Empty = All
+  const [isDisciplineFilterOpen, setIsDisciplineFilterOpen] = useState(false);
+  
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   
@@ -204,6 +208,10 @@ export default function App() {
     if (selectedClients.length > 0) {
       result = result.filter(p => selectedClients.includes(p.client));
     }
+    // Multi-Select Discipline Filter
+    if (selectedDisciplines.length > 0) {
+      result = result.filter(p => selectedDisciplines.includes(p.discipline));
+    }
     
     const dateRange = getFilterDateRange();
     if (dateRange) {
@@ -221,12 +229,15 @@ export default function App() {
       });
     }
     return result;
-  }, [projects, selectedClients, dateFilterType, referenceDate, customRange]);
+  }, [projects, selectedClients, selectedDisciplines, dateFilterType, referenceDate, customRange]);
 
   const filteredMaterials = useMemo(() => {
     let result = materials;
     if (selectedClients.length > 0) {
       result = result.filter(m => selectedClients.includes(m.client));
+    }
+    if (selectedDisciplines.length > 0) {
+      result = result.filter(m => selectedDisciplines.includes(m.discipline));
     }
     const dateRange = getFilterDateRange();
     if (dateRange) {
@@ -244,7 +255,7 @@ export default function App() {
       });
     }
     return result;
-  }, [materials, selectedClients, dateFilterType, referenceDate, customRange]);
+  }, [materials, selectedClients, selectedDisciplines, dateFilterType, referenceDate, customRange]);
 
   const filteredPurchases = useMemo(() => {
       let result = purchases;
@@ -275,6 +286,16 @@ export default function App() {
               return prev.filter(c => c !== clientName);
           } else {
               return [...prev, clientName];
+          }
+      });
+  };
+
+  const toggleDisciplineSelection = (discipline: Discipline) => {
+      setSelectedDisciplines(prev => {
+          if (prev.includes(discipline)) {
+              return prev.filter(d => d !== discipline);
+          } else {
+              return [...prev, discipline];
           }
       });
   };
@@ -586,7 +607,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 pb-20 transition-colors duration-200 print:bg-white print:pb-0 print:h-auto print:min-h-0 print:overflow-visible">
-      {isClientFilterOpen && <div className="fixed inset-0 z-40 bg-transparent print:hidden" onClick={() => setIsClientFilterOpen(false)}></div>}
+      {(isClientFilterOpen || isDisciplineFilterOpen) && <div className="fixed inset-0 z-40 bg-transparent print:hidden" onClick={() => { setIsClientFilterOpen(false); setIsDisciplineFilterOpen(false); }}></div>}
 
       <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-40 transition-colors duration-200 print:hidden">
         <div className="w-full px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -636,7 +657,7 @@ export default function App() {
 
              <div className="relative z-50">
                 <button 
-                    onClick={() => setIsClientFilterOpen(!isClientFilterOpen)}
+                    onClick={() => { setIsClientFilterOpen(!isClientFilterOpen); setIsDisciplineFilterOpen(false); }}
                     className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg border transition-all ${selectedClients.length > 0 ? 'bg-brand-50 border-brand-200 text-brand-700 dark:bg-brand-900/20 dark:border-brand-800 dark:text-brand-400' : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}
                 >
                     <Filter className="w-4 h-4" />
@@ -675,6 +696,48 @@ export default function App() {
                                     );
                                 })
                             )}
+                        </div>
+                    </div>
+                )}
+             </div>
+
+             <div className="relative z-50">
+                <button 
+                    onClick={() => { setIsDisciplineFilterOpen(!isDisciplineFilterOpen); setIsClientFilterOpen(false); }}
+                    className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg border transition-all ${selectedDisciplines.length > 0 ? 'bg-brand-50 border-brand-200 text-brand-700 dark:bg-brand-900/20 dark:border-brand-800 dark:text-brand-400' : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}
+                >
+                    <Filter className="w-4 h-4" />
+                    <span className="text-sm font-medium max-w-[100px] truncate hidden md:inline">
+                        {selectedDisciplines.length === 0 ? 'Todas Disciplinas' : `${selectedDisciplines.length} Selecionada(s)`}
+                    </span>
+                    <ChevronDown className="w-3 h-3 ml-1" />
+                </button>
+                
+                {isDisciplineFilterOpen && (
+                    <div className="absolute top-full right-0 mt-2 w-64 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 py-2 animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
+                        <div className="px-3 pb-2 mb-2 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Filtrar Disciplinas</span>
+                            <button 
+                                onClick={() => setSelectedDisciplines([])}
+                                className="text-xs text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300 font-medium"
+                            >
+                                Limpar
+                            </button>
+                        </div>
+                        <div className="max-h-60 overflow-y-auto custom-scrollbar px-1">
+                            {Object.values(Discipline).map(discipline => {
+                                const isSelected = selectedDisciplines.includes(discipline);
+                                return (
+                                    <button
+                                        key={discipline}
+                                        onClick={() => toggleDisciplineSelection(discipline)}
+                                        className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-md transition-colors ${isSelected ? 'text-brand-700 dark:text-brand-300 font-medium bg-brand-50 dark:bg-brand-900/20' : 'text-slate-700 dark:text-slate-200'}`}
+                                    >
+                                        {isSelected ? <CheckSquare size={16} className="shrink-0 text-brand-600 dark:text-brand-400" /> : <Square size={16} className="shrink-0 text-slate-300 dark:text-slate-500" />}
+                                        <span className="truncate">{discipline}</span>
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
                 )}
