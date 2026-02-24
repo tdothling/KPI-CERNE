@@ -5,89 +5,89 @@ import { ProjectFile, MaterialDoc, PurchaseDoc, ClientDoc, ProjectFilterState } 
 
 const COLL_PROJECTS = "projects";
 const COLL_MATERIALS = "materials";
-const COLL_HOLIDAYS = "settings"; 
+const COLL_HOLIDAYS = "settings";
 const COLL_PURCHASES = "purchases";
 const COLL_CLIENTS = "clients";
-const COLL_CONFIG = "configuration"; 
+const COLL_CONFIG = "configuration";
 
 const isDbActive = () => {
-    if (!db) return false;
-    return true;
+  if (!db) return false;
+  return true;
 };
 
 // Security Hardening: Verificação estrita
 const checkAuth = () => {
-    if (!auth) {
-        console.error("Security Error: Auth service not initialized.");
-        return false;
-    }
-    if (!auth.currentUser) {
-        console.warn("Security Alert: Tentativa de escrita não autorizada bloqueada.");
-        return false;
-    }
-    return true;
+  if (!auth) {
+    console.error("Security Error: Auth service not initialized.");
+    return false;
+  }
+  if (!auth.currentUser) {
+    console.warn("Security Alert: Tentativa de escrita não autorizada bloqueada.");
+    return false;
+  }
+  return true;
 };
 
 // Security Helper: Remove campos undefined que podem quebrar o Firestore ou causar inconsistência
 const sanitizeData = (data: any) => {
-    const clean: any = {};
-    Object.keys(data).forEach(key => {
-        if (data[key] !== undefined) {
-            clean[key] = data[key];
-        }
-    });
-    return clean;
+  const clean: any = {};
+  Object.keys(data).forEach(key => {
+    if (data[key] !== undefined) {
+      clean[key] = data[key];
+    }
+  });
+  return clean;
 };
 
 export const subscribeToProjects = (callback: (data: ProjectFile[]) => void, filter?: ProjectFilterState) => {
-  if (!isDbActive()) return () => {};
-  
+  if (!isDbActive()) return () => { };
+
   let q;
 
   // Lógica de Filtro Avançado (Server-Side)
   if (filter && filter.isActive) {
-      const constraints: any[] = [];
-      
-      // Filtro de Clientes (Usa operador 'in' para permitir múltipla escolha)
-      if (filter.clients.length > 0) {
-          // Firestore limita o operador 'in' a 10 valores (em versões antigas) ou 30 (novas).
-          // Por segurança e performance, pegamos os primeiros 10 se houver muitos.
-          const safeClients = filter.clients.slice(0, 10);
-          constraints.push(where("client", "in", safeClients));
-      }
+    const constraints: any[] = [];
 
-      // Nota: Não adicionamos 'discipline' na query do Firestore para evitar erros de índice composto.
-      // O Firestore exige índices específicos para queries com múltiplos campos diferentes.
-      // Estratégia: Filtramos Clientes no Servidor (Redução drástica de leituras) e Disciplinas no Cliente (Memória).
-      
-      // Se tiver filtro, aumentamos o limite para garantir que o usuário ache o que procura,
-      // mas mantemos um teto para segurança de cota.
-      constraints.push(limit(150)); 
-      
-      // Queries com 'where' muitas vezes não suportam 'orderBy' sem índice criado. 
-      // Removemos 'orderBy' aqui e ordenamos no callback.
-      q = query(collection(db, COLL_PROJECTS), ...constraints);
+    // Filtro de Clientes (Usa operador 'in' para permitir múltipla escolha)
+    if (filter.clients.length > 0) {
+      // Firestore limita o operador 'in' a 10 valores (em versões antigas) ou 30 (novas).
+      // Por segurança e performance, pegamos os primeiros 10 se houver muitos.
+      const safeClients = filter.clients.slice(0, 10);
+      constraints.push(where("client", "in", safeClients));
+    }
+
+    // Nota: Não adicionamos 'discipline' na query do Firestore para evitar erros de índice composto.
+    // O Firestore exige índices específicos para queries com múltiplos campos diferentes.
+    // Estratégia: Filtramos Clientes no Servidor (Redução drástica de leituras) e Disciplinas no Cliente (Memória).
+
+    // Se tiver filtro, aumentamos o limite para garantir que o usuário ache o que procura,
+    // mas mantemos um teto para segurança de cota.
+    constraints.push(limit(150));
+
+    // Queries com 'where' muitas vezes não suportam 'orderBy' sem índice criado. 
+    // Removemos 'orderBy' aqui e ordenamos no callback.
+    q = query(collection(db, COLL_PROJECTS), ...constraints);
 
   } else {
-      // Padrão: 50 últimos projetos (Monitoramento Diário)
-      q = query(collection(db, COLL_PROJECTS), limit(50));
+    // Padrão: 50 últimos projetos (Monitoramento Diário)
+    q = query(collection(db, COLL_PROJECTS), limit(50));
   }
 
   const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
     let projects: ProjectFile[] = [];
     snapshot.forEach((doc) => {
       const data = doc.data();
-      if ('id' in data) delete data.id; 
+      if ('id' in data) delete data.id;
       projects.push({ id: doc.id, ...data } as ProjectFile);
     });
 
     // Se estiver filtrando, aplicamos a filtragem de memória secundária (ex: disciplina) e ordenação
     if (filter && filter.isActive) {
-        if (filter.disciplines.length > 0) {
-            projects = projects.filter(p => filter.disciplines.includes(p.discipline));
-        }
-        // Ordenação manual pois removemos o orderBy da query filtrada
-        projects.sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''));
+      if (filter.disciplines.length > 0) {
+        projects = projects.filter(p => filter.disciplines.includes(p.discipline));
+      }
+      // Ordenação manual pois removemos o orderBy da query filtrada
+      projects.sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''));
     }
 
     callback(projects);
@@ -118,24 +118,24 @@ export const deleteProjectFromDb = async (id: string) => {
 };
 
 export const subscribeToMaterials = (callback: (data: MaterialDoc[]) => void, filter?: ProjectFilterState) => {
-  if (!isDbActive()) return () => {};
-  
+  if (!isDbActive()) return () => { };
+
   let q;
 
   // Lógica de Filtro Avançado para Materiais (Idêntica a Projetos)
   if (filter && filter.isActive) {
-      const constraints: any[] = [];
-      
-      if (filter.clients.length > 0) {
-          const safeClients = filter.clients.slice(0, 10);
-          constraints.push(where("client", "in", safeClients));
-      }
+    const constraints: any[] = [];
 
-      constraints.push(limit(150)); 
-      q = query(collection(db, COLL_MATERIALS), ...constraints);
+    if (filter.clients.length > 0) {
+      const safeClients = filter.clients.slice(0, 10);
+      constraints.push(where("client", "in", safeClients));
+    }
+
+    constraints.push(limit(150));
+    q = query(collection(db, COLL_MATERIALS), ...constraints);
 
   } else {
-      q = query(collection(db, COLL_MATERIALS), limit(50));
+    q = query(collection(db, COLL_MATERIALS), limit(50));
   }
 
   const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
@@ -147,11 +147,11 @@ export const subscribeToMaterials = (callback: (data: MaterialDoc[]) => void, fi
     });
 
     if (filter && filter.isActive) {
-        if (filter.disciplines.length > 0) {
-            materials = materials.filter(m => filter.disciplines.includes(m.discipline));
-        }
-        // Ordenação por nome do arquivo (padrão comum para listas)
-        materials.sort((a, b) => a.filename.localeCompare(b.filename));
+      if (filter.disciplines.length > 0) {
+        materials = materials.filter(m => filter.disciplines.includes(m.discipline));
+      }
+      // Ordenação por nome do arquivo (padrão comum para listas)
+      materials.sort((a, b) => a.filename.localeCompare(b.filename));
     }
 
     callback(materials);
@@ -162,7 +162,7 @@ export const subscribeToMaterials = (callback: (data: MaterialDoc[]) => void, fi
 export const addMaterial = async (material: Omit<MaterialDoc, 'id'>) => {
   if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
   try {
-     const { id, ...cleanMaterial } = material as any;
+    const { id, ...cleanMaterial } = material as any;
     await addDoc(collection(db, COLL_MATERIALS), sanitizeData(cleanMaterial));
   } catch (e) { console.error("Erro ao adicionar material:", e); throw e; }
 };
@@ -177,12 +177,24 @@ export const updateMaterialInDb = async (material: MaterialDoc) => {
 };
 
 export const deleteMaterialFromDb = async (id: string) => {
-  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
-  try { await deleteDoc(doc(db, COLL_MATERIALS, id)); } catch (e) { console.error("Erro ao excluir material:", e); throw e; }
+  console.log("Executando deleteMaterialFromDb com ID:", id);
+  if (!isDbActive() || !checkAuth()) {
+    console.log("Falha na validação dbAtivo ou Auth");
+    throw new Error("Acesso negado.");
+  }
+  try {
+    console.log("Chamando deleteDoc no firestore...");
+    await deleteDoc(doc(db, COLL_MATERIALS, id));
+    console.log("Documento deletado do firestore com sucesso.");
+  } catch (e: any) {
+    console.error("Erro ao excluir material:", e);
+    alert("ERRO AO EXCLUIR: " + e.message);
+    throw e;
+  }
 };
 
 export const subscribeToPurchases = (callback: (data: PurchaseDoc[]) => void) => {
-  if (!isDbActive()) return () => {};
+  if (!isDbActive()) return () => { };
   const q = query(collection(db, COLL_PURCHASES), orderBy("requestDate", "desc"), limit(50));
   const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
     const purchases: PurchaseDoc[] = [];
@@ -214,12 +226,24 @@ export const updatePurchaseInDb = async (purchase: PurchaseDoc) => {
 };
 
 export const deletePurchaseFromDb = async (id: string) => {
-  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
-  try { await deleteDoc(doc(db, COLL_PURCHASES, id)); } catch (e) { console.error("Erro ao excluir compra:", e); throw e; }
+  console.log("Executando deletePurchaseFromDb com ID:", id);
+  if (!isDbActive() || !checkAuth()) {
+    console.log("Falha na validação dbAtivo ou Auth");
+    throw new Error("Acesso negado.");
+  }
+  try {
+    console.log("Chamando deleteDoc no firestore para compras...");
+    await deleteDoc(doc(db, COLL_PURCHASES, id));
+    console.log("Documento deletado do firestore com sucesso.");
+  } catch (e: any) {
+    console.error("Erro ao excluir compra:", e);
+    alert("ERRO AO EXCLUIR: " + e.message);
+    throw e;
+  }
 };
 
 export const subscribeToClients = (callback: (data: ClientDoc[]) => void) => {
-  if (!isDbActive()) return () => {};
+  if (!isDbActive()) return () => { };
   const q = query(collection(db, COLL_CLIENTS), orderBy("name"), limit(100));
   const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
     const clients: ClientDoc[] = [];
@@ -247,45 +271,45 @@ export const updateClientInDb = async (client: ClientDoc) => {
     // 1. Buscar o cliente atual para verificar mudança de nome
     const docRef = doc(db, COLL_CLIENTS, client.id);
     const snapshot = await getDoc(docRef);
-    
+
     if (!snapshot.exists()) throw new Error("Cliente não encontrado.");
-    
+
     const oldData = snapshot.data() as ClientDoc;
     const oldName = oldData.name;
     const newName = client.name;
 
     const { id, ...data } = client;
-    
+
     // 2. Atualiza o cadastro do cliente
     await updateDoc(docRef, sanitizeData(data));
 
     // 3. Se o nome mudou, atualiza em cascata (Cascading Update) todas as coleções vinculadas
     if (oldName && newName && oldName !== newName) {
-        console.log(`Iniciando atualização em cascata: ${oldName} -> ${newName}`);
-        
-        // Prepara queries para encontrar documentos com o nome antigo
-        const pQuery = query(collection(db, COLL_PROJECTS), where("client", "==", oldName));
-        const mQuery = query(collection(db, COLL_MATERIALS), where("client", "==", oldName));
-        const cQuery = query(collection(db, COLL_PURCHASES), where("client", "==", oldName));
+      console.log(`Iniciando atualização em cascata: ${oldName} -> ${newName}`);
 
-        // Executa leituras em paralelo
-        const [pSnap, mSnap, cSnap] = await Promise.all([
-            getDocs(pQuery),
-            getDocs(mQuery),
-            getDocs(cQuery)
-        ]);
+      // Prepara queries para encontrar documentos com o nome antigo
+      const pQuery = query(collection(db, COLL_PROJECTS), where("client", "==", oldName));
+      const mQuery = query(collection(db, COLL_MATERIALS), where("client", "==", oldName));
+      const cQuery = query(collection(db, COLL_PURCHASES), where("client", "==", oldName));
 
-        const updatePromises: Promise<void>[] = [];
+      // Executa leituras em paralelo
+      const [pSnap, mSnap, cSnap] = await Promise.all([
+        getDocs(pQuery),
+        getDocs(mQuery),
+        getDocs(cQuery)
+      ]);
 
-        // Adiciona promessas de atualização para cada documento encontrado
-        pSnap.forEach(d => updatePromises.push(updateDoc(d.ref, { client: newName })));
-        mSnap.forEach(d => updatePromises.push(updateDoc(d.ref, { client: newName })));
-        cSnap.forEach(d => updatePromises.push(updateDoc(d.ref, { client: newName })));
+      const updatePromises: Promise<void>[] = [];
 
-        if (updatePromises.length > 0) {
-            await Promise.all(updatePromises);
-            console.log(`Sucesso: ${updatePromises.length} registros atualizados para o novo nome.`);
-        }
+      // Adiciona promessas de atualização para cada documento encontrado
+      pSnap.forEach(d => updatePromises.push(updateDoc(d.ref, { client: newName })));
+      mSnap.forEach(d => updatePromises.push(updateDoc(d.ref, { client: newName })));
+      cSnap.forEach(d => updatePromises.push(updateDoc(d.ref, { client: newName })));
+
+      if (updatePromises.length > 0) {
+        await Promise.all(updatePromises);
+        console.log(`Sucesso: ${updatePromises.length} registros atualizados para o novo nome.`);
+      }
     }
 
   } catch (e) { console.error("Erro ao atualizar cliente e vínculos:", e); throw e; }
@@ -297,30 +321,30 @@ export const deleteClientFromDb = async (id: string) => {
 };
 
 export const subscribeToHolidays = (callback: (holidays: string[]) => void) => {
-    if (!isDbActive()) return () => {};
-    const docRef = doc(db, COLL_HOLIDAYS, "holidays");
-    const unsubscribe = onSnapshot(docRef, (docSnap) => {
-        if (docSnap.exists()) {
-            const data = docSnap.data() as any;
-            callback(data.dates || []);
-        } else {
-            callback([]);
-        }
-    });
-    return unsubscribe;
+  if (!isDbActive()) return () => { };
+  const docRef = doc(db, COLL_HOLIDAYS, "holidays");
+  const unsubscribe = onSnapshot(docRef, (docSnap) => {
+    if (docSnap.exists()) {
+      const data = docSnap.data() as any;
+      callback(data.dates || []);
+    } else {
+      callback([]);
+    }
+  });
+  return unsubscribe;
 };
 
 export const saveHolidaysToDb = async (holidays: string[]) => {
-    if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
-    try { await setDoc(doc(db, COLL_HOLIDAYS, "holidays"), { dates: holidays }); } catch (e) { console.error("Erro ao salvar feriados:", e); throw e; }
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+  try { await setDoc(doc(db, COLL_HOLIDAYS, "holidays"), { dates: holidays }); } catch (e) { console.error("Erro ao salvar feriados:", e); throw e; }
 };
 
 export const getAppConfig = async () => {
-    if (!isDbActive()) return null;
-    try {
-        const docRef = doc(db, COLL_CONFIG, "general"); 
-        const snap = await getDoc(docRef);
-        if (snap.exists()) { return snap.data(); }
-        return null;
-    } catch (e) { console.error("Erro ao buscar configs:", e); return null; }
+  if (!isDbActive()) return null;
+  try {
+    const docRef = doc(db, COLL_CONFIG, "general");
+    const snap = await getDoc(docRef);
+    if (snap.exists()) { return snap.data(); }
+    return null;
+  } catch (e) { console.error("Erro ao buscar configs:", e); return null; }
 }
