@@ -265,7 +265,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
      const chartData = [
          { name: 'Concluído', value: done, color: '#10b981' }, 
          { name: 'Pendente', value: pending, color: isDarkMode ? '#334155' : '#e2e8f0' }
-     ];
+     ].filter(d => d.value > 0);
 
      return { total, done, percentage, chartData };
   }, [materials, isDarkMode]);
@@ -465,16 +465,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
           <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200 print:break-inside-avoid print:shadow-none print:border-slate-300">
              <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4">ICLM (Conclusão de Listas)</h3>
              <div className="h-60 relative flex flex-col items-center justify-center">
-                 <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                     <PieChart>
-                         <Pie data={materialStats.chartData} cx="50%" cy="50%" startAngle={180} endAngle={0} innerRadius={60} outerRadius={80} paddingAngle={0} dataKey="value">
-                             {materialStats.chartData.map((entry, index) => (
-                                 <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
-                             ))}
-                         </Pie>
-                         <Tooltip formatter={(value: number) => [value, 'Listas Únicas']} contentStyle={{ backgroundColor: tooltipBg, color: tooltipText, border: isDarkMode ? '1px solid #475569' : 'none' }} itemStyle={{ color: tooltipText }} />
-                     </PieChart>
-                 </ResponsiveContainer>
+                 {materialStats.total > 0 ? (
+                     <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                         <PieChart>
+                             <Pie data={materialStats.chartData} cx="50%" cy="50%" startAngle={180} endAngle={0} innerRadius={60} outerRadius={80} paddingAngle={0} dataKey="value">
+                                 {materialStats.chartData.map((entry, index) => (
+                                     <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
+                                 ))}
+                             </Pie>
+                             <Tooltip formatter={(value: number) => [value, 'Listas Únicas']} contentStyle={{ backgroundColor: tooltipBg, color: tooltipText, border: isDarkMode ? '1px solid #475569' : 'none' }} itemStyle={{ color: tooltipText }} />
+                         </PieChart>
+                     </ResponsiveContainer>
+                 ) : (
+                     <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 text-xs italic text-center pb-10">
+                         Nenhuma lista<br/>registrada
+                     </div>
+                 )}
                  <div className="absolute top-1/2 left-0 right-0 text-center -translate-y-1 transform">
                      <span className="text-3xl font-bold text-slate-800 dark:text-white block">{materialStats.percentage}%</span>
                      <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Concluído</span>
