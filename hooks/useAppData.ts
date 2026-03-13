@@ -72,7 +72,7 @@ export function useAppData(projectFilter: ProjectFilterState) {
             return;
         }
 
-        const newStartDate = original.feedbackDate || original.endDate || new Date().toISOString().split('T')[0];
+        const newStartDate = new Date().toISOString().split('T')[0];
         const currentPeriod: Period = new Date().getHours() < 12 ? 'MANHA' : 'TARDE';
 
         let newFilename = original.filename;
