@@ -4,7 +4,7 @@ import { subscribeToProjects, addProject, updateProjectInDb, deleteProjectFromDb
 import { subscribeToAuth } from '../services/auth';
 import { db } from '../firebase';
 import { User } from 'firebase/auth';
-import { generateRevisionFilename } from '../utils';
+import { generateRevisionFilename, canTransitionTo } from '../utils';
 
 export function useAppData(projectFilter: ProjectFilterState) {
     const [projects, setProjects] = useState<ProjectFile[]>([]);
@@ -157,17 +157,25 @@ export function useAppData(projectFilter: ProjectFilterState) {
     };
 
     const handleBatchWorkflow = (ids: string[], action: 'COMPLETE' | 'SEND' | 'APPROVE' | 'REJECT', date: string) => {
+        let skipped = 0;
         ids.forEach(id => {
             const project = projects.find(p => p.id === id);
             if (!project) return;
+            // M2: Validar se a transição é permitida a partir do status atual
+            if (!canTransitionTo(project.status, action)) {
+                skipped++;
+                return;
+            }
             const updatedProject = { ...project };
-            let shouldUpdate = false;
-            if (action === 'COMPLETE') { updatedProject.status = Status.DONE; updatedProject.endDate = date; shouldUpdate = true; }
-            if (action === 'SEND') { updatedProject.status = Status.WAITING_APPROVAL; updatedProject.sendDate = date; shouldUpdate = true; }
-            if (action === 'APPROVE') { updatedProject.status = Status.APPROVED; updatedProject.feedbackDate = date; shouldUpdate = true; }
-            if (action === 'REJECT') { updatedProject.status = Status.REJECTED; updatedProject.feedbackDate = date; shouldUpdate = true; }
-            if (shouldUpdate) updateProjectInDb(updatedProject);
+            if (action === 'COMPLETE') { updatedProject.status = Status.DONE; updatedProject.endDate = date; }
+            if (action === 'SEND') { updatedProject.status = Status.WAITING_APPROVAL; updatedProject.sendDate = date; }
+            if (action === 'APPROVE') { updatedProject.status = Status.APPROVED; updatedProject.feedbackDate = date; }
+            if (action === 'REJECT') { updatedProject.status = Status.REJECTED; updatedProject.feedbackDate = date; }
+            updateProjectInDb(updatedProject);
         });
+        if (skipped > 0) {
+            alert(`${skipped} arquivo(s) foram ignorados porque não estavam no status correto para a ação "${action}".`);
+        }
     };
 
     const handleMaterialBatchUpdate = (ids: string[], field: keyof MaterialDoc, value: any) => {

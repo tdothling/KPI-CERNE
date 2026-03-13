@@ -142,7 +142,7 @@ export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({ projects, holi
                 groups[p.client] = { totalFiles: 0, startDate: new Date(2100, 0, 1), endDate: new Date(1900, 0, 1), activeFiles: 0 };
             }
             groups[p.client].totalFiles += 1;
-            if (p.status === Status.IN_PROGRESS || p.status === Status.REVISED) {
+            if (p.status === Status.IN_PROGRESS) {
                 groups[p.client].activeFiles += 1;
             }
 

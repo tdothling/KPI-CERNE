@@ -39,40 +39,37 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
     // Structure for Execution Time by Phase
     const timeByDiscipline: Record<string, { prelimTotal: number; prelimCount: number; execTotal: number; execCount: number }> = {};
     
-    const fttByDiscipline: Record<string, { totalGroups: number; successGroups: number }> = {};
+    const fttByDiscipline: Record<string, { totalGroups: number; successGroups: number; phase: string }> = {};
     const clientResponseMap: Record<string, { totalDays: number; count: number }> = {};
-    const fileGroups: Record<string, { discipline: string, hasRevisionOrRejection: boolean }> = {};
+    const fileGroups: Record<string, { discipline: string, phase: string, hasRevisionOrRejection: boolean }> = {};
     const volumeMap: Record<string, any> = {};
     const reasonsMap: Record<string, number> = {};
+    // S3: Cycle Time KPI — tempo total do ciclo (startDate até feedbackDate)
+    const cycleTimeByDiscipline: Record<string, { total: number; count: number }> = {};
 
     data.forEach(project => {
+      // C2: Excluir projetos REVISADOS dos cálculos de tempo e volume ativo
+      const isRevised = project.status === Status.REVISED;
+
       // 1. Execution Time Calculation (Split by Phase)
-      let duration = 0;
-      if (project.startDate && isValid(parseISO(project.startDate))) {
+      // C2: Só conta projetos com ciclo completo (tem endDate) e que não são REVISED
+      if (!isRevised && project.startDate && project.endDate && isValid(parseISO(project.startDate)) && isValid(parseISO(project.endDate))) {
         const start = parseISO(project.startDate);
-        let end: Date;
-        if (project.endDate && isValid(parseISO(project.endDate))) {
-            end = parseISO(project.endDate);
-        } else {
-            end = new Date();
-        }
+        let end = parseISO(project.endDate);
         if (end < start) end = start;
         
-        duration = calculateBusinessDaysWithHolidays(
+        const duration = calculateBusinessDaysWithHolidays(
             start, 
             end, 
             holidays, 
             project.startPeriod, 
-            project.endPeriod || (project.endDate ? 'TARDE' : 'TARDE') 
+            project.endPeriod || 'TARDE' 
         );
-      }
 
-      if (!timeByDiscipline[project.discipline]) {
-        timeByDiscipline[project.discipline] = { prelimTotal: 0, prelimCount: 0, execTotal: 0, execCount: 0 };
-      }
+        if (!timeByDiscipline[project.discipline]) {
+          timeByDiscipline[project.discipline] = { prelimTotal: 0, prelimCount: 0, execTotal: 0, execCount: 0 };
+        }
 
-      if (project.startDate) { 
-        // If phase is missing, default to EXECUTIVE for backward compatibility
         const phase = project.phase || ProjectPhase.EXECUTIVE;
         
         if (phase === ProjectPhase.PRELIMINARY) {
@@ -84,10 +81,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
         }
       }
 
-      // 2. Client Response Time (New KPI)
-      if (project.blockedDays !== undefined && project.blockedDays !== null) {
+      // 2. Client Response Time
+      // C3: Usar days > 0 para excluir zeros falsos (valor padrão sem cálculo real)
+      if (!isRevised && project.blockedDays !== undefined && project.blockedDays !== null) {
           const days = Number(project.blockedDays);
-          if (days >= 0 && (project.feedbackDate || project.status === Status.APPROVED || project.status === Status.REJECTED)) {
+          if (days > 0 && (project.feedbackDate || project.status === Status.APPROVED || project.status === Status.REJECTED)) {
               if (!clientResponseMap[project.client]) {
                   clientResponseMap[project.client] = { totalDays: 0, count: 0 };
               }
@@ -97,12 +95,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
       }
 
       // 3. FTT & Groups Logic
+      // M4: Separar FTT/IAPR por fase
       const baseName = getProjectBaseName(project.filename);
-      // Group Key includes Phase to separate stats
-      const groupKey = `${project.client}|${project.discipline}|${baseName}|${project.phase || 'EXEC'}`;
+      const projectPhase = project.phase || 'Executivo';
+      const groupKey = `${project.client}|${project.discipline}|${baseName}|${projectPhase}`;
 
       if (!fileGroups[groupKey]) {
-          fileGroups[groupKey] = { discipline: project.discipline, hasRevisionOrRejection: false };
+          fileGroups[groupKey] = { discipline: project.discipline, phase: projectPhase, hasRevisionOrRejection: false };
       }
 
       if (getRevisionNumber(project.filename) > 0 || project.status === Status.REJECTED || project.status === Status.REVISED) {
@@ -113,21 +112,40 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
          reasonsMap[rev.reason] = (reasonsMap[rev.reason] || 0) + 1;
       });
 
-      // 4. Volume Logic
-      if (!volumeMap[project.client]) {
-        volumeMap[project.client] = { name: project.client, total: 0 };
+      // 4. Volume Logic (exclui REVISED para não inflar contagem)
+      if (!isRevised) {
+        if (!volumeMap[project.client]) {
+          volumeMap[project.client] = { name: project.client, total: 0 };
+        }
+        volumeMap[project.client].total += 1;
+        volumeMap[project.client][project.discipline] = (volumeMap[project.client][project.discipline] || 0) + 1;
       }
-      volumeMap[project.client].total += 1;
-      volumeMap[project.client][project.discipline] = (volumeMap[project.client][project.discipline] || 0) + 1;
+
+      // S3: Cycle Time (startDate → feedbackDate) — apenas projetos com ciclo completo
+      if (!isRevised && project.startDate && project.feedbackDate && 
+          isValid(parseISO(project.startDate)) && isValid(parseISO(project.feedbackDate))) {
+          const start = parseISO(project.startDate);
+          const feedback = parseISO(project.feedbackDate);
+          if (feedback >= start) {
+              const cycleDays = calculateBusinessDaysWithHolidays(start, feedback, holidays, project.startPeriod, project.feedbackPeriod || 'TARDE');
+              if (!cycleTimeByDiscipline[project.discipline]) {
+                  cycleTimeByDiscipline[project.discipline] = { total: 0, count: 0 };
+              }
+              cycleTimeByDiscipline[project.discipline].total += cycleDays;
+              cycleTimeByDiscipline[project.discipline].count += 1;
+          }
+      }
     });
 
+    // M4: IAPR separado por fase (Preliminar / Executivo)
     Object.values(fileGroups).forEach(group => {
-        if (!fttByDiscipline[group.discipline]) {
-            fttByDiscipline[group.discipline] = { totalGroups: 0, successGroups: 0 };
+        const fttKey = `${group.discipline} (${group.phase === 'Preliminar' ? 'Prel' : 'Exec'})`;
+        if (!fttByDiscipline[fttKey]) {
+            fttByDiscipline[fttKey] = { totalGroups: 0, successGroups: 0, phase: group.phase };
         }
-        fttByDiscipline[group.discipline].totalGroups += 1;
+        fttByDiscipline[fttKey].totalGroups += 1;
         if (!group.hasRevisionOrRejection) {
-            fttByDiscipline[group.discipline].successGroups += 1;
+            fttByDiscipline[fttKey].successGroups += 1;
         }
     });
 
@@ -155,7 +173,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
 
-    return { executionData, fttData, volumeData, reasonsData, clientResponseData };
+    // S3: Dados de Cycle Time
+    const cycleTimeData = Object.keys(cycleTimeByDiscipline).map(d => ({
+      name: d,
+      avgCycle: cycleTimeByDiscipline[d].count ? Number((cycleTimeByDiscipline[d].total / cycleTimeByDiscipline[d].count).toFixed(1)) : 0
+    }));
+
+    return { executionData, fttData, volumeData, reasonsData, clientResponseData, cycleTimeData };
   }, [data, holidays]);
 
   const materialStats = useMemo(() => {
@@ -279,21 +303,42 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
           </div>
 
           <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200 print:break-inside-avoid print:shadow-none print:border-slate-300">
-            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4" title="Índice de Aprovação na Primeira Revisão">IAPR (Aprovação Direta)</h3>
+            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4" title="Índice de Aprovação na Primeira Revisão">IAPR (Aprovação Direta por Fase)</h3>
             <div className="h-60">
               <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                 <BarChart data={stats.fttData} layout="vertical" margin={{ left: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={true} stroke={gridColor} />
                   <XAxis type="number" domain={[0, 100]} unit="%" stroke={axisColor} fontSize={10} />
-                  <YAxis dataKey="name" type="category" width={80} fontSize={10} stroke={axisColor} />
+                  <YAxis dataKey="name" type="category" width={120} fontSize={9} stroke={axisColor} />
                   <Tooltip formatter={(value: number) => [`${value}%`, 'Aprovado sem Revisão']} cursor={{ fill: 'transparent' }} contentStyle={{ backgroundColor: tooltipBg, color: tooltipText, border: isDarkMode ? '1px solid #475569' : 'none' }} itemStyle={{ color: tooltipText }} labelStyle={{ color: tooltipText }} />
                   <Bar dataKey="rate" name="Taxa de Assertividade" radius={[0, 4, 4, 0]} barSize={20}>
                     {stats.fttData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={DISCIPLINE_COLORS[entry.name] || '#8884d8'} />
+                      <Cell key={`cell-${index}`} fill={DISCIPLINE_COLORS[entry.name.split(' (')[0]] || '#8884d8'} />
                     ))}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200 print:break-inside-avoid print:shadow-none print:border-slate-300">
+            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4" title="Tempo total do ciclo: início até aprovação do cliente">Cycle Time (Ciclo Completo)</h3>
+            <div className="h-60">
+              {stats.cycleTimeData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                  <BarChart data={stats.cycleTimeData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
+                    <XAxis dataKey="name" fontSize={10} angle={-45} textAnchor="end" height={60} interval={0} stroke={axisColor} />
+                    <YAxis unit="d" width={30} fontSize={12} stroke={axisColor} />
+                    <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ backgroundColor: tooltipBg, color: tooltipText, border: isDarkMode ? '1px solid #475569' : 'none' }} itemStyle={{ color: tooltipText }} labelStyle={{ color: tooltipText }} formatter={(value: number) => [`${value} dias`, 'Ciclo Médio']} />
+                    <Bar dataKey="avgCycle" name="Ciclo Médio" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-slate-400 text-sm italic">
+                  Sem dados de ciclo completo (necessita feedbackDate)
+                </div>
+              )}
             </div>
           </div>
 

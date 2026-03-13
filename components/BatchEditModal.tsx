@@ -3,7 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { ProjectFile, Discipline, Status, Period, ProjectPhase } from '../types';
 import { X, Search, CheckSquare, Square, AlertCircle, CheckCircle2, Send, BadgeCheck, ThumbsDown, ArrowRight, Filter, Layers, Users, GitBranch } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
-import { getRevisionNumber, calculateBusinessDaysWithHolidays } from '../utils';
+import { getRevisionNumber, calculateBusinessDaysWithHolidays, inferStatusFromDates, canTransitionTo } from '../utils';
 
 interface BatchEditModalProps {
   projects: ProjectFile[];
@@ -157,19 +157,7 @@ export const BatchEditModal: React.FC<BatchEditModalProps> = ({ projects, onClos
                 }
             }
 
-            let newStatus = updated.status;
-
-            if (updated.feedbackDate) {
-                if (newStatus !== Status.REJECTED && newStatus !== Status.APPROVED) newStatus = Status.APPROVED;
-            } else if (updated.sendDate) {
-                newStatus = Status.WAITING_APPROVAL;
-            } else if (updated.endDate) {
-                newStatus = Status.DONE;
-            } else if (updated.startDate) {
-                newStatus = Status.IN_PROGRESS;
-            } else {
-                newStatus = Status.IN_PROGRESS; 
-            }
+            const newStatus = inferStatusFromDates(updated);
 
             if (newStatus !== project.status) {
                 onApply([project.id], 'status', newStatus);

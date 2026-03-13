@@ -70,7 +70,7 @@ export const subscribeToProjects = (callback: (data: ProjectFile[]) => void, fil
 
   } else {
     // Padrão: 50 últimos projetos (Monitoramento Diário)
-    q = query(collection(db, COLL_PROJECTS), limit(50));
+    q = query(collection(db, COLL_PROJECTS), limit(200));
   }
 
   const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
@@ -135,7 +135,7 @@ export const subscribeToMaterials = (callback: (data: MaterialDoc[]) => void, fi
     q = query(collection(db, COLL_MATERIALS), ...constraints);
 
   } else {
-    q = query(collection(db, COLL_MATERIALS), limit(50));
+    q = query(collection(db, COLL_MATERIALS), limit(200));
   }
 
   const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {

@@ -63,7 +63,7 @@ export default function App() {
 
   const [importType, setImportType] = useState<ImportType>('PROJECT');
   const [uploadDiscipline, setUploadDiscipline] = useState<Discipline>(Discipline.ARCHITECTURE);
-  const [uploadPhase, setUploadPhase] = useState<ProjectPhase>(ProjectPhase.EXECUTIVE);
+  const [uploadPhase, setUploadPhase] = useState<ProjectPhase>(ProjectPhase.PRELIMINARY);
   const [uploadClient, setUploadClient] = useState<string>('');
   const [uploadBase, setUploadBase] = useState<string>('');
   const [isFolderUpload, setIsFolderUpload] = useState(false);
@@ -101,7 +101,7 @@ export default function App() {
     setUploadDiscipline(Discipline.ARCHITECTURE);
     setUploadClient('');
     setUploadBase('');
-    setUploadPhase(ProjectPhase.EXECUTIVE);
+    setUploadPhase(ProjectPhase.PRELIMINARY);
     setIsFolderUpload(false);
     setImportType('PROJECT');
   };

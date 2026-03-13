@@ -1,6 +1,6 @@
 
 import { format, parseISO, isValid, differenceInBusinessDays, isWeekend, isWithinInterval } from 'date-fns';
-import { Period, Discipline } from './types';
+import { Period, Discipline, Status, ProjectFile } from './types';
 
 export const getProjectBaseName = (filename: string): string => {
     const nameWithoutExt = filename.replace(/\.[^/.]+$/, "");
@@ -138,4 +138,46 @@ export const validateFile = (file: File): boolean => {
         return false;
     }
     return true;
+};
+
+// --- STATUS MACHINE (Centralizado) ---
+
+// Infere o status correto a partir das datas preenchidas.
+// Preserva REVISED, APPROVED e REJECTED se já estiverem definidos.
+export const inferStatusFromDates = (project: Partial<ProjectFile>): Status => {
+    const currentStatus = project.status;
+
+    // Status terminal: REVISED nunca deve ser sobrescrito automaticamente
+    if (currentStatus === Status.REVISED) return Status.REVISED;
+
+    if (project.feedbackDate) {
+        // Se tem feedback, preserva APPROVED ou REJECTED; caso contrário, assume APPROVED
+        if (currentStatus === Status.REJECTED) return Status.REJECTED;
+        if (currentStatus === Status.APPROVED) return Status.APPROVED;
+        return Status.APPROVED;
+    }
+    if (project.sendDate) return Status.WAITING_APPROVAL;
+    if (project.endDate) return Status.DONE;
+    return Status.IN_PROGRESS;
+};
+
+// Valida se uma transição de workflow é permitida a partir do status atual.
+// Retorna true se a ação pode ser executada no status dado.
+export const canTransitionTo = (currentStatus: Status, action: 'COMPLETE' | 'SEND' | 'APPROVE' | 'REJECT'): boolean => {
+    switch (action) {
+        case 'COMPLETE':
+            return currentStatus === Status.IN_PROGRESS;
+        case 'SEND':
+            return currentStatus === Status.DONE;
+        case 'APPROVE':
+        case 'REJECT':
+            return currentStatus === Status.WAITING_APPROVAL;
+        default:
+            return false;
+    }
+};
+
+// Identifica se um status é terminal (não deveria receber mais edições automáticas)
+export const isTerminalStatus = (status: Status): boolean => {
+    return status === Status.REVISED;
 };

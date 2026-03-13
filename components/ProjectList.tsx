@@ -4,7 +4,7 @@ import { ProjectFile, Status, Discipline, RevisionReason, Period, ProjectPhase }
 import { format, parseISO, isValid } from 'date-fns';
 import { Trash2, GitBranch, History, CornerDownRight, AlertTriangle, Edit2, Save, X, Eye, ArrowUpDown, ArrowUp, ArrowDown, BadgeCheck, Send, CheckSquare, ThumbsDown, List, Search, ArrowUpCircle } from 'lucide-react';
 import { subscribeToClients } from '../services/db';
-import { getProjectBaseName, getRevisionNumber, formatDateDisplay, calculateBusinessDaysWithHolidays, getStatusColor } from '../utils';
+import { getProjectBaseName, getRevisionNumber, formatDateDisplay, calculateBusinessDaysWithHolidays, getStatusColor, inferStatusFromDates } from '../utils';
 
 interface ProjectListProps {
   projects: ProjectFile[];
@@ -227,17 +227,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
           }
       }
 
-      if (updated.feedbackDate) { 
-          if (updated.status !== Status.REJECTED && updated.status !== Status.APPROVED && updated.status !== Status.REVISED) { 
-              updated.status = Status.APPROVED; 
-          } 
-      } else if (updated.sendDate) { 
-          updated.status = Status.WAITING_APPROVAL; 
-      } else if (updated.endDate) { 
-          updated.status = Status.DONE; 
-      } else { 
-          updated.status = Status.IN_PROGRESS; 
-      } 
+      updated.status = inferStatusFromDates(updated);
       
       if (field === 'status') { 
           if ((value === Status.APPROVED || value === Status.REJECTED) && !updated.feedbackDate) { 
