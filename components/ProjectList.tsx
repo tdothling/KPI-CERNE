@@ -38,7 +38,8 @@ const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHist
     const canPromote = onPromote && 
                        project.phase === ProjectPhase.PRELIMINARY && 
                        (project.status === Status.DONE || project.status === Status.WAITING_APPROVAL || project.status === Status.APPROVED) &&
-                       !hasExecutiveVersion;
+                       !hasExecutiveVersion &&
+                       isLastInGroup;
 
     let feedbackColorClass = "text-slate-600 dark:text-slate-400";
     if (project.status === Status.APPROVED) feedbackColorClass = "text-emerald-700 dark:text-emerald-400 font-medium";
