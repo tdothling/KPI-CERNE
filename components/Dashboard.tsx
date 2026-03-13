@@ -231,7 +231,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
     const otdChartData = [
          { name: 'No Prazo', value: totalOnTime, color: '#10b981' }, 
          { name: 'Atrasado', value: totalSlaMeasured - totalOnTime, color: '#ef4444' }
-    ];
+    ].filter(d => d.value > 0);
 
     // Sort alerts: ATRASADO first
     alerts.sort((a: any, b: any) => {
