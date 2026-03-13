@@ -13,7 +13,7 @@ import { PurchaseList } from './components/PurchaseList';
 import { LoginModal } from './components/LoginModal';
 import { AdvancedFilter } from './components/AdvancedFilter';
 import { CerneLogo } from './components/CerneLogo';
-import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Package, FileSpreadsheet, Database, LogIn, LogOut, ShoppingCart, HardHat, Search, ChevronDown, CheckSquare, Square, FileText } from 'lucide-react';
+import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Package, FileSpreadsheet, Database, LogIn, LogOut, ShoppingCart, HardHat, Search, ChevronDown, CheckSquare, Square, FileText, MoreHorizontal } from 'lucide-react';
 import { format } from 'date-fns';
 import { logoutUser, formatUsername } from './services/auth';
 import { detectDiscipline, extractMetadataFromMaterialFilename, validateFile } from './utils';
@@ -60,6 +60,7 @@ export default function App() {
   const [isMaterialBatchEditOpen, setIsMaterialBatchEditOpen] = useState(false);
   const [isHolidayManagerOpen, setIsHolidayManagerOpen] = useState(false);
   const [isClientManagerOpen, setIsClientManagerOpen] = useState(false);
+  const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
 
   const [importType, setImportType] = useState<ImportType>('PROJECT');
   const [uploadDiscipline, setUploadDiscipline] = useState<Discipline>(Discipline.ARCHITECTURE);
@@ -240,214 +241,191 @@ export default function App() {
       {(isClientFilterOpen || isDisciplineFilterOpen) && <div className="fixed inset-0 z-40 bg-transparent print:hidden" onClick={() => { setIsClientFilterOpen(false); setIsDisciplineFilterOpen(false); }}></div>}
 
       <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-40 transition-colors duration-200 print:hidden">
-        <div className="w-full px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        {/* Layer 1: Global Top Bar */}
+        <div className="w-full px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between border-b border-slate-100 dark:border-slate-700/50">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center space-x-3">
+              <CerneLogo />
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest border-l border-slate-200 dark:border-slate-700 pl-3 hidden sm:inline">KPI Tracker</span>
+            </div>
+            
+            <div className="hidden md:flex items-center relative max-w-xs ml-4">
+               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+               <input 
+                 type="text" 
+                 placeholder="Busca global..." 
+                 className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-full pl-9 pr-4 py-1.5 text-xs w-64 focus:outline-none focus:ring-1 focus:ring-brand-500/30 transition-all"
+               />
+            </div>
+          </div>
+
           <div className="flex items-center space-x-3">
-            <CerneLogo />
-            <span className="text-xs text-slate-400 font-medium ml-2 uppercase tracking-widest border-l border-slate-300 pl-2">KPI Tracker</span>
-          </div>
-
-          <div className="flex items-center space-x-4">
             {!dbConnected && (
-              <div className="hidden lg:flex items-center text-rose-600 bg-rose-50 px-3 py-1 rounded-full text-xs font-bold animate-pulse border border-rose-200" role="alert">
-                <Database size={14} className="mr-1" aria-hidden="true" />
-                DB Desconectado
+              <div className="flex items-center text-rose-600 bg-rose-50 dark:bg-rose-900/20 px-3 py-1 rounded-full text-[10px] font-bold border border-rose-100 dark:border-rose-900/30">
+                <Database size={12} className="mr-1.5" />
+                OFFLINE
               </div>
             )}
 
-            {currentUser ? (
-              <div className="hidden sm:flex items-center gap-3 pl-3 border-l border-slate-200 dark:border-slate-700">
-                <div className="flex flex-col items-end">
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{formatUsername(currentUser.email)}</span>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Online</span>
-                  </div>
-                </div>
-                <button onClick={logoutUser} className="p-2 bg-slate-100 dark:bg-slate-700 hover:bg-rose-50 dark:hover:bg-rose-900/30 text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg transition-colors" title="Sair" aria-label="Sair"><LogOut size={18} /></button>
-              </div>
-            ) : (
-              <button onClick={() => setIsLoginModalOpen(true)} className="hidden sm:flex items-center gap-2 bg-brand-50 hover:bg-brand-100 dark:bg-brand-900/20 dark:hover:bg-brand-900/40 text-brand-700 dark:text-brand-400 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border border-brand-100 dark:border-brand-900/30"><LogIn size={16} /><span>Entrar</span></button>
-            )}
-
-            <button onClick={toggleTheme} className="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" aria-label="Alternar Tema">
-              {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-            </button>
-
-            {(activeTab === 'projects' || activeTab === 'materials') && (
-              <button
-                onClick={() => setIsFilterModalOpen(true)}
-                className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg border transition-all ${projectFilter.isActive ? 'bg-brand-50 border-brand-200 text-brand-700 dark:bg-brand-900/20 dark:border-brand-800 dark:text-brand-400' : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}
-                title="Filtro Avançado (Banco de Dados)"
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={toggleTheme} 
+                className="p-2 text-slate-500 hover:text-brand-600 dark:text-slate-400 dark:hover:text-brand-400 rounded-lg transition-colors"
+                title="Alternar Tema"
               >
-                <Search className="w-4 h-4" />
-                <span className="text-sm font-medium hidden md:inline">Busca Avançada</span>
-                {projectFilter.isActive && <span className="flex h-2 w-2 rounded-full bg-brand-500"></span>}
-              </button>
-            )}
-
-            <div className="relative z-50">
-              <button
-                onClick={() => { setIsClientFilterOpen(!isClientFilterOpen); setIsDisciplineFilterOpen(false); }}
-                className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg border transition-all ${selectedClients.length > 0 ? 'bg-brand-50 border-brand-200 text-brand-700 dark:bg-brand-900/20 dark:border-brand-800 dark:text-brand-400' : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}
-              >
-                <Filter className="w-4 h-4" />
-                <span className="text-sm font-medium max-w-[100px] truncate hidden md:inline">
-                  {selectedClients.length === 0 ? 'Todos Clientes' : `${selectedClients.length} Selecionado(s)`}
-                </span>
-                <ChevronDown className="w-3 h-3 ml-1" />
+                {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
               </button>
 
-              {isClientFilterOpen && (
-                <div className="absolute top-full right-0 mt-2 w-64 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 py-2 animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
-                  <div className="px-3 pb-2 mb-2 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
-                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Filtrar Clientes</span>
-                    <button
-                      onClick={() => setSelectedClients([])}
-                      className="text-xs text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300 font-medium"
-                    >
-                      Limpar
-                    </button>
+              {currentUser ? (
+                <div className="flex items-center gap-3 pl-3 border-l border-slate-200 dark:border-slate-700">
+                  <div className="flex flex-col items-end mr-1">
+                    <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 leading-tight">{formatUsername(currentUser.email)}</span>
+                    <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-tighter">Online</span>
                   </div>
-                  <div className="max-h-60 overflow-y-auto custom-scrollbar px-1">
-                    {uniqueClients.length === 0 ? (
-                      <div className="px-3 py-2 text-sm text-slate-400 text-center italic">Nenhum cliente disponível</div>
-                    ) : (
-                      uniqueClients.map((client: string) => {
-                        const isSelected = selectedClients.includes(client);
-                        return (
-                          <button
-                            key={client}
-                            onClick={() => toggleClientSelection(client)}
-                            className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-md transition-colors ${isSelected ? 'text-brand-700 dark:text-brand-300 font-medium bg-brand-50 dark:bg-brand-900/20' : 'text-slate-700 dark:text-slate-200'}`}
-                          >
-                            {isSelected ? <CheckSquare size={16} className="shrink-0 text-brand-600 dark:text-brand-400" /> : <Square size={16} className="shrink-0 text-slate-300 dark:text-slate-500" />}
-                            <span className="truncate">{client}</span>
-                          </button>
-                        );
-                      })
-                    )}
-                  </div>
+                  <button 
+                    onClick={logoutUser} 
+                    className="p-2 bg-slate-50 dark:bg-slate-700/50 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg transition-colors border border-slate-200 dark:border-slate-700" 
+                    title="Sair"
+                  >
+                    <LogOut size={16} />
+                  </button>
                 </div>
+              ) : (
+                <button 
+                  onClick={() => setIsLoginModalOpen(true)} 
+                  className="flex items-center gap-2 bg-brand-600 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-sm hover:shadow-md transition-all active:scale-95"
+                >
+                  <LogIn size={14} />
+                  <span>Entrar</span>
+                </button>
               )}
             </div>
-
-            <div className="relative z-50">
-              <button
-                onClick={() => { setIsDisciplineFilterOpen(!isDisciplineFilterOpen); setIsClientFilterOpen(false); }}
-                className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg border transition-all ${selectedDisciplines.length > 0 ? 'bg-brand-50 border-brand-200 text-brand-700 dark:bg-brand-900/20 dark:border-brand-800 dark:text-brand-400' : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200'}`}
-              >
-                <Filter className="w-4 h-4" />
-                <span className="text-sm font-medium max-w-[100px] truncate hidden md:inline">
-                  {selectedDisciplines.length === 0 ? 'Todas Disciplinas' : `${selectedDisciplines.length} Selecionada(s)`}
-                </span>
-                <ChevronDown className="w-3 h-3 ml-1" />
-              </button>
-
-              {isDisciplineFilterOpen && (
-                <div className="absolute top-full right-0 mt-2 w-64 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 py-2 animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
-                  <div className="px-3 pb-2 mb-2 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
-                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Filtrar Disciplinas</span>
-                    <button
-                      onClick={() => setSelectedDisciplines([])}
-                      className="text-xs text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300 font-medium"
-                    >
-                      Limpar
-                    </button>
-                  </div>
-                  <div className="max-h-60 overflow-y-auto custom-scrollbar px-1">
-                    {Object.values(Discipline).map(discipline => {
-                      const isSelected = selectedDisciplines.includes(discipline);
-                      return (
-                        <button
-                          key={discipline}
-                          onClick={() => toggleDisciplineSelection(discipline)}
-                          className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-md transition-colors ${isSelected ? 'text-brand-700 dark:text-brand-300 font-medium bg-brand-50 dark:bg-brand-900/20' : 'text-slate-700 dark:text-slate-200'}`}
-                        >
-                          {isSelected ? <CheckSquare size={16} className="shrink-0 text-brand-600 dark:text-brand-400" /> : <Square size={16} className="shrink-0 text-slate-300 dark:text-slate-500" />}
-                          <span className="truncate">{discipline}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {!isReadOnly && (
-              <>
-                {activeTab !== 'dashboard' && (
-                  <button onClick={() => setIsHolidayManagerOpen(true)} className="hidden md:flex bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-lg text-sm font-medium transition-colors items-center space-x-2 border border-slate-200 dark:border-slate-600 relative" title="Gerenciar Dias Não Úteis">
-                    <CalendarDays className="w-4 h-4" />
-                    <span className="hidden lg:inline">Feriados</span>
-                  </button>
-                )}
-
-                {activeTab === 'projects' && (
-                  <button onClick={() => setIsBatchEditOpen(true)} className="hidden md:flex bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors items-center space-x-2 border border-slate-200 dark:border-slate-600">
-                    <Layers className="w-4 h-4" />
-                    <span>Edição em Lote</span>
-                  </button>
-                )}
-
-                {activeTab === 'materials' && (
-                  <button onClick={() => setIsMaterialBatchEditOpen(true)} className="hidden md:flex bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors items-center space-x-2 border border-slate-200 dark:border-slate-600">
-                    <Layers className="w-4 h-4" />
-                    <span>Edição em Lote</span>
-                  </button>
-                )}
-
-                {activeTab !== 'dashboard' && (
-                  <button onClick={() => setIsClientManagerOpen(true)} className="hidden md:flex bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors items-center space-x-2 border border-slate-200 dark:border-slate-600">
-                    <HardHat className="w-4 h-4" />
-                    <span>Registro de Obra</span>
-                  </button>
-                )}
-
-                {activeTab !== 'dashboard' && (
-                  <button onClick={handleOpenUploadModal} disabled={!dbConnected} className="bg-brand-700 hover:bg-brand-800 disabled:bg-slate-400 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm">
-                    <UploadCloud className="w-4 h-4" />
-                    <span className="hidden sm:inline">Importar</span>
-                  </button>
-                )}
-              </>
-            )}
-
-            {activeTab !== 'dashboard' && (
-              <button onClick={handleExportCSV} className="hidden md:flex bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-lg text-sm font-medium transition-colors items-center space-x-2 border border-slate-200 dark:border-slate-600">
-                <Download className="w-4 h-4" />
-                <span className="hidden lg:inline">Exportar</span>
-              </button>
-            )}
-
-            <input type="file" multiple className="hidden" ref={fileInputRef} onChange={handleFilesSelected} {...({ webkitdirectory: isFolderUpload ? "" : undefined } as any)} accept={isFolderUpload ? undefined : (importType === 'PROJECT' ? ".dwg,.rvt,.pln,.pdf,.dxf,.csv" : ".xlsx,.xls,.csv")} />
           </div>
+        </div>
+
+        {/* Layer 2: Functional Toolbar */}
+        <div className="w-full px-4 sm:px-6 lg:px-8 h-12 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/20">
+          <nav className="flex space-x-1 h-full items-center" aria-label="Tabs">
+            <NavTab active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutDashboard size={16} />} label="Indicadores" />
+            <NavTab active={activeTab === 'timeline'} onClick={() => setActiveTab('timeline')} icon={<Calendar size={16} />} label="Cronograma" />
+            <NavTab active={activeTab === 'projects'} onClick={() => setActiveTab('projects')} icon={<List size={16} />} label="Projetos" />
+            <NavTab active={activeTab === 'materials'} onClick={() => setActiveTab('materials')} icon={<Package size={16} />} label="Materiais" />
+            {showPurchasesTab && <NavTab active={activeTab === 'purchases'} onClick={() => setActiveTab('purchases')} icon={<ShoppingCart size={16} />} label="Compras" />}
+          </nav>
+
+          <div className="flex items-center gap-2">
+            {/* Filters Group */}
+            <div className="flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-0.5 overflow-hidden">
+               <FilterButton active={selectedClients.length > 0} onClick={() => { setIsClientFilterOpen(!isClientFilterOpen); setIsDisciplineFilterOpen(false); }}>
+                 <Filter size={14} />
+                 <span className="max-w-[80px] truncate">{selectedClients.length === 0 ? 'Clientes' : `${selectedClients.length}`}</span>
+                 <ChevronDown size={12} className="opacity-40" />
+               </FilterButton>
+               
+               <div className="w-px h-6 bg-slate-100 dark:bg-slate-700 mx-0.5"></div>
+               
+               <FilterButton active={selectedDisciplines.length > 0} onClick={() => { setIsDisciplineFilterOpen(!isDisciplineFilterOpen); setIsClientFilterOpen(false); }}>
+                 <Layers size={14} />
+                 <span className="max-w-[80px] truncate">{selectedDisciplines.length === 0 ? 'Disciplinas' : `${selectedDisciplines.length}`}</span>
+                 <ChevronDown size={12} className="opacity-40" />
+               </FilterButton>
+
+               <div className="w-px h-6 bg-slate-100 dark:bg-slate-700 mx-0.5"></div>
+
+               <button onClick={() => setIsFilterModalOpen(true)} className={`p-1.5 rounded transition-all hover:bg-slate-100 dark:hover:bg-slate-700 ${projectFilter.isActive ? 'text-brand-600' : 'text-slate-400'}`}>
+                 <Search size={14} />
+               </button>
+            </div>
+
+            {/* Actions Group */}
+            <div className="flex items-center gap-2 ml-2">
+              {!isReadOnly && activeTab !== 'dashboard' && (
+                <button 
+                  onClick={handleOpenUploadModal} 
+                  disabled={!dbConnected} 
+                  className="bg-brand-700 hover:bg-brand-800 disabled:bg-slate-300 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-2"
+                >
+                  <UploadCloud size={14} />
+                  <span>Importar</span>
+                </button>
+              )}
+
+              <div className="relative">
+                <button 
+                  onClick={() => setIsActionsMenuOpen(!isActionsMenuOpen)}
+                  className="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-brand-300 transition-colors"
+                >
+                  <MoreHorizontal size={18} />
+                </button>
+
+                {isActionsMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setIsActionsMenuOpen(false)}></div>
+                    <div className="absolute top-full right-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                      <div className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Ferramentas e Ações</div>
+                      
+                      {activeTab !== 'dashboard' && (
+                        <ActionMenuItem icon={<Download size={16} />} label="Exportar Dados" onClick={handleExportCSV} />
+                      )}
+                      
+                      {!isReadOnly && (
+                        <>
+                          {(activeTab === 'projects' || activeTab === 'materials') && (
+                            <ActionMenuItem 
+                              icon={<Layers size={16} />} 
+                              label="Edição em Lote" 
+                              onClick={() => { setIsBatchEditOpen(true); setIsMaterialBatchEditOpen(true); setIsActionsMenuOpen(false); }} 
+                            />
+                          )}
+                          {activeTab !== 'dashboard' && (
+                            <>
+                              <ActionMenuItem icon={<HardHat size={16} />} label="Registro de Obra" onClick={() => { setIsClientManagerOpen(true); setIsActionsMenuOpen(false); }} />
+                              <ActionMenuItem icon={<CalendarDays size={16} />} label="Gerenciar Feriados" onClick={() => { setIsHolidayManagerOpen(true); setIsActionsMenuOpen(false); }} />
+                            </>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Dropdowns logic (Clientes/Disciplinas) relocated for better layering */}
+        <div className="relative">
+          {isClientFilterOpen && (
+            <div className="absolute right-40 top-0 mt-2 z-50">
+               {/* Client Filter Content (unchanged) */}
+               <FilterDropdown 
+                 title="Filtrar Clientes" 
+                 onClear={() => setSelectedClients([])} 
+                 items={uniqueClients} 
+                 selectedItems={selectedClients} 
+                 onToggle={toggleClientSelection} 
+               />
+            </div>
+          )}
+          {isDisciplineFilterOpen && (
+            <div className="absolute right-20 top-0 mt-2 z-50">
+               <FilterDropdown 
+                 title="Filtrar Disciplinas" 
+                 onClear={() => setSelectedDisciplines([])} 
+                 items={Object.values(Discipline)} 
+                 selectedItems={selectedDisciplines} 
+                 onToggle={toggleDisciplineSelection} 
+               />
+            </div>
+          )}
         </div>
       </header>
 
-      <main className="w-full px-4 sm:px-6 lg:px-8 py-8 print:p-0 print:w-full print:max-w-none">
-
-        <div className="mb-6 flex flex-col lg:flex-row gap-4 justify-between items-start lg:items-end print:hidden">
-          <div className="w-full lg:w-auto border-b border-slate-200 dark:border-slate-700 overflow-x-auto overflow-y-hidden no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
-            <nav className="-mb-px flex space-x-6 min-w-max" aria-label="Tabs">
-              <button onClick={() => setActiveTab('dashboard')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${activeTab === 'dashboard' ? 'border-brand-600 text-brand-600 dark:text-brand-400' : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300'}`}><LayoutDashboard size={18} /> Indicadores</button>
-              <button onClick={() => setActiveTab('timeline')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${activeTab === 'timeline' ? 'border-brand-600 text-brand-600 dark:text-brand-400' : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300'}`}><Calendar size={18} /> Cronograma</button>
-              <button onClick={() => setActiveTab('projects')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${activeTab === 'projects' ? 'border-brand-600 text-brand-600 dark:text-brand-400' : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300'}`}><List size={18} /> Projetos</button>
-              <button onClick={() => setActiveTab('materials')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${activeTab === 'materials' ? 'border-brand-600 text-brand-600 dark:text-brand-400' : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300'}`}><Package size={18} /> Lista de Materiais</button>
-              {showPurchasesTab && (
-                <button onClick={() => setActiveTab('purchases')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${activeTab === 'purchases' ? 'border-brand-600 text-brand-600 dark:text-brand-400' : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300'}`}><ShoppingCart size={18} /> Compras</button>
-              )}
-            </nav>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto items-end sm:items-center">
-
-            {!currentUser && (<button onClick={() => setIsLoginModalOpen(true)} className="md:hidden w-full flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 dark:bg-brand-900/20 dark:hover:bg-brand-900/40 text-brand-700 dark:text-brand-400 px-3 py-2 rounded-lg text-sm font-medium transition-colors border border-brand-100 dark:border-brand-900/30"><LogIn size={16} /><span>Entrar</span></button>)}
-            {currentUser && (<div className="md:hidden w-full flex items-center justify-between bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-lg"><span className="text-sm font-bold text-slate-700 dark:text-slate-200">{formatUsername(currentUser.email)}</span><button onClick={logoutUser} className="text-rose-600 dark:text-rose-400 text-xs font-bold uppercase">Sair</button></div>)}
-
-            <div className="print:hidden">
-              <DateRangeFilter filterType={dateFilterType} setFilterType={setDateFilterType} referenceDate={referenceDate} setReferenceDate={setReferenceDate} customRange={customRange} setCustomRange={setCustomRange} />
+      <main className="w-full px-4 sm:px-6 lg:px-8 py-6 print:p-0 print:w-full print:max-w-none">
+        <div className="mb-6 flex flex-col sm:flex-row gap-4 justify-between items-end print:hidden">
+            <div className="w-full lg:w-auto">
+               <DateRangeFilter filterType={dateFilterType} setFilterType={setDateFilterType} referenceDate={referenceDate} setReferenceDate={setReferenceDate} customRange={customRange} setCustomRange={setCustomRange} />
             </div>
-          </div>
         </div>
 
         <div className="mt-6 print:mt-0">
@@ -654,6 +632,82 @@ export default function App() {
       {isLoginModalOpen && (
         <LoginModal onClose={() => setIsLoginModalOpen(false)} onLoginSuccess={() => setIsLoginModalOpen(false)} />
       )}
+    </div>
+  );
+}
+
+// --- Sub-componentes do Header (Redesign) ---
+
+function NavTab({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
+  return (
+    <button 
+      onClick={onClick} 
+      className={`h-full px-4 flex items-center gap-2 text-xs font-bold transition-all relative ${
+        active ? 'text-brand-700 dark:text-brand-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+      }`}
+    >
+      {icon}
+      <span>{label}</span>
+      {active && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-600 dark:bg-brand-500 rounded-t-full"></div>}
+    </button>
+  );
+}
+
+function FilterButton({ active, onClick, children }: { active: boolean, onClick: () => void, children: React.ReactNode }) {
+  return (
+    <button 
+      onClick={onClick}
+      className={`flex items-center gap-2 px-2.5 py-1 text-[11px] font-bold transition-all hover:bg-slate-50 dark:hover:bg-slate-700/50 ${
+        active ? 'text-brand-700 dark:text-brand-400' : 'text-slate-600 dark:text-slate-300'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ActionMenuItem({ icon, label, onClick }: { icon: React.ReactNode, label: string, onClick: () => void }) {
+  return (
+    <button 
+      onClick={onClick}
+      className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-left"
+    >
+      <span className="text-slate-400">{icon}</span>
+      <span className="font-medium">{label}</span>
+    </button>
+  );
+}
+
+function FilterDropdown({ title, onClear, items, selectedItems, onToggle }: { 
+  title: string, onClear: () => void, items: string[], selectedItems: string[], onToggle: (item: string) => void 
+}) {
+  return (
+    <div className="w-64 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 py-2 animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
+      <div className="px-3 pb-2 mb-2 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{title}</span>
+        <button onClick={onClear} className="text-[10px] text-brand-600 dark:text-brand-400 font-bold hover:underline">Limpar</button>
+      </div>
+      <div className="max-h-60 overflow-y-auto custom-scrollbar px-1">
+        {items.length === 0 ? (
+          <div className="px-3 py-4 text-[11px] text-slate-400 text-center italic">Nenhum item disponível</div>
+        ) : (
+          items.map(item => {
+            const isSelected = selectedItems.includes(item);
+            return (
+              <button
+                key={item}
+                onClick={() => onToggle(item)}
+                className={`w-full text-left px-3 py-2 text-[11px] flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors ${
+                  isSelected ? 'text-brand-700 dark:text-brand-300 font-bold bg-brand-50/50 dark:bg-brand-900/20' : 'text-slate-700 dark:text-slate-200'
+                }`}
+              >
+                {isSelected ? <CheckSquare size={14} className="text-brand-600 dark:text-brand-400" /> : <Square size={14} className="text-slate-300 dark:text-slate-500" />}
+                <span className="truncate">{item}</span>
+              </button>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }
