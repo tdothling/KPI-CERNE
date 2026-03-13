@@ -228,7 +228,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
       }
 
       if (updated.feedbackDate) { 
-          if (updated.status !== Status.REJECTED && updated.status !== Status.APPROVED) { 
+          if (updated.status !== Status.REJECTED && updated.status !== Status.APPROVED && updated.status !== Status.REVISED) { 
               updated.status = Status.APPROVED; 
           } 
       } else if (updated.sendDate) { 
