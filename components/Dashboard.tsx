@@ -158,7 +158,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
           const deadlineDate = calculateDeadlineDate(clientData.contractDate as string, clientData.deadlineDays as number);
           
           if (deadlineDate) {
-              const deadline = parseISO(deadlineDate);
+              const deadline = deadlineDate;
               const isDone = project.status === Status.DONE || project.status === Status.APPROVED;
 
               // Kanban Alert calculation string conditions: Vencendo Hoje or Atrasado
