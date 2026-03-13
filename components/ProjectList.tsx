@@ -80,41 +80,54 @@ const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHist
     const slaDisplay = deadlineDate ? format(deadlineDate, 'dd/MM/yy') : '-';
 
     return (
-        <tr className={`hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors ${isLastInGroup ? 'border-b-4 border-slate-100 dark:border-slate-800' : ''}`}>
-        <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200 border-r border-slate-100 dark:border-slate-700/50">
-            <div className="flex flex-col">
-                <div className="flex items-center space-x-2 overflow-hidden" title={project.filename}>
-                    {isRevision && <CornerDownRight size={14} className="text-slate-400 flex-shrink-0" />}
-                    {isRevision ? (<button onClick={() => setViewHistoryProject(project)} className="flex-shrink-0 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-[10px] font-bold px-1.5 py-0.5 rounded cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors" aria-label={`Ver histórico de revisão ${revNumber}`}>R{revNumber}</button>) : (<span className="w-6"></span>)}
-                    <span className={`truncate select-all ${isRevision ? 'text-slate-600 dark:text-slate-400 text-sm' : 'text-slate-800 dark:text-slate-200'}`}>{project.filename}</span>
+        <tr className={`hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors duration-150 ease-out ${isLastInGroup ? 'border-b-2 border-slate-200/80 dark:border-slate-700' : ''}`}>
+        <td className="px-3 py-2.5 font-medium text-slate-800 dark:text-slate-200">
+            <div className="flex items-center space-x-2 overflow-hidden" title={project.filename}>
+                {isRevision && <CornerDownRight size={14} className="text-slate-400 flex-shrink-0" />}
+                {isRevision ? (<button onClick={() => setViewHistoryProject(project)} className="flex-shrink-0 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-[10px] font-bold px-1.5 py-0.5 rounded cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors duration-150" aria-label={`Ver histórico de revisão ${revNumber}`}>R{revNumber}</button>) : (<span className="w-5"></span>)}
+                <span className={`truncate select-all ${isRevision ? 'text-slate-500 dark:text-slate-400 text-xs' : 'text-slate-800 dark:text-slate-200 text-sm'}`}>{project.filename}</span>
+                {project.phase === ProjectPhase.PRELIMINARY && <span className="flex-shrink-0 text-[9px] uppercase font-bold text-slate-500 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-600">Prel</span>}
+                {project.phase === ProjectPhase.EXECUTIVE && <span className="flex-shrink-0 text-[9px] uppercase font-bold text-violet-600 bg-violet-50 dark:bg-violet-900/30 px-1.5 py-0.5 rounded border border-violet-100 dark:border-violet-800">Exec</span>}
+            </div>
+        </td>
+        <td className="px-3 py-2.5 text-slate-600 dark:text-slate-400 text-sm truncate max-w-[120px]">{project.client}</td>
+        <td className="px-3 py-2.5 text-slate-500 dark:text-slate-400 text-xs truncate max-w-[80px]">{project.base || '-'}</td>
+        <td className="px-3 py-2.5 text-slate-600 dark:text-slate-400 text-xs">{project.discipline}</td>
+        <td className="px-3 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border whitespace-nowrap ${getStatusColor(project.status)}`}>{project.status === Status.DONE ? 'Concluído' : project.status}</span></td>
+        <td className="px-3 py-2.5 text-center text-xs">
+             {deadlineDate ? (
+                 <span className={`px-1.5 py-0.5 rounded border whitespace-nowrap text-[11px] ${isOverdue ? 'bg-rose-50 text-rose-700 border-rose-200 font-bold dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800' : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'}`} title={`Contrato: ${formatDateDisplay(contractDate || '')} | SLA: ${deadlineDays} dias`}>{slaDisplay}</span>
+             ) : <span className="text-slate-300 dark:text-slate-600">—</span>}
+        </td>
+        {/* Coluna Agrupada: Execução (Início → Conclusão) */}
+        <td className="px-3 py-1.5 border-l border-slate-200/60 dark:border-slate-700/50 text-xs">
+            <div className="flex flex-col gap-0.5">
+                <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase w-5">Ini</span>
+                    <span className="text-slate-600 dark:text-slate-400">{displayDate(project.startDate, project.startPeriod)}</span>
                 </div>
-                {/* Visualização da Fase */}
-                <div className="ml-8 mt-1">
-                    {project.phase === ProjectPhase.PRELIMINARY && <span className="text-[10px] uppercase font-bold text-slate-500 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-600">Preliminar</span>}
-                    {project.phase === ProjectPhase.EXECUTIVE && <span className="text-[10px] uppercase font-bold text-violet-600 bg-violet-50 dark:bg-violet-900/30 px-1.5 py-0.5 rounded border border-violet-100 dark:border-violet-800">Executivo</span>}
+                <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase w-5">Fim</span>
+                    <span className="text-slate-600 dark:text-slate-400">{displayDate(project.endDate, project.endPeriod)}</span>
                 </div>
             </div>
         </td>
-        <td className="px-4 py-3 text-slate-600 dark:text-slate-400 truncate max-w-[150px]">{project.client}</td>
-        <td className="px-4 py-3 text-slate-600 dark:text-slate-400 truncate max-w-[100px]">{project.base || '-'}</td>
-        <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{project.discipline}</td>
-        <td className="px-4 py-3"><span className={`px-2 py-1 rounded-full text-xs font-semibold border ${getStatusColor(project.status)}`}>{project.status === Status.DONE ? 'Concluído' : project.status}</span></td>
-        <td className="px-4 py-3 text-center text-xs">
-             {deadlineDate ? (
-                 <span className={`px-2 py-0.5 rounded border whitespace-nowrap ${isOverdue ? 'bg-rose-50 text-rose-700 border-rose-200 font-bold dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800' : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'}`} title={`Contrato: ${formatDateDisplay(contractDate || '')} | SLA: ${deadlineDays} dias`}>{slaDisplay}</span>
-             ) : '-'}
+        {/* Coluna Agrupada: Aprovação (Envio → Feedback) */}
+        <td className="px-3 py-1.5 border-l border-brand-100/60 dark:border-brand-900/20 bg-brand-50/20 dark:bg-brand-900/5 text-xs relative">
+            <div className="flex flex-col gap-0.5">
+                <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] font-semibold text-brand-400 dark:text-brand-500 uppercase w-5">Env</span>
+                    <span className="text-brand-700 dark:text-brand-400 font-medium">{displayDate(project.sendDate, project.sendPeriod)}</span>
+                    {missingSendDate && <AlertTriangle size={12} className="text-amber-500 flex-shrink-0" title="Data de Envio Faltante" />}
+                </div>
+                <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase w-5">Ret</span>
+                    <span className={feedbackColorClass}>{displayDate(project.feedbackDate, project.feedbackPeriod)}</span>
+                    {missingFeedbackDate && <AlertTriangle size={12} className="text-amber-500 flex-shrink-0" title="Data de Feedback Faltante" />}
+                </div>
+            </div>
         </td>
-        <td className="px-4 py-3 border-l border-slate-100 dark:border-slate-700/50 text-slate-600 dark:text-slate-400 text-xs">{displayDate(project.startDate, project.startPeriod)}</td>
-        <td className="px-4 py-3 border-r border-slate-100 dark:border-slate-700/50 text-slate-600 dark:text-slate-400 text-xs">{displayDate(project.endDate, project.endPeriod)}</td>
-        <td className="px-4 py-3 border-l border-brand-50 dark:border-brand-900/20 bg-brand-50/30 dark:bg-brand-900/10 text-brand-700 dark:text-brand-400 text-xs font-medium relative">
-            {displayDate(project.sendDate, project.sendPeriod)}
-            {missingSendDate && <AlertTriangle size={14} className="text-amber-500 absolute top-1 right-1" title="Data de Envio Faltante (Corrija agora)" />}
-        </td>
-        <td className={`px-4 py-3 border-r border-slate-100 dark:border-slate-900/30 bg-slate-50/30 dark:bg-slate-900/10 text-xs ${feedbackColorClass} relative`}>
-            {displayDate(project.feedbackDate, project.feedbackPeriod)}
-            {missingFeedbackDate && <AlertTriangle size={14} className="text-amber-500 absolute top-1 right-1" title="Data de Feedback Faltante" />}
-        </td>
-        <td className="px-4 py-3 text-center"><span className="font-mono text-xs text-slate-700 dark:text-slate-300">{project.blockedDays || '-'}</span></td>
+        <td className="px-3 py-2.5 text-center"><span className="font-mono text-xs text-slate-700 dark:text-slate-300">{project.blockedDays || <span className="text-slate-300 dark:text-slate-600">—</span>}</span></td>
         
         {!readOnly && (
             <td className="px-4 py-3">
@@ -166,6 +179,8 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
   const [detailsProject, setDetailsProject] = useState<ProjectFile | null>(null);
   const [viewHistoryProject, setViewHistoryProject] = useState<ProjectFile | null>(null);
   const [search, setSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 25;
   
   const [clientsList, setClientsList] = useState<{id: string, name: string}[]>([]);
   const [clientsMap, setClientsMap] = useState<Record<string, any>>({});
@@ -210,12 +225,9 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
   const sortedProjects = useMemo(() => {
     const filtered = projects.filter(p => p.filename.toLowerCase().includes(search.toLowerCase()) || p.client.toLowerCase().includes(search.toLowerCase()) || p.discipline.toLowerCase().includes(search.toLowerCase()) || (p.base && p.base.toLowerCase().includes(search.toLowerCase())));
     const groups: Record<string, ProjectFile[]> = {};
-    // Grouping by Base Name to keep Prelim/Exec/Revisions together
     filtered.forEach(p => { 
-        // Remove _EXEC suffix to group phases together
         let baseName = getProjectBaseName(p.filename).toLowerCase(); 
         if (baseName.endsWith('_exec')) baseName = baseName.replace('_exec', '');
-        
         if (!groups[baseName]) { groups[baseName] = []; } 
         groups[baseName].push(p); 
     });
@@ -229,6 +241,23 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
     });
     return sortedGroups.flat();
   }, [projects, sortConfig, search]);
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(sortedProjects.length / ITEMS_PER_PAGE));
+  const paginatedProjects = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return sortedProjects.slice(start, start + ITEMS_PER_PAGE);
+  }, [sortedProjects, currentPage, ITEMS_PER_PAGE]);
+
+  // Reset page when search/filter changes
+  useEffect(() => { setCurrentPage(1); }, [search, projects]);
+
+  // Status summary counts
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    sortedProjects.forEach(p => { counts[p.status] = (counts[p.status] || 0) + 1; });
+    return counts;
+  }, [sortedProjects]);
 
   const projectHistory = useMemo(() => { if (!viewHistoryProject) return []; const baseName = getProjectBaseName(viewHistoryProject.filename); const lineage = projects.filter(p => getProjectBaseName(p.filename) === baseName); const historyEvents = lineage.flatMap(p => { const revNum = getRevisionNumber(p.filename); return p.revisions.map(rev => ({ ...rev, fileId: p.id, filename: p.filename, revisionNumber: revNum })); }); return historyEvents.sort((a, b) => b.revisionNumber - a.revisionNumber); }, [viewHistoryProject, projects]);
   const detailsHistory = useMemo(() => { if (!detailsProject) return []; const baseName = getProjectBaseName(detailsProject.filename); const lineage = projects.filter(p => getProjectBaseName(p.filename) === baseName); const historyEvents = lineage.flatMap(p => { const revNum = getRevisionNumber(p.filename); return p.revisions.map(rev => ({ ...rev, fileId: p.id, filename: p.filename, revisionNumber: revNum })); }); return historyEvents.sort((a, b) => b.revisionNumber - a.revisionNumber); }, [detailsProject, projects]);
@@ -294,28 +323,47 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
       </div>
 
       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden transition-colors duration-200">
-      <div className="p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/30 flex items-center gap-4">
-           <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input type="text" placeholder="Buscar por cliente, arquivo ou disciplina..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-10 pr-4 py-2 border border-slate-200 dark:border-slate-600 rounded-lg focus:outline-none focus:border-brand-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+      <div className="p-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-700/30 flex flex-wrap items-center gap-3">
+           <div className="relative flex-1 min-w-[200px] max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                <input type="text" placeholder="Buscar por cliente, arquivo ou disciplina..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-9 pr-4 py-1.5 text-sm border border-slate-200 dark:border-slate-600 rounded-lg focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 bg-white dark:bg-slate-800 text-slate-900 dark:text-white transition-all duration-150" />
            </div>
-           <div className="text-sm text-slate-500 dark:text-slate-400">Total: <span className="font-semibold text-slate-800 dark:text-slate-200">{sortedProjects.length} registros</span></div>
+           <div className="flex items-center gap-2 flex-wrap text-[11px]">
+               <span className="text-slate-500 dark:text-slate-400 font-medium">{sortedProjects.length} registros</span>
+               <span className="text-slate-300 dark:text-slate-600">|</span>
+               {statusCounts[Status.IN_PROGRESS] > 0 && <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 font-medium">{statusCounts[Status.IN_PROGRESS]} em andamento</span>}
+               {statusCounts[Status.DONE] > 0 && <span className="px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400 font-medium">{statusCounts[Status.DONE]} concluídos</span>}
+               {statusCounts[Status.WAITING_APPROVAL] > 0 && <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 font-medium">{statusCounts[Status.WAITING_APPROVAL]} aguardando</span>}
+               {statusCounts[Status.APPROVED] > 0 && <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 font-medium">{statusCounts[Status.APPROVED]} aprovados</span>}
+               {statusCounts[Status.REJECTED] > 0 && <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 font-medium">{statusCounts[Status.REJECTED]} reprovados</span>}
+           </div>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto custom-scrollbar">
         <table className="w-full text-sm text-left whitespace-nowrap">
-          <thead className="text-xs text-slate-500 dark:text-slate-400 uppercase bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
-            <tr>{renderHeader("Arquivo / Fase", "filename", "min-w-[350px] border-r border-slate-200 dark:border-slate-700/50")}{renderHeader("Cliente", "client", "min-w-[150px]")}{renderHeader("Base", "base", "min-w-[100px]")}{renderHeader("Disciplina", "discipline")}{renderHeader("Status", "status")}<th className="px-4 py-3 text-center">Prazo</th>{renderHeader("Início", "startDate", "bg-slate-100/50 dark:bg-slate-800/50 border-l border-slate-200 dark:border-slate-700")}{renderHeader("Conclusão", "endDate", "bg-slate-100/50 dark:bg-slate-800/50 border-r border-slate-200 dark:border-slate-700")}{renderHeader("Envio", "sendDate", "text-brand-700 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-900/20 border-l border-brand-100 dark:border-brand-900/30")}{renderHeader("Feedback", "feedbackDate", "text-slate-700 dark:text-slate-300 bg-slate-50/50 dark:bg-slate-900/20 border-r border-slate-100 dark:border-slate-900/30")}{renderHeader("Bloqueado", "blockedDays", "w-24 text-center")}
-            {!readOnly && <th className="px-4 py-3 text-center">Ações de Fluxo</th>}
-            <th className="px-4 py-3 text-right">Detalhes{!readOnly && '/Editar'}</th>
+          <thead className="text-[11px] text-slate-500 dark:text-slate-400 uppercase bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
+            <tr>
+              {renderHeader("Arquivo / Fase", "filename", "min-w-[280px]")}
+              {renderHeader("Cliente", "client", "min-w-[120px]")}
+              {renderHeader("Base", "base", "min-w-[80px]")}
+              {renderHeader("Disciplina", "discipline")}
+              {renderHeader("Status", "status")}
+              <th className="px-3 py-2.5 text-center">Prazo</th>
+              {renderHeader("Execução", "startDate", "border-l border-slate-200/60 dark:border-slate-700/50")}
+              {renderHeader("Aprovação", "sendDate", "border-l border-brand-100/60 dark:border-brand-900/20 bg-brand-50/20 dark:bg-brand-900/5")}
+              {renderHeader("Bloq.", "blockedDays", "w-16 text-center")}
+              {!readOnly && <th className="px-3 py-2.5 text-center">Ações</th>}
+              <th className="px-3 py-2.5 text-right">{readOnly ? 'Detalhes' : 'Det./Edit.'}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-            {sortedProjects.map((project, index) => (
+            {paginatedProjects.map((project, index) => {
+                const globalIndex = (currentPage - 1) * ITEMS_PER_PAGE + index;
+                return (
                 <ProjectRow 
                     key={project.id}
                     project={project}
-                    index={index}
+                    index={globalIndex}
                     sortedProjects={sortedProjects}
                     readOnly={readOnly}
                     setViewHistoryProject={setViewHistoryProject}
@@ -331,11 +379,40 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                     executiveExistenceMap={executiveExistenceMap}
                     clientsMap={clientsMap}
                 />
-            ))}
-             {sortedProjects.length === 0 && (<tr><td colSpan={readOnly ? 12 : 14} className="px-6 py-10 text-center text-slate-400 italic">Nenhum registro encontrado.</td></tr>)}
+            );
+            })}
+             {paginatedProjects.length === 0 && (<tr><td colSpan={readOnly ? 9 : 11} className="px-6 py-10 text-center text-slate-400 italic">Nenhum registro encontrado.</td></tr>)}
           </tbody>
         </table>
       </div>
+
+      {/* Pagination Footer */}
+      {totalPages > 1 && (
+        <div className="px-4 py-2.5 border-t border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-700/20 flex items-center justify-between text-sm">
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            {((currentPage - 1) * ITEMS_PER_PAGE) + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, sortedProjects.length)} de {sortedProjects.length}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1 text-xs font-medium rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-150"
+            >
+              ← Anterior
+            </button>
+            <span className="px-3 py-1 text-xs font-semibold text-slate-700 dark:text-slate-300">
+              {currentPage} / {totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1 text-xs font-medium rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-150"
+            >
+              Próximo →
+            </button>
+          </div>
+        </div>
+      )}
       </div>
       
       {/* Edit Modal */}
