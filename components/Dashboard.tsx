@@ -1,14 +1,15 @@
 
 import React, { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { ProjectFile, Discipline, Status, MaterialDoc, ProjectPhase } from '../types';
-import { parseISO, isValid } from 'date-fns';
+import { ProjectFile, Discipline, Status, MaterialDoc, ProjectPhase, ClientDoc } from '../types';
+import { parseISO, isValid, isAfter, isSameDay, addDays, startOfDay } from 'date-fns';
 import { LayoutDashboard, FileDown } from 'lucide-react';
-import { getProjectBaseName, getRevisionNumber, calculateBusinessDaysWithHolidays } from '../utils';
+import { getProjectBaseName, getRevisionNumber, calculateBusinessDaysWithHolidays, calculateDeadlineDate } from '../utils';
 
 interface DashboardProps {
   data: ProjectFile[];
   materials?: MaterialDoc[];
+  clients?: ClientDoc[];
   isDarkMode?: boolean;
   holidays: string[];
 }
@@ -25,7 +26,7 @@ const DISCIPLINE_COLORS: Record<string, string> = {
   [Discipline.OTHER]: '#f472b6',       
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDarkMode = false, holidays }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clients = [], isDarkMode = false, holidays }) => {
   const axisColor = isDarkMode ? '#94a3b8' : '#64748b';
   const gridColor = isDarkMode ? '#334155' : '#e2e8f0';
   const tooltipBg = isDarkMode ? '#1e293b' : '#ffffff';
@@ -46,6 +47,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
     const reasonsMap: Record<string, number> = {};
     // S3: Cycle Time KPI — tempo total do ciclo (startDate até feedbackDate)
     const cycleTimeByDiscipline: Record<string, { total: number; count: number }> = {};
+    
+    // OTD (On Time Delivery) metrics
+    let totalSlaMeasured = 0;
+    let totalOnTime = 0;
+    
+    // SLA Alerts Kanban
+    const alerts: ProjectFile[] = [];
+    const today = startOfDay(new Date());
+
+    // Map clients for SLA lookups
+    const clientsMap: Record<string, ClientDoc> = {};
+    clients.forEach(c => clientsMap[c.name] = c);
 
     data.forEach(project => {
       // C2: Excluir projetos REVISADOS dos cálculos de tempo e volume ativo
@@ -135,6 +148,41 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
               cycleTimeByDiscipline[project.discipline].count += 1;
           }
       }
+
+      // 5. OTD and SLA Alerts
+      // Atrasos e OTD exigem que o cliente daquele projeto tenha uma SLA associada 
+      const clientData = clientsMap[project.client];
+      const hasSLA = clientData?.contractDate && clientData?.deadlineDays !== undefined;
+      
+      if (hasSLA) {
+          const deadlineDate = calculateDeadlineDate(clientData.contractDate as string, clientData.deadlineDays as number);
+          
+          if (deadlineDate) {
+              const deadline = parseISO(deadlineDate);
+              const isDone = project.status === Status.DONE || project.status === Status.APPROVED;
+
+              // Kanban Alert calculation string conditions: Vencendo Hoje or Atrasado
+              if (!isDone && project.status !== Status.REJECTED && project.status !== Status.WAITING_APPROVAL) {
+                  if (isAfter(today, deadline)) {
+                      alerts.push({ ...project, _tempSlaStatus: 'ATRASADO' } as any);
+                  } else if (isSameDay(today, deadline) || isSameDay(addDays(today, 1), deadline)) {
+                      // Vencendo hoje ou amanha
+                      alerts.push({ ...project, _tempSlaStatus: 'VENCENDO' } as any);
+                  }
+              }
+
+              // OTD Calculation - Only measured if project is DONE/APPROVED or if it went past due in an active state
+              if (isDone && project.feedbackDate) {
+                  totalSlaMeasured++;
+                  if (!isAfter(parseISO(project.feedbackDate), deadline)) {
+                      totalOnTime++;
+                  }
+              } else if (!isDone && isAfter(today, deadline)) {
+                  // Active project that is already late also negatively hits the OTD rate
+                  totalSlaMeasured++;
+              }
+          }
+      }
     });
 
     // M4: IAPR separado por fase (Preliminar / Executivo)
@@ -179,8 +227,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
       avgCycle: cycleTimeByDiscipline[d].count ? Number((cycleTimeByDiscipline[d].total / cycleTimeByDiscipline[d].count).toFixed(1)) : 0
     }));
 
-    return { executionData, fttData, volumeData, reasonsData, clientResponseData, cycleTimeData };
-  }, [data, holidays]);
+    const otdPercentage = totalSlaMeasured > 0 ? Math.round((totalOnTime / totalSlaMeasured) * 100) : 0;
+    const otdChartData = [
+         { name: 'No Prazo', value: totalOnTime, color: '#10b981' }, 
+         { name: 'Atrasado', value: totalSlaMeasured - totalOnTime, color: '#ef4444' }
+    ];
+
+    // Sort alerts: ATRASADO first
+    alerts.sort((a: any, b: any) => {
+        if (a._tempSlaStatus === 'ATRASADO' && b._tempSlaStatus !== 'ATRASADO') return -1;
+        if (b._tempSlaStatus === 'ATRASADO' && a._tempSlaStatus !== 'ATRASADO') return 1;
+        return 0;
+    });
+
+    return { executionData, fttData, volumeData, reasonsData, clientResponseData, cycleTimeData, otdPercentage, otdChartData, totalSlaMeasured, alerts };
+  }, [data, holidays, clients]);
 
   const materialStats = useMemo(() => {
      const groups: Record<string, MaterialDoc[]> = {};
@@ -228,24 +289,83 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], isDa
         </button>
       </div>
 
-      <div className="space-y-6 mb-8">
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200 print:break-inside-avoid print:shadow-none print:border-slate-300">
-          <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-2">Massa de Projetos (Volume por Cliente e Disciplina)</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Quantidade total de arquivos demandados por cliente, segmentado por disciplina.</p>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-              <BarChart data={stats.volumeData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
-                <XAxis dataKey="name" stroke={axisColor} fontSize={12} />
-                <YAxis stroke={axisColor} fontSize={12} allowDecimals={false} />
-                <Tooltip cursor={{ fill: isDarkMode ? '#334155' : '#f1f5f9' }} contentStyle={{ borderRadius: '8px', border: isDarkMode ? '1px solid #475569' : 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', backgroundColor: tooltipBg, color: tooltipText }} itemStyle={{ color: tooltipText }} labelStyle={{ color: tooltipText }} />
-                <Legend />
-                {Object.values(Discipline).map((discipline) => (
-                  <Bar key={discipline} dataKey={discipline} stackId="a" fill={DISCIPLINE_COLORS[discipline] || '#cbd5e1'} name={discipline} />
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
+      {stats.alerts.length > 0 && (
+          <div className="mb-6 bg-rose-50 dark:bg-rose-900/10 border border-rose-200 dark:border-rose-800 rounded-xl p-6 shadow-sm">
+             <h3 className="text-lg font-bold text-rose-800 dark:text-rose-400 mb-4 flex items-center gap-2">
+                 <span className="flex h-3 w-3 relative"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span></span>
+                 Projetos Atrasados ou Próximos do Vencimento (Kanban SLA)
+             </h3>
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                 {stats.alerts.map((alert: any) => (
+                     <div key={alert.id} className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg p-4 shadow-sm flex flex-col justify-between">
+                         <div>
+                             <div className="flex justify-between items-start mb-2">
+                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${alert._tempSlaStatus === 'ATRASADO' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400'}`}>
+                                     {alert._tempSlaStatus}
+                                 </span>
+                                 <span className="text-[10px] bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300 px-1.5 py-0.5 rounded">{alert.discipline}</span>
+                             </div>
+                             <h4 className="font-semibold text-sm text-slate-800 dark:text-slate-200 line-clamp-2" title={alert.filename}>{alert.filename}</h4>
+                             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{alert.client} - {alert.base}</p>
+                         </div>
+                         <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                             <span className="text-xs font-medium text-slate-600 dark:text-slate-400">{alert.status}</span>
+                             <span className="text-xs font-bold text-rose-600 dark:text-rose-400">Verificar URGs</span>
+                         </div>
+                     </div>
+                 ))}
+             </div>
           </div>
+      )}
+
+      <div className="space-y-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 print:grid-cols-3">
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center">
+                <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-2 text-center">On-Time Delivery (OTD)</h3>
+                <p className="text-xs text-slate-400 text-center mb-4">Projetos entregues dentro da SLA</p>
+                {stats.totalSlaMeasured > 0 ? (
+                    <div className="h-32 w-full relative flex items-center justify-center">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                            <PieChart>
+                                <Pie data={stats.otdChartData} cx="50%" cy="50%" innerRadius={40} outerRadius={55} paddingAngle={2} dataKey="value">
+                                    {stats.otdChartData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
+                                    ))}
+                                </Pie>
+                                <Tooltip formatter={(value: number) => [value, 'Projetos']} contentStyle={{ backgroundColor: tooltipBg, color: tooltipText, border: isDarkMode ? '1px solid #475569' : 'none' }} itemStyle={{ color: tooltipText }} />
+                            </PieChart>
+                        </ResponsiveContainer>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                            <span className={`text-2xl font-bold ${stats.otdPercentage >= 85 ? 'text-emerald-500' : stats.otdPercentage >= 70 ? 'text-amber-500' : 'text-rose-500'}`}>
+                                {stats.otdPercentage}%
+                            </span>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="h-32 flex flex-col items-center justify-center text-slate-400 text-xs italic text-center">
+                        Nenhuma SLA<br/>medida ainda
+                    </div>
+                )}
+            </div>
+
+            <div className="col-span-1 md:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200 print:break-inside-avoid print:shadow-none print:border-slate-300">
+                <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-2">Massa de Projetos (Volume por Cliente e Disciplina)</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Quantidade total de arquivos demandados por cliente, segmentado por disciplina.</p>
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                    <BarChart data={stats.volumeData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
+                      <XAxis dataKey="name" stroke={axisColor} fontSize={12} />
+                      <YAxis stroke={axisColor} fontSize={12} allowDecimals={false} />
+                      <Tooltip cursor={{ fill: isDarkMode ? '#334155' : '#f1f5f9' }} contentStyle={{ borderRadius: '8px', border: isDarkMode ? '1px solid #475569' : 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', backgroundColor: tooltipBg, color: tooltipText }} itemStyle={{ color: tooltipText }} labelStyle={{ color: tooltipText }} />
+                      <Legend />
+                      {Object.values(Discipline).map((discipline) => (
+                        <Bar key={discipline} dataKey={discipline} stackId="a" fill={DISCIPLINE_COLORS[discipline] || '#cbd5e1'} name={discipline} />
+                      ))}
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+            </div>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 print:grid-cols-2">
