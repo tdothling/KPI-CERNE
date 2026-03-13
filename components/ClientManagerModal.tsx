@@ -14,9 +14,9 @@ interface ClientManagerModalProps {
 export const ClientManagerModal: React.FC<ClientManagerModalProps> = ({ clients, onAddClient, onUpdateClient, onDeleteClient, onClose }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   
-  const [formData, setFormData] = useState<Omit<ClientDoc, 'id'>>({ name: '', location: '', type: SiteType.CONSTRUCTION_SITE, numberOfBases: 0 });
+  const [formData, setFormData] = useState<Omit<ClientDoc, 'id'>>({ name: '', location: '', type: SiteType.CONSTRUCTION_SITE, numberOfBases: 0, contractDate: '', deadlineDays: undefined });
 
-  const resetForm = () => { setFormData({ name: '', location: '', type: SiteType.CONSTRUCTION_SITE, numberOfBases: 0 }); setEditingId(null); };
+  const resetForm = () => { setFormData({ name: '', location: '', type: SiteType.CONSTRUCTION_SITE, numberOfBases: 0, contractDate: '', deadlineDays: undefined }); setEditingId(null); };
   const handleEdit = (client: ClientDoc) => { setEditingId(client.id); const { id, ...data } = client; setFormData(data); };
   
   const handleSubmit = (e: React.FormEvent) => { 
@@ -59,6 +59,20 @@ export const ClientManagerModal: React.FC<ClientManagerModalProps> = ({ clients,
               <div><label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase">Local / Obra</label><div className="relative"><MapPin size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input type="text" value={formData.location} onChange={(e) => setFormData({ ...formData, location: e.target.value })} className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg pl-9 pr-3 py-2 outline-none focus:ring-2 focus:ring-brand-500" placeholder="Ex: São Paulo - SP" /></div></div>
               <div><label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase">Tipo de Instalação</label><div className="flex flex-col gap-2"><label className="flex items-center gap-2 cursor-pointer p-2 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"><input type="radio" name="siteType" value={SiteType.CONSTRUCTION_SITE} checked={formData.type === SiteType.CONSTRUCTION_SITE} onChange={() => setFormData({ ...formData, type: SiteType.CONSTRUCTION_SITE, numberOfBases: 0 })} className="text-brand-600 focus:ring-brand-500" /><div className="flex flex-col"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Canteiro de Obras</span><span className="text-xs text-slate-400">Obra única centralizada</span></div></label><label className="flex items-center gap-2 cursor-pointer p-2 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"><input type="radio" name="siteType" value={SiteType.OPERATIONAL_BASE} checked={formData.type === SiteType.OPERATIONAL_BASE} onChange={() => setFormData({ ...formData, type: SiteType.OPERATIONAL_BASE })} className="text-brand-600 focus:ring-brand-500" /><div className="flex flex-col"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">Bases Operacionais</span><span className="text-xs text-slate-400">Múltiplos pontos de atendimento</span></div></label></div></div>
               {formData.type === SiteType.OPERATIONAL_BASE && (<div className="animate-in fade-in slide-in-from-top-2 duration-200"><label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase">Número de Bases</label><input type="number" min="1" value={formData.numberOfBases || ''} onChange={(e) => setFormData({ ...formData, numberOfBases: parseInt(e.target.value) || 0 })} className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-brand-500" placeholder="Qtd." /></div>)}
+              
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
+                  <h5 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-3">Configuração de SLA Padrão (Opcional)</h5>
+                  <div className="grid grid-cols-2 gap-3">
+                      <div>
+                          <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Data Assinatura Contrato</label>
+                          <input type="date" value={formData.contractDate || ''} onChange={(e) => setFormData({ ...formData, contractDate: e.target.value })} className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-brand-500 dark:[color-scheme:dark]" />
+                      </div>
+                      <div>
+                          <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Dias Corridos (SLA)</label>
+                          <input type="number" min="0" value={formData.deadlineDays ?? ''} onChange={(e) => setFormData({ ...formData, deadlineDays: e.target.value === '' ? undefined : Number(e.target.value) })} className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-brand-500" placeholder="Ex: 30" />
+                      </div>
+                  </div>
+              </div>
               <div className="pt-2 flex gap-2">
                   {editingId && (<button type="button" onClick={resetForm} className="flex-1 px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-sm font-medium">Cancelar</button>)}
                   <button type="submit" className="flex-1 px-4 py-2 bg-brand-700 hover:bg-brand-800 text-white rounded-lg shadow-sm transition-colors text-sm font-medium flex items-center justify-center gap-2">{editingId ? <Save size={16} /> : <Plus size={16} />}{editingId ? 'Salvar' : 'Adicionar'}</button>
@@ -72,7 +86,16 @@ export const ClientManagerModal: React.FC<ClientManagerModalProps> = ({ clients,
                         <div key={client.id} className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm flex justify-between items-center group hover:border-brand-300 dark:hover:border-brand-700 transition-all">
                             <div className="flex items-start gap-3">
                                 <div className={`mt-1 p-2 rounded-full ${client.type === SiteType.CONSTRUCTION_SITE ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'}`}>{client.type === SiteType.CONSTRUCTION_SITE ? <HardHat size={18} /> : <Building2 size={18} />}</div>
-                                <div><h4 className="font-bold text-slate-800 dark:text-white">{client.name}</h4><div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-1"><span className="flex items-center gap-1"><MapPin size={12} /> {client.location || 'Local não informado'}</span><span>•</span><span>{client.type}</span>{client.type === SiteType.OPERATIONAL_BASE && (<><span>•</span><span className="font-semibold text-slate-700 dark:text-slate-300">{client.numberOfBases} Bases</span></>)}</div></div>
+                                <div>
+                                    <h4 className="font-bold text-slate-800 dark:text-white">{client.name}</h4>
+                                    <div className="flex items-center flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                        <span className="flex items-center gap-1"><MapPin size={12} /> {client.location || 'Local não informado'}</span>
+                                        <span>•</span>
+                                        <span>{client.type === SiteType.CONSTRUCTION_SITE ? 'Canteiro' : 'Base'}</span>
+                                        {client.type === SiteType.OPERATIONAL_BASE && (<><span>•</span><span className="font-semibold text-slate-700 dark:text-slate-300">{client.numberOfBases} Bases</span></>)}
+                                        {(client.contractDate || client.deadlineDays !== undefined) && <><span>•</span><span className="font-semibold text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/20 px-1.5 py-0.5 rounded border border-brand-100 dark:border-brand-900/30">SLA: {client.deadlineDays ?? '-'} dias</span></>}
+                                    </div>
+                                </div>
                             </div>
                             <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button onClick={() => handleEdit(client)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors" aria-label="Editar"><Edit2 size={16} /></button>

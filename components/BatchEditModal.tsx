@@ -19,8 +19,6 @@ const EDITABLE_FIELDS: { key: keyof ProjectFile; label: string; type: 'text' | '
   { key: 'base', label: 'Base / Setor', type: 'text' }, 
   { key: 'discipline', label: 'Disciplina', type: 'enum' },
   { key: 'phase', label: 'Fase (Etapa)', type: 'enum' },
-  { key: 'contractDate', label: 'Assinatura Contrato', type: 'date_no_period' },
-  { key: 'deadlineDays', label: 'Dias Corridos (SLA)', type: 'number' },
   { key: 'startDate', label: 'Data Início', type: 'date' },
   { key: 'endDate', label: 'Data Fim', type: 'date' },
   { key: 'sendDate', label: 'Data Envio', type: 'date' },

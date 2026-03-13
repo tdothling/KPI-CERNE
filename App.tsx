@@ -66,8 +66,6 @@ export default function App() {
   const [uploadPhase, setUploadPhase] = useState<ProjectPhase>(ProjectPhase.PRELIMINARY);
   const [uploadClient, setUploadClient] = useState<string>('');
   const [uploadBase, setUploadBase] = useState<string>('');
-  const [uploadContractDate, setUploadContractDate] = useState<string>('');
-  const [uploadDeadlineDays, setUploadDeadlineDays] = useState<number | ''>('');
   const [isFolderUpload, setIsFolderUpload] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -103,8 +101,6 @@ export default function App() {
     setUploadDiscipline(Discipline.ARCHITECTURE);
     setUploadClient('');
     setUploadBase('');
-    setUploadContractDate('');
-    setUploadDeadlineDays('');
     setUploadPhase(ProjectPhase.PRELIMINARY);
     setIsFolderUpload(false);
     setImportType('PROJECT');
@@ -159,8 +155,6 @@ export default function App() {
             base: finalBaseName,
             discipline: discipline,
             phase: uploadPhase,
-            contractDate: uploadContractDate || undefined,
-            deadlineDays: uploadDeadlineDays === '' ? undefined : Number(uploadDeadlineDays),
             status: Status.IN_PROGRESS,
             startDate: new Date().toISOString().split('T')[0],
             startPeriod: autoPeriod,
@@ -525,19 +519,6 @@ export default function App() {
                       <input type="radio" name="projectPhase" value={ProjectPhase.EXECUTIVE} checked={uploadPhase === ProjectPhase.EXECUTIVE} onChange={() => setUploadPhase(ProjectPhase.EXECUTIVE)} className="text-brand-600 focus:ring-brand-500" />
                       <span className="text-sm text-slate-700 dark:text-slate-300">Executivo (Padrão)</span>
                     </label>
-                  </div>
-                </div>
-              )}
-
-              {importType === 'PROJECT' && (
-                <div className="animate-in fade-in slide-in-from-top-2 duration-200 grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Data Assinatura Contrato</label>
-                    <input type="date" value={uploadContractDate} onChange={(e) => setUploadContractDate(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-base rounded-lg focus:ring-brand-500 focus:border-brand-500 block p-3 text-sm h-[46px]" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Dias Corridos (SLA)</label>
-                    <input type="number" min="0" value={uploadDeadlineDays} onChange={(e) => setUploadDeadlineDays(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Ex: 15" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-base rounded-lg focus:ring-brand-500 focus:border-brand-500 block p-3 text-sm h-[46px]" />
                   </div>
                 </div>
               )}

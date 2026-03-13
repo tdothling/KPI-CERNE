@@ -53,9 +53,6 @@ export interface ProjectFile {
   discipline: Discipline;
   phase?: ProjectPhase; // Nova coluna: Fase do Projeto
   status: Status;
-  
-  contractDate?: string; // Data de Assinatura do Contrato
-  deadlineDays?: number; // Número de dias corridos para executar
 
   startDate: string; // ISO Date
   startPeriod?: Period; // Novo
@@ -140,6 +137,10 @@ export interface ClientDoc {
   location: string; // Local da Obra
   type: SiteType;
   numberOfBases?: number; // Apenas se type for OPERATIONAL_BASE
+
+  // SLA Padrão da Obra
+  contractDate?: string; // Data de Assinatura do Contrato para esta obra
+  deadlineDays?: number; // Dias corridos previstos para execução
 }
 
 export interface KPISummary {

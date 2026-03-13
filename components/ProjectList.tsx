@@ -17,7 +17,7 @@ interface ProjectListProps {
 }
 
 // Optimization: Memoized Row Component
-const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHistoryProject, setPendingCompletion, setPendingSend, setPendingApproval, setPendingRejection, setActiveRevModal, setDetailsProject, setEditingProject, setProjectToDelete, onPromote, executiveExistenceMap }: any) => {
+const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHistoryProject, setPendingCompletion, setPendingSend, setPendingApproval, setPendingRejection, setActiveRevModal, setDetailsProject, setEditingProject, setProjectToDelete, onPromote, executiveExistenceMap, clientsMap }: any) => {
     const revNumber = getRevisionNumber(project.filename);
     const isRevision = revNumber > 0;
     const currentBase = getProjectBaseName(project.filename);
@@ -59,9 +59,13 @@ const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHist
     const missingSendDate = (project.status === Status.WAITING_APPROVAL || project.status === Status.APPROVED || project.status === Status.REJECTED) && !project.sendDate;
     const missingFeedbackDate = (project.status === Status.APPROVED || project.status === Status.REJECTED) && !project.feedbackDate;
 
-    // SLA Calculation
-    const deadlineDate = project.contractDate && project.deadlineDays !== undefined
-        ? calculateDeadlineDate(project.contractDate, project.deadlineDays)
+    // SLA Calculation via ClientDoc
+    const clientData = clientsMap[project.client];
+    const contractDate = clientData?.contractDate;
+    const deadlineDays = clientData?.deadlineDays;
+
+    const deadlineDate = contractDate && deadlineDays !== undefined
+        ? calculateDeadlineDate(contractDate, deadlineDays)
         : null;
     
     let isOverdue = false;
@@ -97,7 +101,7 @@ const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHist
         <td className="px-4 py-3"><span className={`px-2 py-1 rounded-full text-xs font-semibold border ${getStatusColor(project.status)}`}>{project.status === Status.DONE ? 'Concluído' : project.status}</span></td>
         <td className="px-4 py-3 text-center text-xs">
              {deadlineDate ? (
-                 <span className={`px-2 py-0.5 rounded border whitespace-nowrap ${isOverdue ? 'bg-rose-50 text-rose-700 border-rose-200 font-bold dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800' : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'}`} title={`Contrato: ${formatDateDisplay(project.contractDate || '')} | SLA: ${project.deadlineDays} dias`}>{slaDisplay}</span>
+                 <span className={`px-2 py-0.5 rounded border whitespace-nowrap ${isOverdue ? 'bg-rose-50 text-rose-700 border-rose-200 font-bold dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800' : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'}`} title={`Contrato: ${formatDateDisplay(contractDate || '')} | SLA: ${deadlineDays} dias`}>{slaDisplay}</span>
              ) : '-'}
         </td>
         <td className="px-4 py-3 border-l border-slate-100 dark:border-slate-700/50 text-slate-600 dark:text-slate-400 text-xs">{displayDate(project.startDate, project.startPeriod)}</td>
@@ -164,14 +168,20 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
   const [search, setSearch] = useState('');
   
   const [clientsList, setClientsList] = useState<{id: string, name: string}[]>([]);
+  const [clientsMap, setClientsMap] = useState<Record<string, any>>({});
+  
   useEffect(() => {
-      if (editingProject) {
-          const unsub = subscribeToClients((data) => {
-              setClientsList(data.map(c => ({ id: c.id, name: c.name })));
-          });
-          return () => unsub();
-      }
-  }, [editingProject]);
+     const unsub = subscribeToClients((data) => {
+         setClientsList(data.map(c => ({ id: c.id, name: c.name })));
+         
+         const map: Record<string, any> = {};
+         data.forEach(c => {
+             map[c.name] = c;
+         });
+         setClientsMap(map);
+     });
+     return () => unsub();
+  }, []);
 
   const [pendingCompletion, setPendingCompletion] = useState<{ id: string, date: string, period: Period } | null>(null);
   const [pendingSend, setPendingSend] = useState<{ id: string, date: string, period: Period } | null>(null);
@@ -295,7 +305,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left whitespace-nowrap">
           <thead className="text-xs text-slate-500 dark:text-slate-400 uppercase bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
-            <tr>{renderHeader("Arquivo / Fase", "filename", "min-w-[350px] border-r border-slate-200 dark:border-slate-700/50")}{renderHeader("Cliente", "client", "min-w-[150px]")}{renderHeader("Base", "base", "min-w-[100px]")}{renderHeader("Disciplina", "discipline")}{renderHeader("Status", "status")}{renderHeader("Prazo", "contractDate", "text-center")}{renderHeader("Início", "startDate", "bg-slate-100/50 dark:bg-slate-800/50 border-l border-slate-200 dark:border-slate-700")}{renderHeader("Conclusão", "endDate", "bg-slate-100/50 dark:bg-slate-800/50 border-r border-slate-200 dark:border-slate-700")}{renderHeader("Envio", "sendDate", "text-brand-700 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-900/20 border-l border-brand-100 dark:border-brand-900/30")}{renderHeader("Feedback", "feedbackDate", "text-slate-700 dark:text-slate-300 bg-slate-50/50 dark:bg-slate-900/20 border-r border-slate-100 dark:border-slate-900/30")}{renderHeader("Bloqueado", "blockedDays", "w-24 text-center")}
+            <tr>{renderHeader("Arquivo / Fase", "filename", "min-w-[350px] border-r border-slate-200 dark:border-slate-700/50")}{renderHeader("Cliente", "client", "min-w-[150px]")}{renderHeader("Base", "base", "min-w-[100px]")}{renderHeader("Disciplina", "discipline")}{renderHeader("Status", "status")}<th className="px-4 py-3 text-center">Prazo</th>{renderHeader("Início", "startDate", "bg-slate-100/50 dark:bg-slate-800/50 border-l border-slate-200 dark:border-slate-700")}{renderHeader("Conclusão", "endDate", "bg-slate-100/50 dark:bg-slate-800/50 border-r border-slate-200 dark:border-slate-700")}{renderHeader("Envio", "sendDate", "text-brand-700 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-900/20 border-l border-brand-100 dark:border-brand-900/30")}{renderHeader("Feedback", "feedbackDate", "text-slate-700 dark:text-slate-300 bg-slate-50/50 dark:bg-slate-900/20 border-r border-slate-100 dark:border-slate-900/30")}{renderHeader("Bloqueado", "blockedDays", "w-24 text-center")}
             {!readOnly && <th className="px-4 py-3 text-center">Ações de Fluxo</th>}
             <th className="px-4 py-3 text-right">Detalhes{!readOnly && '/Editar'}</th>
             </tr>
@@ -319,6 +329,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                     setProjectToDelete={setProjectToDelete}
                     onPromote={onPromote}
                     executiveExistenceMap={executiveExistenceMap}
+                    clientsMap={clientsMap}
                 />
             ))}
              {sortedProjects.length === 0 && (<tr><td colSpan={readOnly ? 12 : 14} className="px-6 py-10 text-center text-slate-400 italic">Nenhum registro encontrado.</td></tr>)}
@@ -348,15 +359,6 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                 <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Disciplina</label><select value={editingProject.discipline} onChange={(e) => updateEditingField('discipline', e.target.value)} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2">{Object.values(Discipline).map(d => <option key={d} value={d}>{d}</option>)}</select></div>
                 <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Fase (Etapa)</label><select value={editingProject.phase || ProjectPhase.EXECUTIVE} onChange={(e) => updateEditingField('phase', e.target.value)} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2">{Object.values(ProjectPhase).map(p => <option key={p} value={p}>{p}</option>)}</select></div>
                 <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Status <span className="text-xs font-normal text-slate-400 ml-1">(Calculado automaticamente)</span></label><select value={editingProject.status} onChange={(e) => updateEditingField('status', e.target.value)} disabled={!editingProject.feedbackDate} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-lg px-3 py-2 cursor-not-allowed disabled:opacity-70">{Object.values(Status).map(s => <option key={s} value={s}>{s}</option>)}</select>{!editingProject.feedbackDate && <p className="text-xs text-brand-600 mt-1">Status bloqueado. Preencha as datas para avançar etapas.</p>}{editingProject.feedbackDate && <p className="text-xs text-emerald-600 mt-1">Desbloqueado: Você pode alternar entre Aprovado e Reprovado.</p>}</div>
-                
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Assinatura de Contrato</label>
-                    <input type="date" value={editingProject.contractDate || ''} onChange={(e) => updateEditingField('contractDate', e.target.value)} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 dark:[color-scheme:dark]" />
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Dias Corridos (SLA)</label>
-                    <input type="number" min="0" value={editingProject.deadlineDays ?? ''} onChange={(e) => updateEditingField('deadlineDays', e.target.value === '' ? undefined : Number(e.target.value))} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2" placeholder="Ex: 15" />
-                </div>
 
                 <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Data Início</label>
