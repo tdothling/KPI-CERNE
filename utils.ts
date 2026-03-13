@@ -1,5 +1,5 @@
 
-import { format, parseISO, isValid, differenceInBusinessDays, isWeekend, isWithinInterval } from 'date-fns';
+import { format, parseISO, isValid, differenceInBusinessDays, isWeekend, isWithinInterval, addDays } from 'date-fns';
 import { Period, Discipline, Status, ProjectFile } from './types';
 
 export const getProjectBaseName = (filename: string): string => {
@@ -180,4 +180,17 @@ export const canTransitionTo = (currentStatus: Status, action: 'COMPLETE' | 'SEN
 // Identifica se um status é terminal (não deveria receber mais edições automáticas)
 export const isTerminalStatus = (status: Status): boolean => {
     return status === Status.REVISED;
+};
+
+// Calcula a data limite somando dias corridos à data do contrato
+export const calculateDeadlineDate = (contractDate?: string, deadlineDays?: number | string): Date | null => {
+    if (!contractDate || !isValid(parseISO(contractDate)) || deadlineDays === undefined || deadlineDays === null || deadlineDays === '') {
+        return null;
+    }
+    const date = parseISO(contractDate);
+    const days = typeof deadlineDays === 'string' ? parseInt(deadlineDays, 10) : deadlineDays;
+    
+    if (isNaN(days)) return null;
+
+    return addDays(date, days);
 };

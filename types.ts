@@ -54,6 +54,9 @@ export interface ProjectFile {
   phase?: ProjectPhase; // Nova coluna: Fase do Projeto
   status: Status;
   
+  contractDate?: string; // Data de Assinatura do Contrato
+  deadlineDays?: number; // Número de dias corridos para executar
+
   startDate: string; // ISO Date
   startPeriod?: Period; // Novo
   

@@ -14,12 +14,13 @@ interface BatchEditModalProps {
 }
 
 // Fields allowed for batch editing
-// Status removed to prevent inconsistent states (Status without Date)
-const EDITABLE_FIELDS: { key: keyof ProjectFile; label: string; type: 'text' | 'number' | 'date' | 'select' | 'enum' }[] = [
+const EDITABLE_FIELDS: { key: keyof ProjectFile; label: string; type: 'text' | 'number' | 'date' | 'date_no_period' | 'select' | 'enum' }[] = [
   { key: 'client', label: 'Cliente', type: 'text' },
   { key: 'base', label: 'Base / Setor', type: 'text' }, 
   { key: 'discipline', label: 'Disciplina', type: 'enum' },
   { key: 'phase', label: 'Fase (Etapa)', type: 'enum' },
+  { key: 'contractDate', label: 'Assinatura Contrato', type: 'date_no_period' },
+  { key: 'deadlineDays', label: 'Dias Corridos (SLA)', type: 'number' },
   { key: 'startDate', label: 'Data Início', type: 'date' },
   { key: 'endDate', label: 'Data Fim', type: 'date' },
   { key: 'sendDate', label: 'Data Envio', type: 'date' },
@@ -108,8 +109,13 @@ export const BatchEditModal: React.FC<BatchEditModalProps> = ({ projects, onClos
       return;
     }
 
+    let finalValue: any = newValue;
+    if (fieldConfig.type === 'number') {
+        finalValue = newValue === '' ? undefined : Number(newValue);
+    }
+
     // Apply the value
-    onApply(Array.from(selectedIds), selectedField, newValue);
+    onApply(Array.from(selectedIds), selectedField, finalValue);
     
     // Se for um campo de data, aplica também o período correspondente
     if (fieldConfig.type === 'date') {
@@ -198,7 +204,7 @@ export const BatchEditModal: React.FC<BatchEditModalProps> = ({ projects, onClos
       );
     }
 
-    if (fieldConfig.type === 'date') {
+    if (fieldConfig.type === 'date' || fieldConfig.type === 'date_no_period') {
       return (
         <div className="flex gap-2">
             <input 
@@ -207,14 +213,16 @@ export const BatchEditModal: React.FC<BatchEditModalProps> = ({ projects, onClos
             onChange={(e) => setNewValue(e.target.value)} 
             className={`${commonClasses} dark:[color-scheme:dark]`}
             />
-            <select 
-                value={newPeriod} 
-                onChange={(e) => setNewPeriod(e.target.value as Period)}
-                className="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none"
-            >
-                <option value="MANHA">Manhã</option>
-                <option value="TARDE">Tarde</option>
-            </select>
+            {fieldConfig.type === 'date' && (
+                <select 
+                    value={newPeriod} 
+                    onChange={(e) => setNewPeriod(e.target.value as Period)}
+                    className="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none"
+                >
+                    <option value="MANHA">Manhã</option>
+                    <option value="TARDE">Tarde</option>
+                </select>
+            )}
         </div>
       );
     }
