@@ -352,18 +352,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
                 <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-2">Massa de Projetos (Volume por Cliente e Disciplina)</h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Quantidade total de arquivos demandados por cliente, segmentado por disciplina.</p>
                 <div className="h-80">
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                    <BarChart data={stats.volumeData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
-                      <XAxis dataKey="name" stroke={axisColor} fontSize={12} />
-                      <YAxis stroke={axisColor} fontSize={12} allowDecimals={false} />
-                      <Tooltip cursor={{ fill: isDarkMode ? '#334155' : '#f1f5f9' }} contentStyle={{ borderRadius: '8px', border: isDarkMode ? '1px solid #475569' : 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', backgroundColor: tooltipBg, color: tooltipText }} itemStyle={{ color: tooltipText }} labelStyle={{ color: tooltipText }} />
-                      <Legend />
-                      {Object.values(Discipline).map((discipline) => (
-                        <Bar key={discipline} dataKey={discipline} stackId="a" fill={DISCIPLINE_COLORS[discipline] || '#cbd5e1'} name={discipline} />
-                      ))}
-                    </BarChart>
-                  </ResponsiveContainer>
+                  {stats.volumeData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                        <BarChart data={stats.volumeData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
+                          <XAxis dataKey="name" stroke={axisColor} fontSize={12} />
+                          <YAxis stroke={axisColor} fontSize={12} allowDecimals={false} />
+                          <Tooltip cursor={{ fill: isDarkMode ? '#334155' : '#f1f5f9' }} contentStyle={{ borderRadius: '8px', border: isDarkMode ? '1px solid #475569' : 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', backgroundColor: tooltipBg, color: tooltipText }} itemStyle={{ color: tooltipText }} labelStyle={{ color: tooltipText }} />
+                          <Legend />
+                          {Object.values(Discipline).map((discipline) => (
+                            <Bar key={discipline} dataKey={discipline} stackId="a" fill={DISCIPLINE_COLORS[discipline] || '#cbd5e1'} name={discipline} />
+                          ))}
+                        </BarChart>
+                      </ResponsiveContainer>
+                  ) : (
+                      <div className="h-full flex items-center justify-center text-slate-400 text-sm italic">
+                          Sem dados de volume
+                      </div>
+                  )}
                 </div>
             </div>
         </div>
@@ -372,32 +378,44 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
           <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200 print:break-inside-avoid print:shadow-none print:border-slate-300">
             <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4">Média Execução por Fase (Dias Úteis)</h3>
             <div className="h-60">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                <BarChart data={stats.executionData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
-                  <XAxis dataKey="name" fontSize={10} angle={-45} textAnchor="end" height={60} interval={0} stroke={axisColor} />
-                  <YAxis unit="d" width={30} fontSize={12} stroke={axisColor} />
-                  <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ backgroundColor: tooltipBg, color: tooltipText, border: isDarkMode ? '1px solid #475569' : 'none' }} itemStyle={{ color: tooltipText }} labelStyle={{ color: tooltipText }} />
-                  <Legend verticalAlign="top" height={36}/>
-                  <Bar dataKey="avgPrelim" name="Preliminar" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="avgExec" name="Executivo" fill="#8e1c3e" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              {stats.executionData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                    <BarChart data={stats.executionData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
+                      <XAxis dataKey="name" fontSize={10} angle={-45} textAnchor="end" height={60} interval={0} stroke={axisColor} />
+                      <YAxis unit="d" width={30} fontSize={12} stroke={axisColor} />
+                      <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ backgroundColor: tooltipBg, color: tooltipText, border: isDarkMode ? '1px solid #475569' : 'none' }} itemStyle={{ color: tooltipText }} labelStyle={{ color: tooltipText }} />
+                      <Legend verticalAlign="top" height={36}/>
+                      <Bar dataKey="avgPrelim" name="Preliminar" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="avgExec" name="Executivo" fill="#8e1c3e" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+              ) : (
+                  <div className="h-full flex items-center justify-center text-slate-400 text-sm italic">
+                      Sem dados de execução
+                  </div>
+              )}
             </div>
           </div>
 
           <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200 print:break-inside-avoid print:shadow-none print:border-slate-300">
             <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4">Tempo Resposta Cliente</h3>
             <div className="h-60">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                <BarChart data={stats.clientResponseData} layout="vertical" margin={{ left: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={true} stroke={gridColor} />
-                  <XAxis type="number" unit="d" stroke={axisColor} fontSize={10} />
-                  <YAxis dataKey="name" type="category" width={80} fontSize={10} stroke={axisColor} />
-                  <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ backgroundColor: tooltipBg, color: tooltipText, border: isDarkMode ? '1px solid #475569' : 'none' }} itemStyle={{ color: tooltipText }} labelStyle={{ color: tooltipText }} formatter={(value: number) => [`${value} dias`, 'Média']} />
-                  <Bar dataKey="avgDays" name="Média Dias" radius={[0, 4, 4, 0]} barSize={20} fill="#f59e0b" />
-                </BarChart>
-              </ResponsiveContainer>
+              {stats.clientResponseData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                    <BarChart data={stats.clientResponseData} layout="vertical" margin={{ left: 10 }}>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={true} stroke={gridColor} />
+                      <XAxis type="number" unit="d" stroke={axisColor} fontSize={10} />
+                      <YAxis dataKey="name" type="category" width={80} fontSize={10} stroke={axisColor} />
+                      <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ backgroundColor: tooltipBg, color: tooltipText, border: isDarkMode ? '1px solid #475569' : 'none' }} itemStyle={{ color: tooltipText }} labelStyle={{ color: tooltipText }} formatter={(value: number) => [`${value} dias`, 'Média']} />
+                      <Bar dataKey="avgDays" name="Média Dias" radius={[0, 4, 4, 0]} barSize={20} fill="#f59e0b" />
+                    </BarChart>
+                  </ResponsiveContainer>
+              ) : (
+                  <div className="h-full flex items-center justify-center text-slate-400 text-sm italic">
+                      Sem dados de resposta
+                  </div>
+              )}
             </div>
           </div>
 
@@ -425,19 +443,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
           <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200 print:break-inside-avoid print:shadow-none print:border-slate-300">
             <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-4" title="Índice de Aprovação na Primeira Revisão">IAPR (Aprovação Direta por Fase)</h3>
             <div className="h-60">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                <BarChart data={stats.fttData} layout="vertical" margin={{ left: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={true} stroke={gridColor} />
-                  <XAxis type="number" domain={[0, 100]} unit="%" stroke={axisColor} fontSize={10} />
-                  <YAxis dataKey="name" type="category" width={120} fontSize={9} stroke={axisColor} />
-                  <Tooltip formatter={(value: number) => [`${value}%`, 'Aprovado sem Revisão']} cursor={{ fill: 'transparent' }} contentStyle={{ backgroundColor: tooltipBg, color: tooltipText, border: isDarkMode ? '1px solid #475569' : 'none' }} itemStyle={{ color: tooltipText }} labelStyle={{ color: tooltipText }} />
-                  <Bar dataKey="rate" name="Taxa de Assertividade" radius={[0, 4, 4, 0]} barSize={20}>
-                    {stats.fttData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={DISCIPLINE_COLORS[entry.name.split(' (')[0]] || '#8884d8'} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              {stats.fttData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                    <BarChart data={stats.fttData} layout="vertical" margin={{ left: 10 }}>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={true} stroke={gridColor} />
+                      <XAxis type="number" domain={[0, 100]} unit="%" stroke={axisColor} fontSize={10} />
+                      <YAxis dataKey="name" type="category" width={120} fontSize={9} stroke={axisColor} />
+                      <Tooltip formatter={(value: number) => [`${value}%`, 'Aprovado sem Revisão']} cursor={{ fill: 'transparent' }} contentStyle={{ backgroundColor: tooltipBg, color: tooltipText, border: isDarkMode ? '1px solid #475569' : 'none' }} itemStyle={{ color: tooltipText }} labelStyle={{ color: tooltipText }} />
+                      <Bar dataKey="rate" name="Taxa de Assertividade" radius={[0, 4, 4, 0]} barSize={20}>
+                        {stats.fttData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={DISCIPLINE_COLORS[entry.name.split(' (')[0]] || '#8884d8'} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+              ) : (
+                  <div className="h-full flex items-center justify-center text-slate-400 text-sm italic">
+                      Sem dados IAPR
+                  </div>
+              )}
             </div>
           </div>
 
