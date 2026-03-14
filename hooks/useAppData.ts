@@ -76,6 +76,9 @@ export function useAppData(projectFilter: ProjectFilterState) {
         const currentPeriod: Period = new Date().getHours() < 12 ? 'MANHA' : 'TARDE';
 
         let newFilename = original.filename;
+        // Remove a marcação de revisão (ex: [R1]) para o arquivo executivo
+        newFilename = newFilename.replace(/\s*\[R\d+\]/gi, '');
+
         if (!newFilename.toLowerCase().includes('exec') && !newFilename.toLowerCase().includes('rev')) {
             const parts = newFilename.split('.');
             if (parts.length > 1) {
