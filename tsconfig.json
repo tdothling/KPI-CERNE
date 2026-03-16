@@ -23,7 +23,17 @@
         "./*"
       ]
     },
-    "allowImportingTsExtensions": true,
+    "baseUrl": ".",
+    "allowImportingTsExtensions": false,
     "noEmit": true
-  }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "*.ts",
+    "*.tsx"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

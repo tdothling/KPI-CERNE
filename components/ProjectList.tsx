@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect, memo } from 'react';
 import { ProjectFile, Status, Discipline, RevisionReason, Period, ProjectPhase } from '../types';
 import { format, parseISO, isValid } from 'date-fns';
-import { Trash2, GitBranch, History, CornerDownRight, AlertTriangle, Edit2, Save, X, Eye, ArrowUpDown, ArrowUp, ArrowDown, BadgeCheck, Send, CheckSquare, ThumbsDown, List, Search, ArrowUpCircle } from 'lucide-react';
+import { Trash2, GitBranch, History, CornerDownRight, AlertTriangle, Edit2, Save, X, Eye, ArrowUpDown, ArrowUp, ArrowDown, BadgeCheck, Send, CheckSquare, ThumbsDown, List, Search, ArrowUpCircle, ChevronRight, ChevronDown } from 'lucide-react';
 import { subscribeToClients } from '../services/db';
 import { getProjectBaseName, getRevisionNumber, formatDateDisplay, calculateBusinessDaysWithHolidays, getStatusColor, inferStatusFromDates, calculateDeadlineDate } from '../utils';
 
@@ -17,7 +17,7 @@ interface ProjectListProps {
 }
 
 // Optimization: Memoized Row Component
-const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHistoryProject, setPendingCompletion, setPendingSend, setPendingApproval, setPendingRejection, setActiveRevModal, setDetailsProject, setEditingProject, setProjectToDelete, onPromote, executiveExistenceMap, clientsMap }: any) => {
+const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHistoryProject, setPendingCompletion, setPendingSend, setPendingApproval, setPendingRejection, setActiveRevModal, setDetailsProject, setEditingProject, setProjectToDelete, onPromote, executiveExistenceMap, clientsMap, isChildRow }: any) => {
     const revNumber = getRevisionNumber(project.filename);
     const isRevision = revNumber > 0;
     const currentBase = getProjectBaseName(project.filename);
@@ -80,7 +80,7 @@ const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHist
     const slaDisplay = deadlineDate ? format(deadlineDate, 'dd/MM/yy') : '-';
 
     return (
-        <tr className={`hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors duration-150 ease-out ${isLastInGroup ? 'border-b-2 border-slate-200/80 dark:border-slate-700' : ''}`}>
+        <tr className={`hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors duration-150 ease-out ${isLastInGroup ? 'border-b-2 border-slate-200/80 dark:border-slate-700' : ''} ${isChildRow ? 'bg-slate-50/60 dark:bg-slate-800/40' : ''}`}>
             <td className="px-3 py-2.5 font-medium text-slate-800 dark:text-slate-200">
                 <div className="flex items-center space-x-2 overflow-hidden" title={project.filename}>
                     {isRevision && <CornerDownRight size={14} className="text-slate-400 flex-shrink-0" />}
@@ -172,6 +172,13 @@ const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHist
 type SortKey = keyof ProjectFile | 'blockedDays';
 type SortDirection = 'asc' | 'desc';
 
+interface ProjectGroup {
+    baseName: string;
+    latestProject: ProjectFile;
+    children: ProjectFile[]; // older revisions (all except latest)
+    allProjects: ProjectFile[]; // all projects in the group, sorted by revision
+}
+
 export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, onDelete, onAddRevision, onPromote, holidays, readOnly = false }) => {
     const [activeRevModal, setActiveRevModal] = useState<string | null>(null);
     const [projectToDelete, setProjectToDelete] = useState<ProjectFile | null>(null);
@@ -181,6 +188,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
     const [search, setSearch] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const ITEMS_PER_PAGE = 25;
+    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
     const [clientsList, setClientsList] = useState<{ id: string, name: string }[]>([]);
     const [clientsMap, setClientsMap] = useState<Record<string, any>>({});
@@ -222,37 +230,55 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
         return map;
     }, [projects]);
 
-    const sortedProjects = useMemo(() => {
+    // Build grouped project data
+    const projectGroups = useMemo((): ProjectGroup[] => {
         const filtered = projects.filter(p => p.filename.toLowerCase().includes(search.toLowerCase()) || p.client.toLowerCase().includes(search.toLowerCase()) || p.discipline.toLowerCase().includes(search.toLowerCase()) || (p.base && p.base.toLowerCase().includes(search.toLowerCase())));
-        const groups: Record<string, ProjectFile[]> = {};
+        const rawGroups: Record<string, ProjectFile[]> = {};
         filtered.forEach(p => {
             let baseName = getProjectBaseName(p.filename).toLowerCase();
             if (baseName.endsWith('_exec')) baseName = baseName.replace('_exec', '');
-            if (!groups[baseName]) { groups[baseName] = []; }
-            groups[baseName].push(p);
+            if (!rawGroups[baseName]) { rawGroups[baseName] = []; }
+            rawGroups[baseName].push(p);
         });
-        Object.values(groups).forEach(group => { group.sort((a, b) => getRevisionNumber(a.filename) - getRevisionNumber(b.filename)); });
-        const sortedGroups = Object.values(groups).sort((groupA, groupB) => {
+        Object.values(rawGroups).forEach(group => { group.sort((a, b) => getRevisionNumber(a.filename) - getRevisionNumber(b.filename)); });
+        const sortedRawGroups = Object.values(rawGroups).sort((groupA, groupB) => {
             const fileA = groupA[0]; const fileB = groupB[0];
             let valA = fileA[sortConfig.key]; let valB = fileB[sortConfig.key];
             if (typeof valA === 'string') valA = valA.toLowerCase(); if (typeof valB === 'string') valB = valB.toLowerCase();
             if (sortConfig.key === 'blockedDays') { valA = fileA.blockedDays || 0; valB = fileB.blockedDays || 0; }
             if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1; if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1; return 0;
         });
-        return sortedGroups.flat();
+        return sortedRawGroups.map(group => {
+            const latest = group[group.length - 1];
+            const children = group.slice(0, group.length - 1);
+            let baseName = getProjectBaseName(latest.filename).toLowerCase();
+            if (baseName.endsWith('_exec')) baseName = baseName.replace('_exec', '');
+            return { baseName, latestProject: latest, children, allProjects: group };
+        });
     }, [projects, sortConfig, search]);
 
-    // Pagination
-    const totalPages = Math.max(1, Math.ceil(sortedProjects.length / ITEMS_PER_PAGE));
-    const paginatedProjects = useMemo(() => {
+    // Flat list for compatibility with status counts and history
+    const sortedProjects = useMemo(() => projectGroups.flatMap(g => g.allProjects), [projectGroups]);
+
+    const toggleGroup = (baseName: string) => {
+        setExpandedGroups(prev => {
+            const next = new Set(prev);
+            if (next.has(baseName)) { next.delete(baseName); } else { next.add(baseName); }
+            return next;
+        });
+    };
+
+    // Pagination (counts groups, not individual rows)
+    const totalPages = Math.max(1, Math.ceil(projectGroups.length / ITEMS_PER_PAGE));
+    const paginatedGroups = useMemo(() => {
         const start = (currentPage - 1) * ITEMS_PER_PAGE;
-        return sortedProjects.slice(start, start + ITEMS_PER_PAGE);
-    }, [sortedProjects, currentPage, ITEMS_PER_PAGE]);
+        return projectGroups.slice(start, start + ITEMS_PER_PAGE);
+    }, [projectGroups, currentPage, ITEMS_PER_PAGE]);
 
     // Reset page when search/filter changes
     useEffect(() => { setCurrentPage(1); }, [search, projects]);
 
-    // Status summary counts
+    // Status summary counts (all projects, not just visible)
     const statusCounts = useMemo(() => {
         const counts: Record<string, number> = {};
         sortedProjects.forEach(p => { counts[p.status] = (counts[p.status] || 0) + 1; });
@@ -329,7 +355,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                         <input type="text" placeholder="Buscar por cliente, arquivo ou disciplina..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-9 pr-4 py-1.5 text-sm border border-slate-200 dark:border-slate-600 rounded-lg focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 bg-white dark:bg-slate-800 text-slate-900 dark:text-white transition-all duration-150" />
                     </div>
                     <div className="flex items-center gap-2 flex-wrap text-[11px]">
-                        <span className="text-slate-500 dark:text-slate-400 font-medium">{sortedProjects.length} registros</span>
+                        <span className="text-slate-500 dark:text-slate-400 font-medium">{sortedProjects.length} registros ({projectGroups.length} projetos)</span>
                         <span className="text-slate-300 dark:text-slate-600">|</span>
                         {statusCounts[Status.IN_PROGRESS] > 0 && <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 font-medium">{statusCounts[Status.IN_PROGRESS]} em andamento</span>}
                         {statusCounts[Status.DONE] > 0 && <span className="px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400 font-medium">{statusCounts[Status.DONE]} concluídos</span>}
@@ -357,31 +383,152 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                            {paginatedProjects.map((project, index) => {
-                                const globalIndex = (currentPage - 1) * ITEMS_PER_PAGE + index;
+                            {paginatedGroups.map((group) => {
+                                const isExpanded = expandedGroups.has(group.baseName);
+                                const hasChildren = group.children.length > 0;
+                                const latestIdx = sortedProjects.indexOf(group.latestProject);
                                 return (
-                                    <ProjectRow
-                                        key={project.id}
-                                        project={project}
-                                        index={globalIndex}
-                                        sortedProjects={sortedProjects}
-                                        readOnly={readOnly}
-                                        setViewHistoryProject={setViewHistoryProject}
-                                        setPendingCompletion={setPendingCompletion}
-                                        setPendingSend={setPendingSend}
-                                        setPendingApproval={setPendingApproval}
-                                        setPendingRejection={setPendingRejection}
-                                        setActiveRevModal={setActiveRevModal}
-                                        setDetailsProject={setDetailsProject}
-                                        setEditingProject={setEditingProject}
-                                        setProjectToDelete={setProjectToDelete}
-                                        onPromote={onPromote}
-                                        executiveExistenceMap={executiveExistenceMap}
-                                        clientsMap={clientsMap}
-                                    />
+                                    <React.Fragment key={group.baseName}>
+                                        {/* Parent / Latest Revision Row */}
+                                        <tr className={`hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors duration-150 ease-out ${!isExpanded ? 'border-b-2 border-slate-200/80 dark:border-slate-700' : ''}`}>
+                                            {/* Custom first cell with chevron */}
+                                            <td className="px-3 py-2.5 font-medium text-slate-800 dark:text-slate-200">
+                                                <div className="flex items-center space-x-1.5 overflow-hidden" title={group.latestProject.filename}>
+                                                    {hasChildren ? (
+                                                        <button
+                                                            onClick={() => toggleGroup(group.baseName)}
+                                                            className="p-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors flex-shrink-0"
+                                                            aria-label={isExpanded ? 'Recolher revisões' : 'Expandir revisões'}
+                                                        >
+                                                            {isExpanded
+                                                                ? <ChevronDown size={14} className="text-brand-600 dark:text-brand-400" />
+                                                                : <ChevronRight size={14} className="text-slate-400" />
+                                                            }
+                                                        </button>
+                                                    ) : (
+                                                        <span className="w-[22px] flex-shrink-0"></span>
+                                                    )}
+                                                    {getRevisionNumber(group.latestProject.filename) > 0 && (
+                                                        <button onClick={() => setViewHistoryProject(group.latestProject)} className="flex-shrink-0 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-[10px] font-bold px-1.5 py-0.5 rounded cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors duration-150" aria-label={`Ver histórico de revisão ${getRevisionNumber(group.latestProject.filename)}`}>R{getRevisionNumber(group.latestProject.filename)}</button>
+                                                    )}
+                                                    <span className={`truncate select-all text-slate-800 dark:text-slate-200 text-sm`}>{group.latestProject.filename}</span>
+                                                    {group.latestProject.phase === ProjectPhase.PRELIMINARY && <span className="flex-shrink-0 text-[9px] uppercase font-bold text-slate-500 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-600">Prel</span>}
+                                                    {group.latestProject.phase === ProjectPhase.EXECUTIVE && <span className="flex-shrink-0 text-[9px] uppercase font-bold text-violet-600 bg-violet-50 dark:bg-violet-900/30 px-1.5 py-0.5 rounded border border-violet-100 dark:border-violet-800">Exec</span>}
+                                                    {hasChildren && (
+                                                        <span className="flex-shrink-0 text-[9px] font-medium text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">
+                                                            +{group.children.length} rev
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            {/* Remaining cells use ProjectRow-compatible rendering for the latest project */}
+                                            {(() => {
+                                                const project = group.latestProject;
+                                                const revNumber = getRevisionNumber(project.filename);
+                                                const isRevision = revNumber > 0;
+                                                const currentBase = getProjectBaseName(project.filename);
+                                                const nextProject = sortedProjects[latestIdx + 1];
+                                                const isLastInGroup = (!nextProject || getProjectBaseName(nextProject.filename) !== currentBase);
+                                                const canCreateRevision = isLastInGroup || project.status === Status.REJECTED;
+                                                const baseNameKey = getProjectBaseName(project.filename).replace(/_EXEC/gi, '').replace(/\s*\[R\d+\]/gi, '').trim().toLowerCase();
+                                                const uniqueKey = `${project.client}|${project.discipline}|${baseNameKey}`;
+                                                const hasExecutiveVersion = executiveExistenceMap.has(uniqueKey);
+                                                const canPromote = onPromote && project.phase === ProjectPhase.PRELIMINARY && (project.status === Status.DONE || project.status === Status.WAITING_APPROVAL || project.status === Status.APPROVED) && !hasExecutiveVersion && isLastInGroup;
+                                                let feedbackColorClass = "text-slate-600 dark:text-slate-400";
+                                                if (project.status === Status.APPROVED) feedbackColorClass = "text-emerald-700 dark:text-emerald-400 font-medium";
+                                                if (project.status === Status.REJECTED) feedbackColorClass = "text-rose-700 dark:text-rose-400 font-medium";
+                                                const displayDate = (date: string, period?: Period) => { const d = formatDateDisplay(date); if (d === '-') return d; if (period) return `${d} (${period === 'MANHA' ? 'M' : 'T'})`; return d; };
+                                                const currentPeriod: Period = new Date().getHours() < 12 ? 'MANHA' : 'TARDE';
+                                                const missingSendDate = (project.status === Status.WAITING_APPROVAL || project.status === Status.APPROVED || project.status === Status.REJECTED) && !project.sendDate;
+                                                const missingFeedbackDate = (project.status === Status.APPROVED || project.status === Status.REJECTED) && !project.feedbackDate;
+                                                const clientData = clientsMap[project.client];
+                                                const contractDate = clientData?.contractDate;
+                                                const deadlineDays = clientData?.deadlineDays;
+                                                const deadlineDate = contractDate && deadlineDays !== undefined ? calculateDeadlineDate(contractDate, deadlineDays) : null;
+                                                let isOverdue = false;
+                                                if (deadlineDate) {
+                                                    const deadlineStr = format(deadlineDate, 'yyyy-MM-dd');
+                                                    if (project.endDate && project.status !== Status.REVISED) { isOverdue = project.endDate > deadlineStr; }
+                                                    else if (project.status !== Status.DONE && project.status !== Status.WAITING_APPROVAL && project.status !== Status.APPROVED && project.status !== Status.REVISED) { isOverdue = new Date().toISOString().split('T')[0] > deadlineStr; }
+                                                }
+                                                const slaDisplay = deadlineDate ? format(deadlineDate, 'dd/MM/yy') : '-';
+                                                return (
+                                                    <>
+                                                        <td className="px-3 py-2.5 text-slate-600 dark:text-slate-400 text-sm truncate max-w-[120px]">{project.client}</td>
+                                                        <td className="px-3 py-2.5 text-slate-500 dark:text-slate-400 text-xs truncate max-w-[80px]">{project.base || '-'}</td>
+                                                        <td className="px-3 py-2.5 text-slate-600 dark:text-slate-400 text-xs">{project.discipline}</td>
+                                                        <td className="px-3 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border whitespace-nowrap ${getStatusColor(project.status)}`}>{project.status === Status.DONE ? 'Concluído' : project.status}</span></td>
+                                                        <td className="px-3 py-2.5 text-center text-xs">
+                                                            {deadlineDate ? (
+                                                                <span className={`px-1.5 py-0.5 rounded border whitespace-nowrap text-[11px] ${isOverdue ? 'bg-rose-50 text-rose-700 border-rose-200 font-bold dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800' : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'}`} title={`Contrato: ${formatDateDisplay(contractDate || '')} | SLA: ${deadlineDays} dias`}>{slaDisplay}</span>
+                                                            ) : <span className="text-slate-300 dark:text-slate-600">—</span>}
+                                                        </td>
+                                                        <td className="px-3 py-1.5 border-l border-slate-200/60 dark:border-slate-700/50 text-xs">
+                                                            <div className="flex flex-col gap-0.5">
+                                                                <div className="flex items-center gap-1.5"><span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase w-5">Ini</span><span className="text-slate-600 dark:text-slate-400">{displayDate(project.startDate, project.startPeriod)}</span></div>
+                                                                <div className="flex items-center gap-1.5"><span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase w-5">Fim</span><span className="text-slate-600 dark:text-slate-400">{displayDate(project.endDate, project.endPeriod)}</span></div>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-3 py-1.5 border-l border-brand-100/60 dark:border-brand-900/20 bg-brand-50/20 dark:bg-brand-900/5 text-xs relative">
+                                                            <div className="flex flex-col gap-0.5">
+                                                                <div className="flex items-center gap-1.5"><span className="text-[9px] font-semibold text-brand-400 dark:text-brand-500 uppercase w-5">Env</span><span className="text-brand-700 dark:text-brand-400 font-medium">{displayDate(project.sendDate, project.sendPeriod)}</span>{missingSendDate && <AlertTriangle size={12} className="text-amber-500 flex-shrink-0" title="Data de Envio Faltante" />}</div>
+                                                                <div className="flex items-center gap-1.5"><span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase w-5">Ret</span><span className={feedbackColorClass}>{displayDate(project.feedbackDate, project.feedbackPeriod)}</span>{missingFeedbackDate && <AlertTriangle size={12} className="text-amber-500 flex-shrink-0" title="Data de Feedback Faltante" />}</div>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-3 py-2.5 text-center"><span className="font-mono text-xs text-slate-700 dark:text-slate-300">{project.blockedDays || <span className="text-slate-300 dark:text-slate-600">—</span>}</span></td>
+                                                        {!readOnly && (
+                                                            <td className="px-4 py-3">
+                                                                <div className="flex items-center justify-center space-x-2">
+                                                                    {project.status === Status.IN_PROGRESS && (<button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingCompletion({ id: project.id, date: today, period: currentPeriod }); }} title="Concluir Execução" aria-label="Concluir Execução" className="p-1.5 bg-violet-50 text-violet-600 hover:bg-violet-100 rounded-md transition-colors border border-violet-200"><CheckSquare size={16} /></button>)}
+                                                                    {(project.status === Status.DONE || missingSendDate) && (<button onClick={() => { const today = new Date().toISOString().split('T')[0]; const defaultDate = (project.endDate && today > project.endDate) ? today : (project.endDate || today); setPendingSend({ id: project.id, date: defaultDate, period: currentPeriod }); }} title={missingSendDate ? "Corrigir Data de Envio" : "Registrar Envio ao Cliente"} aria-label="Registrar Envio" className={`p-1.5 rounded-md transition-colors border ${missingSendDate ? 'bg-amber-100 text-amber-700 border-amber-300 animate-pulse' : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200'}`}><Send size={16} /></button>)}
+                                                                    {project.status === Status.WAITING_APPROVAL && !missingSendDate && (<><button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingApproval({ id: project.id, date: today, period: currentPeriod }); }} title="Aprovar Projeto" aria-label="Aprovar" className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md transition-colors border border-emerald-200"><BadgeCheck size={16} /></button><button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingRejection({ id: project.id, date: today, period: currentPeriod }); }} title="Reprovar Projeto" aria-label="Reprovar" className="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-md transition-colors border border-rose-200"><ThumbsDown size={16} /></button></>)}
+                                                                    {canCreateRevision && project.sendDate && project.status !== Status.REVISED && project.status !== Status.WAITING_APPROVAL && (<button onClick={() => setActiveRevModal(project.id)} title={project.status === Status.REJECTED ? "Gerar Nova Revisão (Pós-Reprovação)" : "Gerar Revisão"} aria-label="Gerar Revisão" className={`p-1.5 rounded-md transition-colors border ${project.status === Status.REJECTED ? 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100' : 'text-slate-400 hover:text-brand-600 border-transparent hover:bg-brand-50'}`}><GitBranch size={16} /></button>)}
+                                                                    {canPromote && (<button onClick={() => onPromote(project.id)} title="Gerar Versão Executiva (Novo Arquivo)" className="p-1.5 bg-violet-50 text-violet-600 hover:bg-violet-100 rounded-md transition-colors border border-violet-200 animate-in zoom-in"><ArrowUpCircle size={16} /></button>)}
+                                                                </div>
+                                                            </td>
+                                                        )}
+                                                        <td className="px-4 py-3 text-right">
+                                                            <div className="flex items-center justify-end space-x-1">
+                                                                <button onClick={() => setDetailsProject(project)} className="p-1.5 text-slate-400 hover:text-violet-500 rounded-full hover:bg-violet-50 transition-colors" aria-label="Ver Detalhes"><Eye size={16} /></button>
+                                                                {!readOnly && (
+                                                                    <>
+                                                                        <button onClick={() => setEditingProject({ ...project })} className="p-1.5 text-slate-400 hover:text-blue-500 rounded-full hover:bg-blue-50 transition-colors" aria-label="Editar"><Edit2 size={16} /></button>
+                                                                        <button onClick={() => setProjectToDelete(project)} className="p-1.5 text-slate-400 hover:text-rose-500 rounded-full hover:bg-rose-50 transition-colors" aria-label="Excluir"><Trash2 size={16} /></button>
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                    </>
+                                                );
+                                            })()}
+                                        </tr>
+                                        {/* Expanded children rows (older revisions) */}
+                                        {isExpanded && group.children.map((child) => (
+                                            <ProjectRow
+                                                key={child.id}
+                                                project={child}
+                                                index={sortedProjects.indexOf(child)}
+                                                sortedProjects={sortedProjects}
+                                                readOnly={readOnly}
+                                                setViewHistoryProject={setViewHistoryProject}
+                                                setPendingCompletion={setPendingCompletion}
+                                                setPendingSend={setPendingSend}
+                                                setPendingApproval={setPendingApproval}
+                                                setPendingRejection={setPendingRejection}
+                                                setActiveRevModal={setActiveRevModal}
+                                                setDetailsProject={setDetailsProject}
+                                                setEditingProject={setEditingProject}
+                                                setProjectToDelete={setProjectToDelete}
+                                                onPromote={onPromote}
+                                                executiveExistenceMap={executiveExistenceMap}
+                                                clientsMap={clientsMap}
+                                                isChildRow={true}
+                                            />
+                                        ))}
+                                    </React.Fragment>
                                 );
                             })}
-                            {paginatedProjects.length === 0 && (<tr><td colSpan={readOnly ? 9 : 11} className="px-6 py-10 text-center text-slate-400 italic">Nenhum registro encontrado.</td></tr>)}
+                            {paginatedGroups.length === 0 && (<tr><td colSpan={readOnly ? 9 : 11} className="px-6 py-10 text-center text-slate-400 italic">Nenhum registro encontrado.</td></tr>)}
                         </tbody>
                     </table>
                 </div>
@@ -390,7 +537,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                 {totalPages > 1 && (
                     <div className="px-4 py-2.5 border-t border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-700/20 flex items-center justify-between text-sm">
                         <span className="text-xs text-slate-500 dark:text-slate-400">
-                            {((currentPage - 1) * ITEMS_PER_PAGE) + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, sortedProjects.length)} de {sortedProjects.length}
+                            {((currentPage - 1) * ITEMS_PER_PAGE) + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, projectGroups.length)} de {projectGroups.length} projetos
                         </span>
                         <div className="flex items-center gap-1">
                             <button
