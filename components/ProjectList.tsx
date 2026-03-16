@@ -80,12 +80,12 @@ const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHist
     const slaDisplay = deadlineDate ? format(deadlineDate, 'dd/MM/yy') : '-';
 
     return (
-        <tr className={`hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors duration-150 ease-out ${isLastInGroup ? 'border-b-2 border-slate-200/80 dark:border-slate-700' : ''} ${isChildRow ? 'bg-slate-50/60 dark:bg-slate-800/40' : ''}`}>
+        <tr className={`hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors duration-150 ease-out ${isLastInGroup && !isChildRow ? 'border-b-2 border-slate-200/80 dark:border-slate-700' : ''} ${isChildRow ? 'bg-slate-100/70 dark:bg-slate-900/40 border-l-4 border-brand-300/60 dark:border-brand-500/40' : ''}`}>
             <td className="px-3 py-2.5 font-medium text-slate-800 dark:text-slate-200">
                 <div className="flex items-center space-x-2 overflow-hidden" title={project.filename}>
                     {isRevision && <CornerDownRight size={14} className="text-slate-400 flex-shrink-0" />}
                     {isRevision ? (<button onClick={() => setViewHistoryProject(project)} className="flex-shrink-0 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-[10px] font-bold px-1.5 py-0.5 rounded cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors duration-150" aria-label={`Ver histórico de revisão ${revNumber}`}>R{revNumber}</button>) : (<span className="w-5"></span>)}
-                    <span className={`truncate select-all ${isRevision ? 'text-slate-500 dark:text-slate-400 text-xs' : 'text-slate-800 dark:text-slate-200 text-sm'}`}>{project.filename}</span>
+                    <span className={`truncate select-all ${isRevision ? 'text-slate-500 dark:text-slate-400 text-[11px]' : 'text-slate-800 dark:text-slate-200 text-sm'} ${isChildRow ? 'opacity-80' : ''}`}>{project.filename}</span>
                     {project.phase === ProjectPhase.PRELIMINARY && <span className="flex-shrink-0 text-[9px] uppercase font-bold text-slate-500 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-600">Prel</span>}
                     {project.phase === ProjectPhase.EXECUTIVE && <span className="flex-shrink-0 text-[9px] uppercase font-bold text-violet-600 bg-violet-50 dark:bg-violet-900/30 px-1.5 py-0.5 rounded border border-violet-100 dark:border-violet-800">Exec</span>}
                 </div>
@@ -235,10 +235,11 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
         const filtered = projects.filter(p => p.filename.toLowerCase().includes(search.toLowerCase()) || p.client.toLowerCase().includes(search.toLowerCase()) || p.discipline.toLowerCase().includes(search.toLowerCase()) || (p.base && p.base.toLowerCase().includes(search.toLowerCase())));
         const rawGroups: Record<string, ProjectFile[]> = {};
         filtered.forEach(p => {
-            let baseName = getProjectBaseName(p.filename).toLowerCase();
-            if (baseName.endsWith('_exec')) baseName = baseName.replace('_exec', '');
-            if (!rawGroups[baseName]) { rawGroups[baseName] = []; }
-            rawGroups[baseName].push(p);
+            const baseName = getProjectBaseName(p.filename).toLowerCase();
+            const phase = p.phase || ProjectPhase.PRELIMINARY;
+            const groupKey = `${baseName}|${phase}`;
+            if (!rawGroups[groupKey]) { rawGroups[groupKey] = []; }
+            rawGroups[groupKey].push(p);
         });
         Object.values(rawGroups).forEach(group => { group.sort((a, b) => getRevisionNumber(a.filename) - getRevisionNumber(b.filename)); });
         const sortedRawGroups = Object.values(rawGroups).sort((groupA, groupB) => {
@@ -251,9 +252,10 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
         return sortedRawGroups.map(group => {
             const latest = group[group.length - 1];
             const children = group.slice(0, group.length - 1);
-            let baseName = getProjectBaseName(latest.filename).toLowerCase();
-            if (baseName.endsWith('_exec')) baseName = baseName.replace('_exec', '');
-            return { baseName, latestProject: latest, children, allProjects: group };
+            const baseName = getProjectBaseName(latest.filename).toLowerCase();
+            const phase = latest.phase || ProjectPhase.PRELIMINARY;
+            const groupKey = `${baseName}|${phase}`;
+            return { baseName: groupKey, latestProject: latest, children, allProjects: group };
         });
     }, [projects, sortConfig, search]);
 
