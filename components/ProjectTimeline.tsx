@@ -1,13 +1,14 @@
 
 import React, { useMemo, useState } from 'react';
-import { ProjectFile, Discipline, Status } from '../types';
-import { differenceInCalendarDays, differenceInBusinessDays, format, startOfDay, endOfDay, eachDayOfInterval, min, max, parseISO, isValid, isWeekend, isWithinInterval } from 'date-fns';
+import { ProjectFile, Discipline, Status, ClientDoc } from '../types';
+import { differenceInCalendarDays, differenceInBusinessDays, format, startOfDay, endOfDay, eachDayOfInterval, min, max, parseISO, isValid, isWeekend, isWithinInterval, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ChevronRight, ChevronDown, Layers, ZoomIn, X, Briefcase, CalendarClock, CalendarRange, CheckCircle2 } from 'lucide-react';
 import { calculateBusinessDaysWithHolidays } from '../utils';
 
 interface ProjectTimelineProps {
   projects: ProjectFile[];
+  clients: ClientDoc[];
   holidays: string[];
 }
 
@@ -25,7 +26,7 @@ const DISCIPLINE_COLORS: Record<string, string> = {
 
 const STRIPE_PATTERN_STYLE = { backgroundImage: 'linear-gradient(45deg,rgba(255,255,255,.15) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.15) 50%,rgba(255,255,255,.15) 75%,transparent 75%,transparent)', backgroundSize: '1rem 1rem' };
 
-const ClientDetailGantt = ({ clientName, projects, holidays, onClose }: { clientName: string, projects: ProjectFile[], holidays: string[], onClose: () => void }) => {
+const ClientDetailGantt = ({ clientName, projects, holidays, clients, onClose }: { clientName: string, projects: ProjectFile[], holidays: string[], clients: ClientDoc[], onClose: () => void }) => {
     const [expandedDisciplines, setExpandedDisciplines] = useState<Set<string>>(new Set());
     const toggleDiscipline = (disc: string) => { const newSet = new Set(expandedDisciplines); if (newSet.has(disc)) newSet.delete(disc); else newSet.add(disc); setExpandedDisciplines(newSet); };
 
@@ -41,15 +42,27 @@ const ClientDetailGantt = ({ clientName, projects, holidays, onClose }: { client
             const files = discMap[disc];
             const discDates: Date[] = [];
             const fileRows: any[] = [];
+            const clientDoc = clients.find(c => c.name === clientName);
+            const deadlineDays = clientDoc?.deadlineDays || 0;
+
             files.forEach(f => {
                 const start = parseISO(f.startDate);
                 let end = (f.endDate && isValid(parseISO(f.endDate))) ? parseISO(f.endDate) : today;
                 if (end < start) end = start;
-                discDates.push(start, end); allDates.push(start, end);
+                
+                const plannedEnd = deadlineDays > 0 ? addDays(start, deadlineDays) : start;
+
+                discDates.push(start, end); 
+                allDates.push(start, end);
+                if (deadlineDays > 0) {
+                    discDates.push(plannedEnd);
+                    allDates.push(plannedEnd);
+                }
+
                 // Calcula duração considerando periodos
                 const duration = calculateBusinessDaysWithHolidays(start, end, holidays, f.startPeriod, f.endPeriod || (f.endDate ? 'TARDE' : 'TARDE'));
                 
-                fileRows.push({ id: f.id, type: 'FILE', label: f.filename, discipline: f.discipline, status: f.status, start, end, duration });
+                fileRows.push({ id: f.id, type: 'FILE', label: f.filename, discipline: f.discipline, status: f.status, start, end, duration, plannedEnd, deadlineDays });
             });
             fileRows.sort((a, b) => a.start.getTime() - b.start.getTime());
             if (discDates.length > 0) {
@@ -71,8 +84,17 @@ const ClientDetailGantt = ({ clientName, projects, holidays, onClose }: { client
     return (
         <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center md:p-4 backdrop-blur-sm p-0">
             <div className="bg-white dark:bg-slate-800 md:rounded-xl rounded-none shadow-2xl max-w-[95vw] w-full h-full md:h-[90vh] flex flex-col border dark:border-slate-700 overflow-hidden">
-                <div className="px-4 md:px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-700/50 shrink-0">
-                    <div><h3 className="text-lg md:text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2"><Briefcase size={20} className="text-slate-500" />{clientName}</h3><p className="text-xs md:text-sm text-slate-500 dark:text-slate-400">Detalhamento por Disciplina e Arquivos</p></div>
+                <div className="px-4 md:px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-start bg-slate-50 dark:bg-slate-700/50 shrink-0">
+                    <div>
+                        <h3 className="text-lg md:text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2"><Briefcase size={20} className="text-slate-500" />{clientName}</h3>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-1">
+                            <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400">Detalhamento por Disciplina e Arquivos</p>
+                            <div className="flex items-center gap-3 text-[10px] md:text-xs">
+                                <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-sm bg-slate-400"></div><span className="text-slate-600 dark:text-slate-300 font-medium tracking-tight uppercase">Executado</span></div>
+                                <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-sm border-2 border-dashed border-slate-400 bg-slate-100/50 dark:bg-slate-700/30"></div><span className="text-slate-600 dark:text-slate-300 font-medium tracking-tight uppercase">Planejado (Prazo)</span></div>
+                            </div>
+                        </div>
+                    </div>
                     <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full transition-colors text-slate-500 dark:text-slate-400" aria-label="Fechar"><X size={24} /></button>
                 </div>
                 <div className="flex-1 overflow-auto custom-scrollbar relative bg-white dark:bg-slate-800">
@@ -112,8 +134,19 @@ const ClientDetailGantt = ({ clientName, projects, holidays, onClose }: { client
                                             )}
                                         </div>
                                         <div className="flex-1 relative h-full">
+                                            {/* Sombra de Planejamento */}
+                                            {row.type === 'FILE' && row.deadlineDays > 0 && (
+                                                <div 
+                                                    className="absolute top-1.5 bottom-1.5 rounded-md border-2 border-dashed border-slate-400 dark:border-slate-500 bg-slate-100/30 dark:bg-slate-800/30 z-0 pointer-events-none"
+                                                    style={{ 
+                                                        left: `${(differenceInCalendarDays(row.start, chartStart) / totalDays) * 100}%`, 
+                                                        width: `${(Math.max(1, differenceInCalendarDays(row.plannedEnd, row.start) + 1) / totalDays) * 100}%` 
+                                                    }}
+                                                />
+                                            )}
+                                            {/* Barra Executada Principal */}
                                             <div 
-                                                className={`absolute top-2 bottom-2 rounded-md shadow-sm transition-all flex items-center px-2 whitespace-nowrap overflow-hidden text-[10px] md:text-xs font-medium text-white ${isDisc ? 'opacity-80' : ''} ${DISCIPLINE_COLORS[row.discipline] || 'bg-slate-400'} ${isRejected ? 'ring-2 ring-rose-500' : ''}`}
+                                                className={`absolute top-2.5 bottom-2.5 rounded-md shadow-sm transition-all flex items-center px-2 whitespace-nowrap overflow-hidden text-[10px] md:text-xs font-medium text-white ${isDisc ? 'opacity-80' : ''} ${DISCIPLINE_COLORS[row.discipline] || 'bg-slate-400'} ${isRejected ? 'ring-2 ring-rose-500' : ''} z-10`}
                                                 style={{ left: `${offsetPercent}%`, width: `${widthPercent}%`, ...((isDisc && !isDone) ? STRIPE_PATTERN_STYLE : {}) }}
                                             >
                                                 <span className="drop-shadow-md">{row.duration} dias</span>
@@ -130,7 +163,7 @@ const ClientDetailGantt = ({ clientName, projects, holidays, onClose }: { client
     );
 };
 
-export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({ projects, holidays }) => {
+export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({ projects, holidays, clients }) => {
     const [selectedClient, setSelectedClient] = useState<string | null>(null);
 
     const clientStats = useMemo(() => {
@@ -254,6 +287,7 @@ export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({ projects, holi
                     clientName={selectedClient} 
                     projects={projects.filter(p => p.client === selectedClient)} 
                     holidays={holidays}
+                    clients={clients}
                     onClose={() => setSelectedClient(null)} 
                 />
             )}
