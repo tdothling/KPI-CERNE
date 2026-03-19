@@ -89,6 +89,18 @@ export default function App() {
     }
   }, [currentUser, activeTab]);
 
+  useEffect(() => {
+    const input = fileInputRef.current;
+    if (!input) return;
+    if (isFolderUpload) {
+      input.setAttribute('webkitdirectory', '');
+      input.setAttribute('directory', '');
+    } else {
+      input.removeAttribute('webkitdirectory');
+      input.removeAttribute('directory');
+    }
+  }, [isFolderUpload]);
+
   const toggleTheme = () => setIsDarkMode(!isDarkMode);
 
   const selectedUploadClientDoc = (() => {
@@ -436,6 +448,27 @@ export default function App() {
           {activeTab === 'purchases' && showPurchasesTab && <div className="animate-in fade-in zoom-in-95 duration-200"><PurchaseList purchases={filteredPurchases} onAdd={handleAddPurchase} onUpdate={handleUpdatePurchase} onDelete={handleDeletePurchase} currentUser={currentUser ? formatUsername(currentUser.email) : ''} holidays={holidays} readOnly={isReadOnly} /></div>}
         </div>
       </main>
+
+      {/* Hidden file input - triggered programmatically by triggerFileSelect */}
+      <input
+        ref={(el) => {
+          (fileInputRef as React.MutableRefObject<HTMLInputElement | null>).current = el;
+          if (el) {
+            if (isFolderUpload) {
+              el.setAttribute('webkitdirectory', '');
+              el.setAttribute('directory', '');
+            } else {
+              el.removeAttribute('webkitdirectory');
+              el.removeAttribute('directory');
+            }
+          }
+        }}
+        type="file"
+        className="hidden"
+        multiple
+        accept={importType === 'MATERIAL_LIST' ? '.xlsx,.xls' : '.dwg,.rvt,.pdf,.DWG,.RVT,.PDF'}
+        onChange={handleFilesSelected}
+      />
 
       {/* Upload Modal with Phase Selector */}
       {isUploadModalOpen && (
