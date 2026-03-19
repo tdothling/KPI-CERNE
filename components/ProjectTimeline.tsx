@@ -3,7 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { ProjectFile, Discipline, Status, ClientDoc } from '../types';
 import { differenceInCalendarDays, differenceInBusinessDays, format, startOfDay, endOfDay, eachDayOfInterval, min, max, parseISO, isValid, isWeekend, isWithinInterval, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronRight, ChevronDown, Layers, ZoomIn, X, Briefcase, CalendarClock, CalendarRange, CheckCircle2 } from 'lucide-react';
+import { ChevronRight, ChevronDown, Layers, ZoomIn, X, Briefcase, CalendarClock, CalendarRange, CheckCircle2, Download } from 'lucide-react';
 import { calculateBusinessDaysWithHolidays } from '../utils';
 
 interface ProjectTimelineProps {
@@ -25,6 +25,62 @@ const DISCIPLINE_COLORS: Record<string, string> = {
 };
 
 const STRIPE_PATTERN_STYLE = { backgroundImage: 'linear-gradient(45deg,rgba(255,255,255,.15) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.15) 50%,rgba(255,255,255,.15) 75%,transparent 75%,transparent)', backgroundSize: '1rem 1rem' };
+
+const exportToMSProjectXML = (clientName: string, rows: any[]) => {
+    let xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n`;
+    xml += `<Project xmlns="http://schemas.microsoft.com/project">\n`;
+    xml += `  <Name>${clientName}</Name>\n`;
+    xml += `  <CreationDate>${format(new Date(), "yyyy-MM-dd'T'HH:mm:ss")}</CreationDate>\n`;
+    xml += `  <Tasks>\n`;
+    
+    let idCounter = 1;
+
+    rows.forEach(discRow => {
+        const discId = idCounter++;
+        const dDurHours = discRow.duration * 8;
+        xml += `    <Task>\n`;
+        xml += `      <UID>${discId}</UID>\n`;
+        xml += `      <ID>${discId}</ID>\n`;
+        xml += `      <Name>${discRow.label}</Name>\n`;
+        xml += `      <Type>1</Type>\n`;
+        xml += `      <Start>${format(discRow.start, "yyyy-MM-dd'T'08:00:00")}</Start>\n`;
+        xml += `      <Finish>${format(discRow.end, "yyyy-MM-dd'T'17:00:00")}</Finish>\n`;
+        xml += `      <Duration>PT${dDurHours}H0M0S</Duration>\n`;
+        xml += `      <DurationFormat>7</DurationFormat>\n`;
+        xml += `      <OutlineLevel>1</OutlineLevel>\n`;
+        xml += `    </Task>\n`;
+
+        if (discRow.children) {
+            discRow.children.forEach((fileRow: any) => {
+                const fileId = idCounter++;
+                const fDurHours = fileRow.duration * 8;
+                xml += `    <Task>\n`;
+                xml += `      <UID>${fileId}</UID>\n`;
+                xml += `      <ID>${fileId}</ID>\n`;
+                xml += `      <Name>${fileRow.label}</Name>\n`;
+                xml += `      <Type>1</Type>\n`;
+                xml += `      <Start>${format(fileRow.start, "yyyy-MM-dd'T'08:00:00")}</Start>\n`;
+                xml += `      <Finish>${format(fileRow.end, "yyyy-MM-dd'T'17:00:00")}</Finish>\n`;
+                xml += `      <Duration>PT${fDurHours}H0M0S</Duration>\n`;
+                xml += `      <DurationFormat>7</DurationFormat>\n`;
+                xml += `      <OutlineLevel>2</OutlineLevel>\n`;
+                xml += `    </Task>\n`;
+            });
+        }
+    });
+
+    xml += `  </Tasks>\n`;
+    xml += `</Project>`;
+
+    const blob = new Blob([xml], { type: 'application/vnd.ms-project' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Cronograma_MSProject_${clientName.replace(/\s+/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}.xml`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
 
 const ClientDetailGantt = ({ clientName, projects, holidays, clients, onClose }: { clientName: string, projects: ProjectFile[], holidays: string[], clients: ClientDoc[], onClose: () => void }) => {
     const [expandedDisciplines, setExpandedDisciplines] = useState<Set<string>>(new Set());
@@ -95,7 +151,13 @@ const ClientDetailGantt = ({ clientName, projects, holidays, clients, onClose }:
                             </div>
                         </div>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full transition-colors text-slate-500 dark:text-slate-400" aria-label="Fechar"><X size={24} /></button>
+                    <div className="flex items-center gap-3">
+                        <button onClick={() => exportToMSProjectXML(clientName, rows)} className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm">
+                            <Download size={14} />
+                            <span className="hidden sm:inline">MS Project XML</span>
+                        </button>
+                        <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full transition-colors text-slate-500 dark:text-slate-400" aria-label="Fechar"><X size={24} /></button>
+                    </div>
                 </div>
                 <div className="flex-1 overflow-auto custom-scrollbar relative bg-white dark:bg-slate-800">
                     <div style={{ width: `${chartWidth}px` }} className="relative min-h-full">
