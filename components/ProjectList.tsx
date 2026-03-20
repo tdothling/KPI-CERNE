@@ -370,6 +370,40 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
         setEditingProject(updated);
     };
 
+    const handleAddPause = () => {
+        if (!editingProject) return;
+        const newPause = { id: Math.random().toString(36).substr(2, 9), startDate: new Date().toISOString().split('T')[0] };
+        setEditingProject({
+            ...editingProject,
+            pauses: [...(editingProject.pauses || []), newPause]
+        });
+    };
+
+    const handleUpdatePause = (pauseId: string, field: 'startDate' | 'endDate' | 'reason', value: string) => {
+        if (!editingProject || !editingProject.pauses) return;
+        const updatedPauses = editingProject.pauses.map(p => 
+            p.id === pauseId ? { ...p, [field]: value } : p
+        );
+        setEditingProject({ ...editingProject, pauses: updatedPauses });
+    };
+
+    const handleRemovePause = (pauseId: string) => {
+        if (!editingProject || !editingProject.pauses) return;
+        setEditingProject({
+            ...editingProject,
+            pauses: editingProject.pauses.filter(p => p.id !== pauseId)
+        });
+    };
+
+    const handleEndPause = (pauseId: string) => {
+        if (!editingProject || !editingProject.pauses) return;
+        const today = new Date().toISOString().split('T')[0];
+        const updatedPauses = editingProject.pauses.map(p => 
+            p.id === pauseId ? { ...p, endDate: today } : p
+        );
+        setEditingProject({ ...editingProject, pauses: updatedPauses });
+    };
+
     const SortIcon = ({ column }: { column: SortKey }) => { if (sortConfig.key !== column) return <ArrowUpDown size={12} className="ml-1 text-slate-300 dark:text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity" />; return sortConfig.direction === 'asc' ? <ArrowUp size={12} className="ml-1 text-brand-600 dark:text-brand-400" /> : <ArrowDown size={12} className="ml-1 text-brand-600 dark:text-brand-400" />; };
     const renderHeader = (label: string, key: SortKey, className: string = "") => (<th className={`px-4 py-3 cursor-pointer group hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors select-none ${className}`} onClick={() => handleSort(key)}> <div className={`flex items-center ${className.includes('text-right') ? 'justify-end' : className.includes('text-center') ? 'justify-center' : 'justify-start'}`}> {label} <SortIcon column={key} /> </div> </th>);
 
@@ -669,6 +703,47 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                                     <input type="date" value={editingProject.endDate} onChange={(e) => updateEditingField('endDate', e.target.value)} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-l-lg px-3 py-2 dark:[color-scheme:dark]" />
                                     <PeriodSelector value={editingProject.endPeriod} onChange={(v) => updateEditingField('endPeriod', v)} />
                                 </div>
+                            </div>
+                            <div className="md:col-span-2 bg-slate-50 dark:bg-slate-700/30 p-4 rounded-lg border border-slate-200 dark:border-slate-700 mt-2">
+                                <div className="flex justify-between items-center mb-3">
+                                    <span className="text-xs font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wide">Pausas de Execução</span>
+                                    <button onClick={handleAddPause} className="px-3 py-1 bg-brand-100 text-brand-700 hover:bg-brand-200 dark:bg-brand-900/30 dark:text-brand-400 rounded text-xs font-semibold transition-colors flex items-center gap-1">
+                                        + Adicionar Pausa
+                                    </button>
+                                </div>
+                                
+                                {(!editingProject.pauses || editingProject.pauses.length === 0) ? (
+                                    <p className="text-sm text-slate-500 italic text-center py-2">Nenhuma pausa registrada.</p>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {editingProject.pauses.map((pause, idx) => (
+                                            <div key={pause.id} className="grid grid-cols-12 gap-3 items-center bg-white dark:bg-slate-800 p-2.5 rounded border border-slate-200 dark:border-slate-600">
+                                                <div className="col-span-1 text-center font-bold text-slate-400 text-xs">#{idx + 1}</div>
+                                                <div className="col-span-3">
+                                                    <label className="block text-[10px] text-slate-500 uppercase mb-0.5">Início</label>
+                                                    <input type="date" value={pause.startDate} onChange={(e) => handleUpdatePause(pause.id, 'startDate', e.target.value)} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded px-2 py-1 text-xs dark:[color-scheme:dark]" />
+                                                </div>
+                                                <div className="col-span-3">
+                                                    <label className="block text-[10px] text-slate-500 uppercase mb-0.5">Retomada</label>
+                                                    {pause.endDate ? (
+                                                        <input type="date" value={pause.endDate} onChange={(e) => handleUpdatePause(pause.id, 'endDate', e.target.value)} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded px-2 py-1 text-xs dark:[color-scheme:dark]" />
+                                                    ) : (
+                                                        <button onClick={() => handleEndPause(pause.id)} className="w-full bg-emerald-100 hover:bg-emerald-200 text-emerald-700 text-xs py-1 rounded border border-emerald-200 transition-colors font-medium">
+                                                            Registrar Retomada
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <div className="col-span-4">
+                                                    <label className="block text-[10px] text-slate-500 uppercase mb-0.5">Motivo</label>
+                                                    <input type="text" value={pause.reason || ''} onChange={(e) => handleUpdatePause(pause.id, 'reason', e.target.value)} placeholder="Opcional..." className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded px-2 py-1 text-xs" />
+                                                </div>
+                                                <div className="col-span-1 flex justify-end">
+                                                    <button onClick={() => handleRemovePause(pause.id)} className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded" aria-label="Remover Pausa"><Trash2 size={14} /></button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="md:col-span-2 grid grid-cols-3 gap-4 bg-slate-50 dark:bg-slate-700/30 p-4 rounded-lg border border-slate-200 dark:border-slate-700 mt-2">

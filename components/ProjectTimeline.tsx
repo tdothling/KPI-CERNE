@@ -4,7 +4,7 @@ import { ProjectFile, Discipline, Status, ClientDoc } from '../types';
 import { differenceInCalendarDays, differenceInBusinessDays, format, startOfDay, endOfDay, eachDayOfInterval, min, max, parseISO, isValid, isWeekend, isWithinInterval, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ChevronRight, ChevronDown, Layers, ZoomIn, X, Briefcase, CalendarClock, CalendarRange, CheckCircle2, Download } from 'lucide-react';
-import { calculateBusinessDaysWithHolidays } from '../utils';
+import { calculateBusinessDaysWithHolidays, calculateNetExecutionDuration } from '../utils';
 
 interface ProjectTimelineProps {
   projects: ProjectFile[];
@@ -117,8 +117,9 @@ const ClientDetailGantt = ({ clientName, projects, holidays, clients, onClose }:
 
                 // Calcula duração considerando periodos
                 const duration = calculateBusinessDaysWithHolidays(start, end, holidays, f.startPeriod, f.endPeriod || (f.endDate ? 'TARDE' : 'TARDE'));
+                const netDuration = calculateNetExecutionDuration(f, holidays);
                 
-                fileRows.push({ id: f.id, type: 'FILE', label: f.filename, discipline: f.discipline, status: f.status, start, end, duration, plannedEnd, deadlineDays });
+                fileRows.push({ id: f.id, type: 'FILE', label: f.filename, discipline: f.discipline, status: f.status, start, end, duration, netDuration, plannedEnd, deadlineDays, pauses: f.pauses || [] });
             });
             fileRows.sort((a, b) => a.start.getTime() - b.start.getTime());
             if (discDates.length > 0) {
@@ -211,8 +212,31 @@ const ClientDetailGantt = ({ clientName, projects, holidays, clients, onClose }:
                                                 className={`absolute top-2.5 bottom-2.5 rounded-md shadow-sm transition-all flex items-center px-2 whitespace-nowrap overflow-hidden text-[10px] md:text-xs font-medium text-white ${isDisc ? 'opacity-80' : ''} ${DISCIPLINE_COLORS[row.discipline] || 'bg-slate-400'} ${isRejected ? 'ring-2 ring-rose-500' : ''} z-10`}
                                                 style={{ left: `${offsetPercent}%`, width: `${widthPercent}%`, ...((isDisc && !isDone) ? STRIPE_PATTERN_STYLE : {}) }}
                                             >
-                                                <span className="drop-shadow-md">{row.duration} dias</span>
+                                                <span className="drop-shadow-md">{row.type === 'FILE' && row.netDuration !== undefined ? row.netDuration : row.duration} dias</span>
                                             </div>
+                                            
+                                            {/* Indicador Visual de Pausas */}
+                                            {row.type === 'FILE' && row.pauses && row.pauses.length > 0 && row.pauses.map((pause: any, idx: number) => {
+                                                if (!pause.startDate) return null;
+                                                const pStart = parseISO(pause.startDate);
+                                                const pEnd = pause.endDate ? parseISO(pause.endDate) : new Date();
+                                                const pOffsetDays = differenceInCalendarDays(pStart, chartStart);
+                                                const pDuration = Math.max(1, differenceInCalendarDays(pEnd, pStart) + 1);
+                                                const pOffsetPercent = (pOffsetDays / totalDays) * 100;
+                                                const pWidthPercent = (pDuration / totalDays) * 100;
+                                                return (
+                                                    <div 
+                                                        key={`pause-${row.id}-${idx}`} 
+                                                        className="absolute top-2.5 bottom-2.5 bg-black/40 dark:bg-black/60 z-[11] pointer-events-none rounded-sm border-x border-slate-400/50" 
+                                                        style={{ 
+                                                            left: `${pOffsetPercent}%`, 
+                                                            width: `${pWidthPercent}%`, 
+                                                            backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.1) 4px, rgba(255,255,255,0.1) 8px)' 
+                                                        }} 
+                                                        title={`Pausado: ${pause.reason || 'Sem motivo registrado'}`}
+                                                    />
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 );

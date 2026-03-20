@@ -45,6 +45,13 @@ export interface Revision {
   comment: string;
 }
 
+export interface ProjectPause {
+  id: string;
+  startDate: string; // ISO Date
+  endDate?: string; // ISO Date (se vazio, a pausa está em andamento)
+  reason?: string; // Opcional, para descrever o motivo
+}
+
 export interface ProjectFile {
   id: string;
   filename: string;
@@ -68,6 +75,7 @@ export interface ProjectFile {
 
   blockedDays: number; // Days waiting for client
   revisions: Revision[];
+  pauses?: ProjectPause[]; // Array de pausas de execução do time
 }
 
 // Interface para o Filtro Avançado

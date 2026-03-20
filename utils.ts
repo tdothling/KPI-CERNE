@@ -73,6 +73,56 @@ export const calculateBusinessDaysWithHolidays = (
     return Math.max(0, finalDays);
 };
 
+export const calculateNetExecutionDuration = (
+    project: Pick<ProjectFile, 'startDate' | 'endDate' | 'startPeriod' | 'endPeriod' | 'pauses'>,
+    holidays: string[]
+): number => {
+    if (!project.startDate || !isValid(parseISO(project.startDate))) return 0;
+    
+    const start = parseISO(project.startDate);
+    const end = (project.endDate && isValid(parseISO(project.endDate))) ? parseISO(project.endDate) : new Date();
+
+    // Duração bruta (Lead Time)
+    const grossDuration = calculateBusinessDaysWithHolidays(
+        start, 
+        end, 
+        holidays, 
+        project.startPeriod, 
+        project.endPeriod
+    );
+
+    if (!project.pauses || project.pauses.length === 0) {
+        return grossDuration;
+    }
+
+    // Calcula total de dias pausados (Touch Time = Gross - Paused)
+    let totalPausedDays = 0;
+    
+    for (const pause of project.pauses) {
+        if (!pause.startDate || !isValid(parseISO(pause.startDate))) continue;
+        
+        const pauseStart = parseISO(pause.startDate);
+        // Se a pausa não tem fim, considera que está pausado até o momento atual (se o projeto não acabou) ou até o fim do projeto.
+        let pauseEnd = new Date();
+        if (pause.endDate && isValid(parseISO(pause.endDate))) {
+            pauseEnd = parseISO(pause.endDate);
+        }
+        
+        // Garante que a pausa não ultrapasse o fim do projeto para o cálculo retroativo
+        if (pauseEnd > end) pauseEnd = end;
+        
+        // Se a pausa começou depois do fim do projeto (anomalia de dados), ignora
+        if (pauseStart > end) continue;
+
+        const pStart = pauseStart < start ? start : pauseStart;
+
+        const pausedDuration = calculateBusinessDaysWithHolidays(pStart, pauseEnd, holidays, 'MANHA', 'TARDE');
+        totalPausedDays += pausedDuration;
+    }
+
+    return Math.max(0, grossDuration - totalPausedDays);
+};
+
 export const getStatusColor = (status: string) => {
     switch (status) {
         case 'Aprovado': return 'text-emerald-700 bg-emerald-100 border-emerald-300 dark:bg-emerald-900/40 dark:border-emerald-700 dark:text-emerald-400';
