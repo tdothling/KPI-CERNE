@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect, memo } from 'react';
 import { ProjectFile, Status, Discipline, RevisionReason, Period, ProjectPhase } from '../types';
 import { format, parseISO, isValid } from 'date-fns';
-import { Trash2, GitBranch, History, CornerDownRight, AlertTriangle, Edit2, Save, X, Eye, ArrowUpDown, ArrowUp, ArrowDown, BadgeCheck, Send, CheckSquare, ThumbsDown, List, Search, ArrowUpCircle, ChevronRight, ChevronDown } from 'lucide-react';
+import { Trash2, GitBranch, History, CornerDownRight, AlertTriangle, Edit2, Save, X, Eye, ArrowUpDown, ArrowUp, ArrowDown, BadgeCheck, Send, CheckSquare, ThumbsDown, List, Search, ArrowUpCircle, ChevronRight, ChevronDown, Play, Pause } from 'lucide-react';
 import { subscribeToClients } from '../services/db';
 import { getProjectBaseName, getRevisionNumber, formatDateDisplay, calculateBusinessDaysWithHolidays, getStatusColor, inferStatusFromDates, calculateDeadlineDate } from '../utils';
 
@@ -17,7 +17,7 @@ interface ProjectListProps {
 }
 
 // Optimization: Memoized Row Component
-const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHistoryProject, setPendingCompletion, setPendingSend, setPendingApproval, setPendingRejection, setActiveRevModal, setDetailsProject, setEditingProject, setProjectToDelete, onPromote, executiveExistenceMap, clientsMap, isChildRow }: any) => {
+const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHistoryProject, setPendingCompletion, setPendingSend, setPendingApproval, setPendingRejection, setActiveRevModal, setDetailsProject, setEditingProject, setProjectToDelete, onPromote, onTogglePause, executiveExistenceMap, clientsMap, isChildRow }: any) => {
     const revNumber = getRevisionNumber(project.filename);
     const isRevision = revNumber > 0;
     const currentBase = getProjectBaseName(project.filename);
@@ -133,6 +133,19 @@ const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHist
                 <td className="px-4 py-3">
                     <div className="flex items-center justify-center space-x-2">
                         {project.status === Status.IN_PROGRESS && (<button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingCompletion({ id: project.id, date: today, period: currentPeriod }); }} title="Concluir Execução" aria-label="Concluir Execução" className="p-1.5 bg-violet-50 text-violet-600 hover:bg-violet-100 rounded-md transition-colors border border-violet-200"><CheckSquare size={16} /></button>)}
+                        {project.status === Status.IN_PROGRESS && (() => {
+                            const isPaused = project.pauses?.some((p: any) => !p.endDate);
+                            return (
+                                <button
+                                    onClick={() => onTogglePause(project)}
+                                    title={isPaused ? "Retomar Execução" : "Pausar Execução"}
+                                    aria-label={isPaused ? "Retomar" : "Pausar"}
+                                    className={`p-1.5 rounded-md transition-colors border ${isPaused ? 'bg-amber-50 text-amber-600 hover:bg-amber-100 border-amber-200' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'}`}
+                                >
+                                    {isPaused ? <Play size={16} /> : <Pause size={16} />}
+                                </button>
+                            );
+                        })()}
                         {/* Botão de Envio aparece se estiver Concluído OU se estiver Aguardando Aprovação mas sem data (Correção) */}
                         {(project.status === Status.DONE || missingSendDate) && (<button onClick={() => { const today = new Date().toISOString().split('T')[0]; const defaultDate = (project.endDate && today > project.endDate) ? today : (project.endDate || today); setPendingSend({ id: project.id, date: defaultDate, period: currentPeriod }); }} title={missingSendDate ? "Corrigir Data de Envio" : "Registrar Envio ao Cliente"} aria-label="Registrar Envio" className={`p-1.5 rounded-md transition-colors border ${missingSendDate ? 'bg-amber-100 text-amber-700 border-amber-300 animate-pulse' : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200'}`}><Send size={16} /></button>)}
 
@@ -404,6 +417,21 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
         setEditingProject({ ...editingProject, pauses: updatedPauses });
     };
 
+    const handleTogglePause = (projectToToggle: ProjectFile) => {
+        const today = new Date().toISOString().split('T')[0];
+        const newProject = { ...projectToToggle };
+        const pauses = [...(newProject.pauses || [])];
+        const activePauseIndex = pauses.findIndex(p => !p.endDate);
+        
+        if (activePauseIndex !== -1) {
+            pauses[activePauseIndex] = { ...pauses[activePauseIndex], endDate: today };
+        } else {
+            pauses.push({ id: Math.random().toString(36).substr(2, 9), startDate: today });
+        }
+        newProject.pauses = pauses;
+        if (onUpdate) onUpdate(newProject);
+    };
+
     const SortIcon = ({ column }: { column: SortKey }) => { if (sortConfig.key !== column) return <ArrowUpDown size={12} className="ml-1 text-slate-300 dark:text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity" />; return sortConfig.direction === 'asc' ? <ArrowUp size={12} className="ml-1 text-brand-600 dark:text-brand-400" /> : <ArrowDown size={12} className="ml-1 text-brand-600 dark:text-brand-400" />; };
     const renderHeader = (label: string, key: SortKey, className: string = "") => (<th className={`px-4 py-3 cursor-pointer group hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors select-none ${className}`} onClick={() => handleSort(key)}> <div className={`flex items-center ${className.includes('text-right') ? 'justify-end' : className.includes('text-center') ? 'justify-center' : 'justify-start'}`}> {label} <SortIcon column={key} /> </div> </th>);
 
@@ -583,6 +611,14 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                                                                         <td className="px-4 py-3">
                                                                             <div className="flex items-center justify-center space-x-2">
                                                                                 {project.status === Status.IN_PROGRESS && (<button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingCompletion({ id: project.id, date: today, period: currentPeriod }); }} title="Concluir Execução" aria-label="Concluir Execução" className="p-1.5 bg-violet-50 text-violet-600 hover:bg-violet-100 rounded-md transition-colors border border-violet-200"><CheckSquare size={16} /></button>)}
+                                                                                {project.status === Status.IN_PROGRESS && (() => {
+                                                                                    const isPaused = project.pauses?.some((p: any) => !p.endDate);
+                                                                                    return (
+                                                                                        <button onClick={() => handleTogglePause(project)} title={isPaused ? "Retomar Execução" : "Pausar Execução"} aria-label={isPaused ? "Retomar" : "Pausar"} className={`p-1.5 rounded-md transition-colors border ${isPaused ? 'bg-amber-50 text-amber-600 hover:bg-amber-100 border-amber-200' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'}`}>
+                                                                                            {isPaused ? <Play size={16} /> : <Pause size={16} />}
+                                                                                        </button>
+                                                                                    );
+                                                                                })()}
                                                                                 {(project.status === Status.DONE || missingSendDate) && (<button onClick={() => { const today = new Date().toISOString().split('T')[0]; const defaultDate = (project.endDate && today > project.endDate) ? today : (project.endDate || today); setPendingSend({ id: project.id, date: defaultDate, period: currentPeriod }); }} title={missingSendDate ? "Corrigir Data de Envio" : "Registrar Envio ao Cliente"} aria-label="Registrar Envio" className={`p-1.5 rounded-md transition-colors border ${missingSendDate ? 'bg-amber-100 text-amber-700 border-amber-300 animate-pulse' : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200'}`}><Send size={16} /></button>)}
                                                                                 {project.status === Status.WAITING_APPROVAL && !missingSendDate && (<><button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingApproval({ id: project.id, date: today, period: currentPeriod }); }} title="Aprovar Projeto" aria-label="Aprovar" className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md transition-colors border border-emerald-200"><BadgeCheck size={16} /></button><button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingRejection({ id: project.id, date: today, period: currentPeriod }); }} title="Reprovar Projeto" aria-label="Reprovar" className="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-md transition-colors border border-rose-200"><ThumbsDown size={16} /></button></>)}
                                                                                 {canCreateRevision && project.sendDate && project.status !== Status.REVISED && project.status !== Status.WAITING_APPROVAL && (<button onClick={() => setActiveRevModal(project.id)} title={project.status === Status.REJECTED ? "Gerar Nova Revisão (Pós-Reprovação)" : "Gerar Revisão"} aria-label="Gerar Revisão" className={`p-1.5 rounded-md transition-colors border ${project.status === Status.REJECTED ? 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100' : 'text-slate-400 hover:text-brand-600 border-transparent hover:bg-brand-50'}`}><GitBranch size={16} /></button>)}
@@ -623,6 +659,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                                                             setEditingProject={setEditingProject}
                                                             setProjectToDelete={setProjectToDelete}
                                                             onPromote={onPromote}
+                                                            onTogglePause={handleTogglePause}
                                                             executiveExistenceMap={executiveExistenceMap}
                                                             clientsMap={clientsMap}
                                                             isChildRow={true}
