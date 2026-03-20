@@ -1,10 +1,15 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { ProjectFile, Discipline, Status, MaterialDoc, ProjectPhase, ClientDoc } from '../types';
 import { parseISO, isValid, isAfter, isSameDay, addDays, startOfDay } from 'date-fns';
-import { LayoutDashboard, FileDown } from 'lucide-react';
+import { LayoutDashboard, FileDown, Sparkles } from 'lucide-react';
 import { getProjectBaseName, getRevisionNumber, calculateBusinessDaysWithHolidays, calculateDeadlineDate } from '../utils';
+import { useDashboardFilters } from '../hooks/useDashboardFilters';
+import { DashboardFilters } from './DashboardFilters';
+import { DrillDownModal, DrillDownPayload } from './DrillDownModal';
+import { AIReportModal } from './AIReportModal';
+import { generateDashboardReport, KPIReportPayload } from '../services/geminiService';
 
 interface DashboardProps {
   data: ProjectFile[];
@@ -32,6 +37,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
   const tooltipBg = isDarkMode ? '#1e293b' : '#ffffff';
   const tooltipText = isDarkMode ? '#f1f5f9' : '#1e293b';
 
+  // --- Filtros dinâmicos ---
+  const { filters, filteredProjects, activeFilterCount, availableClients, clearAllFilters, toggleMulti, setDateFrom, setDateTo } = useDashboardFilters(data);
+
+  // --- Drill-down state ---
+  const [drillDown, setDrillDown] = useState<DrillDownPayload | null>(null);
+  const closeDrillDown = useCallback(() => setDrillDown(null), []);
+
+  // --- AI Report state ---
+  const [showReport, setShowReport] = useState(false);
+  const [reportMd, setReportMd] = useState<string | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+
   const handlePrint = () => {
       window.print();
   };
@@ -45,22 +63,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
     const fileGroups: Record<string, { discipline: string, phase: string, hasRevisionOrRejection: boolean }> = {};
     const volumeMap: Record<string, any> = {};
     const reasonsMap: Record<string, number> = {};
-    // S3: Cycle Time KPI — tempo total do ciclo (startDate até feedbackDate)
     const cycleTimeByDiscipline: Record<string, { total: number; count: number }> = {};
     
-    // OTD (On Time Delivery) metrics
     let totalSlaMeasured = 0;
     let totalOnTime = 0;
     
-    // SLA Alerts Kanban
     const alerts: ProjectFile[] = [];
     const today = startOfDay(new Date());
 
-    // Map clients for SLA lookups
     const clientsMap: Record<string, ClientDoc> = {};
     clients.forEach(c => clientsMap[c.name] = c);
 
-    data.forEach(project => {
+    // Usa filteredProjects em vez de data para reagir aos filtros
+    filteredProjects.forEach(project => {
       // C2: Excluir projetos REVISADOS dos cálculos de tempo e volume ativo
       const isRevised = project.status === Status.REVISED;
 
@@ -240,8 +255,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
         return 0;
     });
 
-    return { executionData, fttData, volumeData, reasonsData, clientResponseData, cycleTimeData, otdPercentage, otdChartData, totalSlaMeasured, alerts };
-  }, [data, holidays, clients]);
+    return { executionData, fttData, volumeData, reasonsData, clientResponseData, cycleTimeData, otdPercentage, otdChartData, totalSlaMeasured, alerts, rawReasons: reasonsData };
+  }, [filteredProjects, holidays, clients]);
 
   const materialStats = useMemo(() => {
      const groups: Record<string, MaterialDoc[]> = {};
@@ -270,6 +285,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
      return { total, done, percentage, chartData };
   }, [materials, isDarkMode]);
 
+  // Handler para gerar relatório IA com os KPIs atuais
+  const handleGenerateReport = useCallback(async () => {
+    setReportLoading(true);
+    setReportError(null);
+    try {
+      const payload: KPIReportPayload = {
+        totalFiles: filteredProjects.length,
+        fttData: stats.fttData,
+        executionData: stats.executionData,
+        clientResponseData: stats.clientResponseData,
+        otdPercentage: stats.otdPercentage,
+        cycleTimeData: stats.cycleTimeData,
+        topRevisionReasons: stats.rawReasons.slice(0, 5),
+      };
+      const md = await generateDashboardReport(payload);
+      setReportMd(md);
+    } catch (e: any) {
+      setReportError(e?.message ?? 'Erro desconhecido.');
+    } finally {
+      setReportLoading(false);
+    }
+  }, [filteredProjects, stats]);
+
   return (
     <div className="animate-in fade-in zoom-in-95 duration-200">
       <div className="flex items-center justify-between mb-6">
@@ -280,14 +318,34 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
            </h2>
            <p className="text-sm text-slate-500 dark:text-slate-400">Visão geral do desempenho, assertividade e volume de projetos.</p>
         </div>
-        <button 
+        <div className="flex items-center gap-2 print:hidden">
+          <button
+            onClick={() => setShowReport(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg transition-colors shadow-sm"
+          >
+            <Sparkles size={16} />
+            <span className="font-medium hidden sm:inline">Relatório IA</span>
+          </button>
+          <button
             onClick={handlePrint}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg transition-colors border border-slate-200 dark:border-slate-700 print:hidden"
-        >
+            className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg transition-colors border border-slate-200 dark:border-slate-700"
+          >
             <FileDown size={18} />
-            <span className="font-medium">Exportar PDF</span>
-        </button>
+            <span className="font-medium hidden sm:inline">Exportar PDF</span>
+          </button>
+        </div>
       </div>
+
+      {/* Filtros Dinâmicos */}
+      <DashboardFilters
+        filters={filters}
+        availableClients={availableClients}
+        activeFilterCount={activeFilterCount}
+        onToggleMulti={toggleMulti}
+        onSetDateFrom={setDateFrom}
+        onSetDateTo={setDateTo}
+        onClearAll={clearAllFilters}
+      />
 
       {stats.alerts.length > 0 && (
           <div className="mb-6 bg-rose-50 dark:bg-rose-900/10 border border-rose-200 dark:border-rose-800 rounded-xl p-6 shadow-sm">
@@ -450,10 +508,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
                       <XAxis type="number" domain={[0, 100]} unit="%" stroke={axisColor} fontSize={10} />
                       <YAxis dataKey="name" type="category" width={120} fontSize={9} stroke={axisColor} />
                       <Tooltip formatter={(value: number) => [`${value}%`, 'Aprovado sem Revisão']} cursor={{ fill: 'transparent' }} contentStyle={{ backgroundColor: tooltipBg, color: tooltipText, border: isDarkMode ? '1px solid #475569' : 'none' }} itemStyle={{ color: tooltipText }} labelStyle={{ color: tooltipText }} />
-                      <Bar dataKey="rate" name="Taxa de Assertividade" radius={[0, 4, 4, 0]} barSize={20}>
-                        {stats.fttData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={DISCIPLINE_COLORS[entry.name.split(' (')[0]] || '#8884d8'} />
-                        ))}
+                      <Bar
+                        dataKey="rate"
+                        name="Taxa de Assertividade"
+                        radius={[0, 4, 4, 0]}
+                        barSize={20}
+                        style={{ cursor: 'pointer' }}
+                        onClick={(barData: any) => {
+                          const nameParts = barData.name?.match(/^(.+?)\s\((Prel|Exec)\)$/);
+                          if (!nameParts) return;
+                          const disc = nameParts[1] as Discipline;
+                          const phase = nameParts[2];
+                          setDrillDown({ label: barData.name, discipline: disc, phase, filterKey: 'ftt' });
+                        }}
+                      >
+                        {stats.fttData.map((entry, index) => {
+                          const discName = entry.name.split(' (')[0];
+                          return <Cell key={`cell-${index}`} fill={DISCIPLINE_COLORS[discName] || '#8884d8'} />;
+                        })}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
@@ -518,6 +590,27 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
           </div>
         </div>
       </div>
+
+      {/* Drill-Down Modal */}
+      {drillDown && (
+        <DrillDownModal
+          payload={drillDown}
+          projects={filteredProjects}
+          holidays={holidays}
+          onClose={closeDrillDown}
+        />
+      )}
+
+      {/* AI Report Modal */}
+      {showReport && (
+        <AIReportModal
+          reportMarkdown={reportMd}
+          isLoading={reportLoading}
+          error={reportError}
+          onClose={() => setShowReport(false)}
+          onGenerate={handleGenerateReport}
+        />
+      )}
     </div>
   );
 };
