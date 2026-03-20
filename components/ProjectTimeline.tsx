@@ -96,7 +96,7 @@ const ClientDetailGantt = ({ clientName, projects, holidays, clients, onClose }:
         const today = new Date();
         Object.keys(discMap).sort().forEach(disc => {
             const files = discMap[disc];
-            const discDates: Date[] = [];
+            const discDates: Date[] = [];  // Datas reais de execução (para a barra da disciplina)
             const fileRows: any[] = [];
             const clientDoc = clients.find(c => c.name === clientName);
             const deadlineDays = clientDoc?.deadlineDays || 0;
@@ -111,7 +111,7 @@ const ClientDetailGantt = ({ clientName, projects, holidays, clients, onClose }:
                 discDates.push(start, end); 
                 allDates.push(start, end);
                 if (deadlineDays > 0) {
-                    discDates.push(plannedEnd);
+                    // plannedEnd só entra no eixo global (allDates), NÃO na barra da disciplina (discDates)
                     allDates.push(plannedEnd);
                 }
 
@@ -124,7 +124,7 @@ const ClientDetailGantt = ({ clientName, projects, holidays, clients, onClose }:
             fileRows.sort((a, b) => a.start.getTime() - b.start.getTime());
             if (discDates.length > 0) {
                 const minD = min(discDates); const maxD = max(discDates);
-                // Duração do grupo é uma aproximação visual, usamos o cálculo padrão
+                // Duração do grupo agora reflete apenas o período real de execução
                 const duration = calculateBusinessDaysWithHolidays(minD, maxD, holidays); 
                 rowData.push({ id: `disc-${disc}`, type: 'DISCIPLINE', label: disc, discipline: disc, start: minD, end: maxD, duration, children: fileRows });
             }
