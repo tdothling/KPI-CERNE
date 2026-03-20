@@ -193,7 +193,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
     const [viewHistoryProject, setViewHistoryProject] = useState<ProjectFile | null>(null);
     const [search, setSearch] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
-    const ITEMS_PER_PAGE = 25;
+    const ITEMS_PER_PAGE = 100;
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
     const [expandedDisciplines, setExpandedDisciplines] = useState<Set<Discipline>>(new Set(Object.values(Discipline)));
 
