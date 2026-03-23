@@ -3,13 +3,12 @@ import React, { useMemo, useState, useCallback } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { ProjectFile, Discipline, Status, MaterialDoc, ProjectPhase, ClientDoc } from '../types';
 import { parseISO, isValid, isAfter, isSameDay, addDays, startOfDay } from 'date-fns';
-import { LayoutDashboard, FileDown, Sparkles } from 'lucide-react';
+import { LayoutDashboard, FileDown } from 'lucide-react';
 import { getProjectBaseName, getRevisionNumber, calculateBusinessDaysWithHolidays, calculateDeadlineDate } from '../utils';
 import { useDashboardFilters } from '../hooks/useDashboardFilters';
 import { DashboardFilters } from './DashboardFilters';
 import { DrillDownModal, DrillDownPayload } from './DrillDownModal';
-import { AIReportModal } from './AIReportModal';
-import { generateDashboardReport, KPIReportPayload } from '../services/geminiService';
+
 
 interface DashboardProps {
   data: ProjectFile[];
@@ -44,11 +43,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
   const [drillDown, setDrillDown] = useState<DrillDownPayload | null>(null);
   const closeDrillDown = useCallback(() => setDrillDown(null), []);
 
-  // --- AI Report state ---
-  const [showReport, setShowReport] = useState(false);
-  const [reportMd, setReportMd] = useState<string | null>(null);
-  const [reportLoading, setReportLoading] = useState(false);
-  const [reportError, setReportError] = useState<string | null>(null);
 
   const handlePrint = () => {
       window.print();
@@ -285,28 +279,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
      return { total, done, percentage, chartData };
   }, [materials, isDarkMode]);
 
-  // Handler para gerar relatório IA com os KPIs atuais
-  const handleGenerateReport = useCallback(async () => {
-    setReportLoading(true);
-    setReportError(null);
-    try {
-      const payload: KPIReportPayload = {
-        totalFiles: filteredProjects.length,
-        fttData: stats.fttData,
-        executionData: stats.executionData,
-        clientResponseData: stats.clientResponseData,
-        otdPercentage: stats.otdPercentage,
-        cycleTimeData: stats.cycleTimeData,
-        topRevisionReasons: stats.rawReasons.slice(0, 5),
-      };
-      const md = await generateDashboardReport(payload);
-      setReportMd(md);
-    } catch (e: any) {
-      setReportError(e?.message ?? 'Erro desconhecido.');
-    } finally {
-      setReportLoading(false);
-    }
-  }, [filteredProjects, stats]);
 
   return (
     <div className="animate-in fade-in zoom-in-95 duration-200">
@@ -319,13 +291,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
            <p className="text-sm text-slate-500 dark:text-slate-400">Visão geral do desempenho, assertividade e volume de projetos.</p>
         </div>
         <div className="flex items-center gap-2 print:hidden">
-          <button
-            onClick={() => setShowReport(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg transition-colors shadow-sm"
-          >
-            <Sparkles size={16} />
-            <span className="font-medium hidden sm:inline">Relatório IA</span>
-          </button>
+
           <button
             onClick={handlePrint}
             className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg transition-colors border border-slate-200 dark:border-slate-700"
@@ -601,16 +567,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
         />
       )}
 
-      {/* AI Report Modal */}
-      {showReport && (
-        <AIReportModal
-          reportMarkdown={reportMd}
-          isLoading={reportLoading}
-          error={reportError}
-          onClose={() => setShowReport(false)}
-          onGenerate={handleGenerateReport}
-        />
-      )}
     </div>
   );
 };
