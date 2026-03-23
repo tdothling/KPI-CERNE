@@ -1,0 +1,15 @@
+{
+  "name": "Cerne KPI Tracker",
+  "short_name": "Cerne KPI",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#651830",
+  "background_color": "#ffffff",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='512' height='512' fill='%23651830'/%3E%3Cpath d='M0 0L140 0L0 140Z' fill='%238e1c3e'/%3E%3Ctext x='50%25' y='55%25' fill='white' font-size='110' font-family='Arial, sans-serif' font-weight='bold' text-anchor='middle'%3ECERNE%3C/text%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}
