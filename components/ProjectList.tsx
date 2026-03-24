@@ -193,9 +193,14 @@ interface ProjectGroup {
     allProjects: ProjectFile[]; // all projects in the group, sorted by revision
 }
 
+interface PhaseGroup {
+    phase: ProjectPhase;
+    groups: ProjectGroup[];
+}
+
 interface DisciplineGroup {
     discipline: Discipline;
-    groups: ProjectGroup[];
+    phaseGroups: PhaseGroup[];
 }
 
 export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, onDelete, onAddRevision, onPromote, holidays, readOnly = false }) => {
@@ -281,16 +286,30 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
     }, [projects, sortConfig, search]);
 
     const disciplineGroups = useMemo((): DisciplineGroup[] => {
-        const disciplineMap: Partial<Record<Discipline, ProjectGroup[]>> = {};
+        const disciplineMap: Partial<Record<Discipline, Partial<Record<ProjectPhase, ProjectGroup[]>>>> = {};
+        
         projectGroups.forEach(pg => {
-            if (!disciplineMap[pg.discipline]) { disciplineMap[pg.discipline] = []; }
-            disciplineMap[pg.discipline]!.push(pg);
+            const phase = pg.latestProject.phase || ProjectPhase.PRELIMINARY;
+            if (!disciplineMap[pg.discipline]) {
+                disciplineMap[pg.discipline] = {};
+            }
+            if (!disciplineMap[pg.discipline]![phase]) {
+                disciplineMap[pg.discipline]![phase] = [];
+            }
+            disciplineMap[pg.discipline]![phase]!.push(pg);
         });
         
-        // Sort disciplines alphabetically or keep consistent order
-        return Object.entries(disciplineMap).map(([discipline, groups]) => ({
+        return Object.entries(disciplineMap).map(([discipline, phases]) => ({
             discipline: discipline as Discipline,
-            groups: groups as ProjectGroup[]
+            phaseGroups: Object.entries(phases!).map(([phase, groups]) => ({
+                phase: phase as ProjectPhase,
+                groups: groups as ProjectGroup[]
+            })).sort((a, b) => {
+                // Executive first, then Preliminary
+                if (a.phase === ProjectPhase.EXECUTIVE) return -1;
+                if (b.phase === ProjectPhase.EXECUTIVE) return 1;
+                return 0;
+            })
         })).sort((a,b) => a.discipline.localeCompare(b.discipline));
     }, [projectGroups]);
 
@@ -492,11 +511,13 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                             {disciplineGroups.map((dg) => {
-                                // Important: We only show projects of this discipline that are in the current page
-                                const paginatedGroupsInDiscipline = dg.groups.filter(g => paginatedGroups.includes(g));
-                                if (paginatedGroupsInDiscipline.length === 0) return null;
-
                                 const isDisciplineExpanded = expandedDisciplines.has(dg.discipline);
+                                // Check if any projects in this discipline are in the current page
+                                const hasProjectsInPage = dg.phaseGroups.some(pg => 
+                                    pg.groups.some(g => paginatedGroups.includes(g))
+                                );
+                                
+                                if (!hasProjectsInPage) return null;
 
                                 return (
                                     <React.Fragment key={dg.discipline}>
@@ -509,162 +530,185 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                                                 >
                                                     {isDisciplineExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                                                     {dg.discipline}
-                                                    <span className="ml-1 text-[10px] font-medium text-slate-400 normal-case">({dg.groups.length} projetos)</span>
+                                                    <span className="ml-1 text-[10px] font-medium text-slate-400 normal-case">
+                                                        ({dg.phaseGroups.reduce((acc, pg) => acc + pg.groups.length, 0)} projetos)
+                                                    </span>
                                                 </button>
                                             </td>
                                         </tr>
 
-                                        {isDisciplineExpanded && paginatedGroupsInDiscipline.map((group) => {
-                                            const isExpanded = expandedGroups.has(group.baseName);
-                                            const hasChildren = group.children.length > 0;
-                                            const latestIdx = sortedProjects.indexOf(group.latestProject);
+                                        {isDisciplineExpanded && dg.phaseGroups.map((pg) => {
+                                            const paginatedGroupsInPhase = pg.groups.filter(g => paginatedGroups.includes(g));
+                                            if (paginatedGroupsInPhase.length === 0) return null;
+
                                             return (
-                                                <React.Fragment key={group.baseName}>
-                                                    {/* Parent / Latest Revision Row */}
-                                                    <tr className={`hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors duration-150 ease-out ${!isExpanded ? 'border-b border-slate-100 dark:border-slate-700' : ''}`}>
-                                                        {/* First cell with chevron and naming */}
-                                                        <td className="px-3 py-2.5 font-medium text-slate-800 dark:text-slate-200">
-                                                            <div className="flex items-center space-x-1.5 overflow-hidden" title={group.latestProject.filename}>
-                                                                {hasChildren ? (
-                                                                    <button
-                                                                        onClick={() => toggleGroup(group.baseName)}
-                                                                        className="p-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors flex-shrink-0"
-                                                                        aria-label={isExpanded ? 'Recolher revisões' : 'Expandir revisões'}
-                                                                    >
-                                                                        {isExpanded
-                                                                            ? <ChevronDown size={14} className="text-brand-600 dark:text-brand-400" />
-                                                                            : <ChevronRight size={14} className="text-slate-400" />
-                                                                        }
-                                                                    </button>
-                                                                ) : (
-                                                                    <span className="w-[22px] flex-shrink-0"></span>
-                                                                )}
-                                                                {getRevisionNumber(group.latestProject.filename) > 0 && (
-                                                                    <button onClick={() => setViewHistoryProject(group.latestProject)} className="flex-shrink-0 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-[10px] font-bold px-1.5 py-0.5 rounded cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors duration-150" aria-label={`Ver histórico de revisão ${getRevisionNumber(group.latestProject.filename)}`}>R{getRevisionNumber(group.latestProject.filename)}</button>
-                                                                )}
-                                                                <span className={`truncate select-all text-slate-800 dark:text-slate-200 text-sm`}>{group.latestProject.filename}</span>
-                                                                {group.latestProject.phase === ProjectPhase.PRELIMINARY && <span className="flex-shrink-0 text-[9px] uppercase font-bold text-slate-500 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-600">Prel</span>}
-                                                                {group.latestProject.phase === ProjectPhase.EXECUTIVE && <span className="flex-shrink-0 text-[9px] uppercase font-bold text-violet-600 bg-violet-50 dark:bg-violet-900/30 px-1.5 py-0.5 rounded border border-violet-100 dark:border-violet-800">Exec</span>}
-                                                                {hasChildren && !isExpanded && (
-                                                                    <span className="flex-shrink-0 text-[9px] font-medium text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">
-                                                                        +{group.children.length} rev
-                                                                    </span>
-                                                                )}
+                                                <React.Fragment key={pg.phase}>
+                                                    {/* Phase Sub-header Row */}
+                                                    <tr>
+                                                        <td colSpan={readOnly ? 10 : 11} className="px-8 py-1.5 bg-slate-50/50 dark:bg-slate-800/30 border-b border-slate-100 dark:border-slate-700/50">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className={`w-1.5 h-1.5 rounded-full ${pg.phase === ProjectPhase.EXECUTIVE ? 'bg-violet-500' : 'bg-amber-500'}`} />
+                                                                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                                                                    {pg.phase} ({paginatedGroupsInPhase.length})
+                                                                </span>
                                                             </div>
                                                         </td>
-                                                        {/* Remaining data cells */}
-                                                        {(() => {
-                                                            const project = group.latestProject;
-                                                            const revNumber = getRevisionNumber(project.filename);
-                                                            const isRevision = revNumber > 0;
-                                                            const currentBase = getProjectBaseName(project.filename);
-                                                            const nextProject = sortedProjects[latestIdx + 1];
-                                                            const isLastInGroup = (!nextProject || getProjectBaseName(nextProject.filename) !== currentBase);
-                                                            const canCreateRevision = isLastInGroup || project.status === Status.REJECTED;
-                                                            const baseNameKey = getProjectBaseName(project.filename).replace(/_EXEC/gi, '').replace(/\s*\[R\d+\]/gi, '').trim().toLowerCase();
-                                                            const uniqueKey = `${project.client}|${project.discipline}|${baseNameKey}`;
-                                                            const hasExecutiveVersion = executiveExistenceMap.has(uniqueKey);
-                                                            const canPromote = onPromote && project.phase === ProjectPhase.PRELIMINARY && (project.status === Status.DONE || project.status === Status.WAITING_APPROVAL || project.status === Status.APPROVED) && !hasExecutiveVersion && isLastInGroup;
-                                                            let feedbackColorClass = "text-slate-600 dark:text-slate-400";
-                                                            if (project.status === Status.APPROVED) feedbackColorClass = "text-emerald-700 dark:text-emerald-400 font-medium";
-                                                            if (project.status === Status.REJECTED) feedbackColorClass = "text-rose-700 dark:text-rose-400 font-medium";
-                                                            const displayDate = (date: string, period?: Period) => { const d = formatDateDisplay(date); if (d === '-') return d; if (period) return `${d} (${period === 'MANHA' ? 'M' : 'T'})`; return d; };
-                                                            const currentPeriod: Period = new Date().getHours() < 12 ? 'MANHA' : 'TARDE';
-                                                            const missingSendDate = (project.status === Status.WAITING_APPROVAL || project.status === Status.APPROVED || project.status === Status.REJECTED) && !project.sendDate;
-                                                            const missingFeedbackDate = (project.status === Status.APPROVED || project.status === Status.REJECTED) && !project.feedbackDate;
-                                                            const clientData = clientsMap[project.client];
-                                                            const contractDate = clientData?.contractDate;
-                                                            const deadlineDays = clientData?.deadlineDays;
-                                                            const deadlineDate = contractDate && deadlineDays !== undefined ? calculateDeadlineDate(contractDate, deadlineDays) : null;
-                                                            let isOverdue = false;
-                                                            if (deadlineDate) {
-                                                                const deadlineStr = format(deadlineDate, 'yyyy-MM-dd');
-                                                                if (project.endDate && project.status !== Status.REVISED) { isOverdue = project.endDate > deadlineStr; }
-                                                                else if (project.status !== Status.DONE && project.status !== Status.WAITING_APPROVAL && project.status !== Status.APPROVED && project.status !== Status.REVISED) { isOverdue = new Date().toISOString().split('T')[0] > deadlineStr; }
-                                                            }
-                                                            const slaDisplay = deadlineDate ? format(deadlineDate, 'dd/MM/yy') : '-';
-                                                            return (
-                                                                <>
-                                                                    <td className="px-3 py-2.5 text-slate-600 dark:text-slate-400 text-sm truncate max-w-[120px]">{project.client}</td>
-                                                                    <td className="px-3 py-2.5 text-slate-500 dark:text-slate-400 text-xs truncate max-w-[80px]">{project.base || '-'}</td>
-                                                                    <td className="px-3 py-2.5 text-slate-600 dark:text-slate-400 text-xs">{project.discipline}</td>
-                                                                    <td className="px-3 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border whitespace-nowrap ${getStatusColor(project.status)}`}>{project.status === Status.DONE ? 'Concluído' : project.status}</span></td>
-                                                                    <td className="px-3 py-2.5 text-center text-xs">
-                                                                        {deadlineDate ? (
-                                                                            <span className={`px-1.5 py-0.5 rounded border whitespace-nowrap text-[11px] ${isOverdue ? 'bg-rose-50 text-rose-700 border-rose-200 font-bold dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800' : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'}`} title={`Contrato: ${formatDateDisplay(contractDate || '')} | SLA: ${deadlineDays} dias`}>{slaDisplay}</span>
-                                                                        ) : <span className="text-slate-300 dark:text-slate-600">—</span>}
-                                                                    </td>
-                                                                    <td className="px-3 py-1.5 border-l border-slate-200/60 dark:border-slate-700/50 text-xs">
-                                                                        <div className="flex flex-col gap-0.5">
-                                                                            <div className="flex items-center gap-1.5"><span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase w-5">Ini</span><span className="text-slate-600 dark:text-slate-400">{displayDate(project.startDate, project.startPeriod)}</span></div>
-                                                                            <div className="flex items-center gap-1.5"><span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase w-5">Fim</span><span className="text-slate-600 dark:text-slate-400">{displayDate(project.endDate, project.endPeriod)}</span></div>
-                                                                        </div>
-                                                                    </td>
-                                                                    <td className="px-3 py-1.5 border-l border-brand-100/60 dark:border-brand-900/20 bg-brand-50/20 dark:bg-brand-900/5 text-xs relative">
-                                                                        <div className="flex flex-col gap-0.5">
-                                                                            <div className="flex items-center gap-1.5"><span className="text-[9px] font-semibold text-brand-400 dark:text-brand-500 uppercase w-5">Env</span><span className="text-brand-700 dark:text-brand-400 font-medium">{displayDate(project.sendDate, project.sendPeriod)}</span>{missingSendDate && <AlertTriangle size={12} className="text-amber-500 flex-shrink-0" title="Data de Envio Faltante" />}</div>
-                                                                            <div className="flex items-center gap-1.5"><span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase w-5">Ret</span><span className={feedbackColorClass}>{displayDate(project.feedbackDate, project.feedbackPeriod)}</span>{missingFeedbackDate && <AlertTriangle size={12} className="text-amber-500 flex-shrink-0" title="Data de Feedback Faltante" />}</div>
-                                                                        </div>
-                                                                    </td>
-                                                                    <td className="px-3 py-2.5 text-center"><span className="font-mono text-xs text-slate-700 dark:text-slate-300">{project.blockedDays || <span className="text-slate-300 dark:text-slate-600">—</span>}</span></td>
-                                                                    {!readOnly && (
-                                                                        <td className="px-4 py-3">
-                                                                            <div className="flex items-center justify-center space-x-2">
-                                                                                {project.status === Status.IN_PROGRESS && (<button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingCompletion({ id: project.id, date: today, period: currentPeriod }); }} title="Concluir Execução" aria-label="Concluir Execução" className="p-1.5 bg-violet-50 text-violet-600 hover:bg-violet-100 rounded-md transition-colors border border-violet-200"><CheckSquare size={16} /></button>)}
-                                                                                {project.status === Status.IN_PROGRESS && (() => {
-                                                                                    const isPaused = project.pauses?.some((p: any) => !p.endDate);
-                                                                                    return (
-                                                                                        <button onClick={() => handleTogglePause(project)} title={isPaused ? "Retomar Execução" : "Pausar Execução"} aria-label={isPaused ? "Retomar" : "Pausar"} className={`p-1.5 rounded-md transition-colors border ${isPaused ? 'bg-amber-50 text-amber-600 hover:bg-amber-100 border-amber-200' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'}`}>
-                                                                                            {isPaused ? <Play size={16} /> : <Pause size={16} />}
-                                                                                        </button>
-                                                                                    );
-                                                                                })()}
-                                                                                {(project.status === Status.DONE || missingSendDate) && (<button onClick={() => { const today = new Date().toISOString().split('T')[0]; const defaultDate = (project.endDate && today > project.endDate) ? today : (project.endDate || today); setPendingSend({ id: project.id, date: defaultDate, period: currentPeriod }); }} title={missingSendDate ? "Corrigir Data de Envio" : "Registrar Envio ao Cliente"} aria-label="Registrar Envio" className={`p-1.5 rounded-md transition-colors border ${missingSendDate ? 'bg-amber-100 text-amber-700 border-amber-300 animate-pulse' : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200'}`}><Send size={16} /></button>)}
-                                                                                {project.status === Status.WAITING_APPROVAL && !missingSendDate && (<><button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingApproval({ id: project.id, date: today, period: currentPeriod }); }} title="Aprovar Projeto" aria-label="Aprovar" className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md transition-colors border border-emerald-200"><BadgeCheck size={16} /></button><button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingRejection({ id: project.id, date: today, period: currentPeriod }); }} title="Reprovar Projeto" aria-label="Reprovar" className="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-md transition-colors border border-rose-200"><ThumbsDown size={16} /></button></>)}
-                                                                                {canCreateRevision && project.sendDate && project.status !== Status.REVISED && project.status !== Status.WAITING_APPROVAL && (<button onClick={() => setActiveRevModal(project.id)} title={project.status === Status.REJECTED ? "Gerar Nova Revisão (Pós-Reprovação)" : "Gerar Revisão"} aria-label="Gerar Revisão" className={`p-1.5 rounded-md transition-colors border ${project.status === Status.REJECTED ? 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100' : 'text-slate-400 hover:text-brand-600 border-transparent hover:bg-brand-50'}`}><GitBranch size={16} /></button>)}
-                                                                                {canPromote && (<button onClick={() => onPromote(project.id)} title="Gerar Versão Executiva (Novo Arquivo)" className="p-1.5 bg-violet-50 text-violet-600 hover:bg-violet-100 rounded-md transition-colors border border-violet-200 animate-in zoom-in"><ArrowUpCircle size={16} /></button>)}
-                                                                            </div>
-                                                                        </td>
-                                                                    )}
-                                                                    <td className="px-4 py-3 text-right">
-                                                                        <div className="flex items-center justify-end space-x-1">
-                                                                            <button onClick={() => setDetailsProject(project)} className="p-1.5 text-slate-400 hover:text-violet-500 rounded-full hover:bg-violet-50 transition-colors" aria-label="Ver Detalhes"><Eye size={16} /></button>
-                                                                            {!readOnly && (
-                                                                                <>
-                                                                                    <button onClick={() => setEditingProject({ ...project })} className="p-1.5 text-slate-400 hover:text-blue-500 rounded-full hover:bg-blue-50 transition-colors" aria-label="Editar"><Edit2 size={16} /></button>
-                                                                                    <button onClick={() => setProjectToDelete(project)} className="p-1.5 text-slate-400 hover:text-rose-500 rounded-full hover:bg-rose-50 transition-colors" aria-label="Excluir"><Trash2 size={16} /></button>
-                                                                                </>
+                                                    </tr>
+
+                                                    {paginatedGroupsInPhase.map((group) => {
+                                                        const isExpanded = expandedGroups.has(group.baseName);
+                                                        const hasChildren = group.children.length > 0;
+                                                        const latestIdx = sortedProjects.indexOf(group.latestProject);
+                                                        return (
+                                                            <React.Fragment key={group.baseName}>
+                                                                {/* Parent / Latest Revision Row */}
+                                                                <tr className={`hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors duration-150 ease-out ${!isExpanded ? 'border-b border-slate-100 dark:border-slate-700' : ''}`}>
+                                                                    {/* First cell with chevron and naming */}
+                                                                    <td className="px-3 py-2.5 font-medium text-slate-800 dark:text-slate-200">
+                                                                        <div className="flex items-center space-x-1.5 overflow-hidden" title={group.latestProject.filename}>
+                                                                            {hasChildren ? (
+                                                                                <button
+                                                                                    onClick={() => toggleGroup(group.baseName)}
+                                                                                    className="p-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors flex-shrink-0"
+                                                                                    aria-label={isExpanded ? 'Recolher revisões' : 'Expandir revisões'}
+                                                                                >
+                                                                                    {isExpanded
+                                                                                        ? <ChevronDown size={14} className="text-brand-600 dark:text-brand-400" />
+                                                                                        : <ChevronRight size={14} className="text-slate-400" />
+                                                                                    }
+                                                                                </button>
+                                                                            ) : (
+                                                                                <span className="w-[22px] flex-shrink-0"></span>
+                                                                            )}
+                                                                            {getRevisionNumber(group.latestProject.filename) > 0 && (
+                                                                                <button onClick={() => setViewHistoryProject(group.latestProject)} className="flex-shrink-0 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-[10px] font-bold px-1.5 py-0.5 rounded cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors duration-150" aria-label={`Ver histórico de revisão ${getRevisionNumber(group.latestProject.filename)}`}>R{getRevisionNumber(group.latestProject.filename)}</button>
+                                                                            )}
+                                                                            <span className={`truncate select-all text-slate-800 dark:text-slate-200 text-sm`}>{group.latestProject.filename}</span>
+                                                                            {group.latestProject.phase === ProjectPhase.PRELIMINARY && <span className="flex-shrink-0 text-[9px] uppercase font-bold text-slate-500 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-600">Prel</span>}
+                                                                            {group.latestProject.phase === ProjectPhase.EXECUTIVE && <span className="flex-shrink-0 text-[9px] uppercase font-bold text-violet-600 bg-violet-50 dark:bg-violet-900/30 px-1.5 py-0.5 rounded border border-violet-100 dark:border-violet-800">Exec</span>}
+                                                                            {hasChildren && !isExpanded && (
+                                                                                <span className="flex-shrink-0 text-[9px] font-medium text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">
+                                                                                    +{group.children.length} rev
+                                                                                </span>
                                                                             )}
                                                                         </div>
                                                                     </td>
-                                                                </>
-                                                            );
-                                                        })()}
-                                                    </tr>
-                                                    {/* Expanded children rows (older revisions) */}
-                                                    {isExpanded && group.children.map((child) => (
-                                                        <ProjectRow
-                                                            key={child.id}
-                                                            project={child}
-                                                            index={sortedProjects.indexOf(child)}
-                                                            sortedProjects={sortedProjects}
-                                                            readOnly={readOnly}
-                                                            setViewHistoryProject={setViewHistoryProject}
-                                                            setPendingCompletion={setPendingCompletion}
-                                                            setPendingSend={setPendingSend}
-                                                            setPendingApproval={setPendingApproval}
-                                                            setPendingRejection={setPendingRejection}
-                                                            setActiveRevModal={setActiveRevModal}
-                                                            setDetailsProject={setDetailsProject}
-                                                            setEditingProject={setEditingProject}
-                                                            setProjectToDelete={setProjectToDelete}
-                                                            onPromote={onPromote}
-                                                            onTogglePause={handleTogglePause}
-                                                            executiveExistenceMap={executiveExistenceMap}
-                                                            clientsMap={clientsMap}
-                                                            isChildRow={true}
-                                                        />
-                                                    ))}
+                                                                    {/* Remaining data cells */}
+                                                                    {(() => {
+                                                                        const project = group.latestProject;
+                                                                        const revNumber = getRevisionNumber(project.filename);
+                                                                        const isRevision = revNumber > 0;
+                                                                        const currentBase = getProjectBaseName(project.filename);
+                                                                        const nextProject = sortedProjects[latestIdx + 1];
+                                                                        const isLastInGroup = (!nextProject || getProjectBaseName(nextProject.filename) !== currentBase);
+                                                                        const canCreateRevision = isLastInGroup || project.status === Status.REJECTED;
+                                                                        const baseNameKey = getProjectBaseName(project.filename).replace(/_EXEC/gi, '').replace(/\s*\[R\d+\]/gi, '').trim().toLowerCase();
+                                                                        const uniqueKey = `${project.client}|${project.discipline}|${baseNameKey}`;
+                                                                        const hasExecutiveVersion = executiveExistenceMap.has(uniqueKey);
+                                                                        const canPromote = onPromote && project.phase === ProjectPhase.PRELIMINARY && (project.status === Status.DONE || project.status === Status.WAITING_APPROVAL || project.status === Status.APPROVED) && !hasExecutiveVersion && isLastInGroup;
+                                                                        let feedbackColorClass = "text-slate-600 dark:text-slate-400";
+                                                                        if (project.status === Status.APPROVED) feedbackColorClass = "text-emerald-700 dark:text-emerald-400 font-medium";
+                                                                        if (project.status === Status.REJECTED) feedbackColorClass = "text-rose-700 dark:text-rose-400 font-medium";
+                                                                        const displayDate = (date: string, period?: Period) => { const d = formatDateDisplay(date); if (d === '-') return d; if (period) return `${d} (${period === 'MANHA' ? 'M' : 'T'})`; return d; };
+                                                                        const currentPeriod: Period = new Date().getHours() < 12 ? 'MANHA' : 'TARDE';
+                                                                        const missingSendDate = (project.status === Status.WAITING_APPROVAL || project.status === Status.APPROVED || project.status === Status.REJECTED) && !project.sendDate;
+                                                                        const missingFeedbackDate = (project.status === Status.APPROVED || project.status === Status.REJECTED) && !project.feedbackDate;
+                                                                        const clientData = clientsMap[project.client];
+                                                                        const contractDate = clientData?.contractDate;
+                                                                        const deadlineDays = clientData?.deadlineDays;
+                                                                        const deadlineDate = contractDate && deadlineDays !== undefined ? calculateDeadlineDate(contractDate, deadlineDays) : null;
+                                                                        let isOverdue = false;
+                                                                        if (deadlineDate) {
+                                                                            const deadlineStr = format(deadlineDate, 'yyyy-MM-dd');
+                                                                            if (project.endDate && project.status !== Status.REVISED) { isOverdue = project.endDate > deadlineStr; }
+                                                                            else if (project.status !== Status.DONE && project.status !== Status.WAITING_APPROVAL && project.status !== Status.APPROVED && project.status !== Status.REVISED) { isOverdue = new Date().toISOString().split('T')[0] > deadlineStr; }
+                                                                        }
+                                                                        const slaDisplay = deadlineDate ? format(deadlineDate, 'dd/MM/yy') : '-';
+                                                                        return (
+                                                                            <>
+                                                                                <td className="px-3 py-2.5 text-slate-600 dark:text-slate-400 text-sm truncate max-w-[120px]">{project.client}</td>
+                                                                                <td className="px-3 py-2.5 text-slate-500 dark:text-slate-400 text-xs truncate max-w-[80px]">{project.base || '-'}</td>
+                                                                                <td className="px-3 py-2.5 text-slate-600 dark:text-slate-400 text-xs">{project.discipline}</td>
+                                                                                <td className="px-3 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border whitespace-nowrap ${getStatusColor(project.status)}`}>{project.status === Status.DONE ? 'Concluído' : project.status}</span></td>
+                                                                                <td className="px-3 py-2.5 text-center text-xs">
+                                                                                    {deadlineDate ? (
+                                                                                        <span className={`px-1.5 py-0.5 rounded border whitespace-nowrap text-[11px] ${isOverdue ? 'bg-rose-50 text-rose-700 border-rose-200 font-bold dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800' : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'}`} title={`Contrato: ${formatDateDisplay(contractDate || '')} | SLA: ${deadlineDays} dias`}>{slaDisplay}</span>
+                                                                                    ) : <span className="text-slate-300 dark:text-slate-600">—</span>}
+                                                                                </td>
+                                                                                <td className="px-3 py-1.5 border-l border-slate-200/60 dark:border-slate-700/50 text-xs">
+                                                                                    <div className="flex flex-col gap-0.5">
+                                                                                        <div className="flex items-center gap-1.5"><span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase w-5">Ini</span><span className="text-slate-600 dark:text-slate-400">{displayDate(project.startDate, project.startPeriod)}</span></div>
+                                                                                        <div className="flex items-center gap-1.5"><span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase w-5">Fim</span><span className="text-slate-600 dark:text-slate-400">{displayDate(project.endDate, project.endPeriod)}</span></div>
+                                                                                    </div>
+                                                                                </td>
+                                                                                <td className="px-3 py-1.5 border-l border-brand-100/60 dark:border-brand-900/20 bg-brand-50/20 dark:bg-brand-900/5 text-xs relative">
+                                                                                    <div className="flex flex-col gap-0.5">
+                                                                                        <div className="flex items-center gap-1.5"><span className="text-[9px] font-semibold text-brand-400 dark:text-brand-500 uppercase w-5">Env</span><span className="text-brand-700 dark:text-brand-400 font-medium">{displayDate(project.sendDate, project.sendPeriod)}</span>{missingSendDate && <AlertTriangle size={12} className="text-amber-500 flex-shrink-0" title="Data de Envio Faltante" />}</div>
+                                                                                        <div className="flex items-center gap-1.5"><span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase w-5">Ret</span><span className={feedbackColorClass}>{displayDate(project.feedbackDate, project.feedbackPeriod)}</span>{missingFeedbackDate && <AlertTriangle size={12} className="text-amber-500 flex-shrink-0" title="Data de Feedback Faltante" />}</div>
+                                                                                    </div>
+                                                                                </td>
+                                                                                <td className="px-3 py-2.5 text-center"><span className="font-mono text-xs text-slate-700 dark:text-slate-300">{project.blockedDays || <span className="text-slate-300 dark:text-slate-600">—</span>}</span></td>
+                                                                                {!readOnly && (
+                                                                                    <td className="px-4 py-3">
+                                                                                        <div className="flex items-center justify-center space-x-2">
+                                                                                            {project.status === Status.IN_PROGRESS && (<button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingCompletion({ id: project.id, date: today, period: currentPeriod }); }} title="Concluir Execução" aria-label="Concluir Execução" className="p-1.5 bg-violet-50 text-violet-600 hover:bg-violet-100 rounded-md transition-colors border border-violet-200"><CheckSquare size={16} /></button>)}
+                                                                                            {project.status === Status.IN_PROGRESS && (() => {
+                                                                                                const isPaused = project.pauses?.some((p: any) => !p.endDate);
+                                                                                                return (
+                                                                                                    <button onClick={() => handleTogglePause(project)} title={isPaused ? "Retomar Execução" : "Pausar Execução"} aria-label={isPaused ? "Retomar" : "Pausar"} className={`p-1.5 rounded-md transition-colors border ${isPaused ? 'bg-amber-50 text-amber-600 hover:bg-amber-100 border-amber-200' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'}`}>
+                                                                                                        {isPaused ? <Play size={16} /> : <Pause size={16} />}
+                                                                                                    </button>
+                                                                                                );
+                                                                                            })()}
+                                                                                            {(project.status === Status.DONE || missingSendDate) && (<button onClick={() => { const today = new Date().toISOString().split('T')[0]; const defaultDate = (project.endDate && today > project.endDate) ? today : (project.endDate || today); setPendingSend({ id: project.id, date: defaultDate, period: currentPeriod }); }} title={missingSendDate ? "Corrigir Data de Envio" : "Registrar Envio ao Cliente"} aria-label="Registrar Envio" className={`p-1.5 rounded-md transition-colors border ${missingSendDate ? 'bg-amber-100 text-amber-700 border-amber-300 animate-pulse' : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200'}`}><Send size={16} /></button>)}
+                                                                                            {project.status === Status.WAITING_APPROVAL && !missingSendDate && (<><button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingApproval({ id: project.id, date: today, period: currentPeriod }); }} title="Aprovar Projeto" aria-label="Aprovar" className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md transition-colors border border-emerald-200"><BadgeCheck size={16} /></button><button onClick={() => { const today = new Date().toISOString().split('T')[0]; setPendingRejection({ id: project.id, date: today, period: currentPeriod }); }} title="Reprovar Projeto" aria-label="Reprovar" className="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-md transition-colors border border-rose-200"><ThumbsDown size={16} /></button></>)}
+                                                                                            {canCreateRevision && project.sendDate && project.status !== Status.REVISED && project.status !== Status.WAITING_APPROVAL && (<button onClick={() => setActiveRevModal(project.id)} title={project.status === Status.REJECTED ? "Gerar Nova Revisão (Pós-Reprovação)" : "Gerar Revisão"} aria-label="Gerar Revisão" className={`p-1.5 rounded-md transition-colors border ${project.status === Status.REJECTED ? 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100' : 'text-slate-400 hover:text-brand-600 border-transparent hover:bg-brand-50'}`}><GitBranch size={16} /></button>)}
+                                                                                            {canPromote && (<button onClick={() => onPromote(project.id)} title="Gerar Versão Executiva (Novo Arquivo)" className="p-1.5 bg-violet-50 text-violet-600 hover:bg-violet-100 rounded-md transition-colors border border-violet-200 animate-in zoom-in"><ArrowUpCircle size={16} /></button>)}
+                                                                                        </div>
+                                                                                    </td>
+                                                                                )}
+                                                                                <td className="px-4 py-3 text-right">
+                                                                                    <div className="flex items-center justify-end space-x-1">
+                                                                                        <button onClick={() => setDetailsProject(project)} className="p-1.5 text-slate-400 hover:text-violet-500 rounded-full hover:bg-violet-50 transition-colors" aria-label="Ver Detalhes"><Eye size={16} /></button>
+                                                                                        {!readOnly && (
+                                                                                            <>
+                                                                                                <button onClick={() => setEditingProject({ ...project })} className="p-1.5 text-slate-400 hover:text-blue-500 rounded-full hover:bg-blue-50 transition-colors" aria-label="Editar"><Edit2 size={16} /></button>
+                                                                                                <button onClick={() => setProjectToDelete(project)} className="p-1.5 text-slate-400 hover:text-rose-500 rounded-full hover:bg-rose-50 transition-colors" aria-label="Excluir"><Trash2 size={16} /></button>
+                                                                                            </>
+                                                                                        )}
+                                                                                    </div>
+                                                                                </td>
+                                                                            </>
+                                                                        );
+                                                                    })()}
+                                                                </tr>
+                                                                {/* Expanded children rows (older revisions) */}
+                                                                {isExpanded && group.children.map((child) => (
+                                                                    <ProjectRow
+                                                                        key={child.id}
+                                                                        project={child}
+                                                                        index={sortedProjects.indexOf(child)}
+                                                                        sortedProjects={sortedProjects}
+                                                                        readOnly={readOnly}
+                                                                        setViewHistoryProject={setViewHistoryProject}
+                                                                        setPendingCompletion={setPendingCompletion}
+                                                                        setPendingSend={setPendingSend}
+                                                                        setPendingApproval={setPendingApproval}
+                                                                        setPendingRejection={setPendingRejection}
+                                                                        setActiveRevModal={setActiveRevModal}
+                                                                        setDetailsProject={setDetailsProject}
+                                                                        setEditingProject={setEditingProject}
+                                                                        setProjectToDelete={setProjectToDelete}
+                                                                        onPromote={onPromote}
+                                                                        onTogglePause={handleTogglePause}
+                                                                        executiveExistenceMap={executiveExistenceMap}
+                                                                        clientsMap={clientsMap}
+                                                                        isChildRow={true}
+                                                                    />
+                                                                ))}
+                                                            </React.Fragment>
+                                                        );
+                                                    })}
                                                 </React.Fragment>
                                             );
                                         })}
