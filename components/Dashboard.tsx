@@ -453,7 +453,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
                     <XAxis type="number" stroke={axisColor} fontSize={10} allowDecimals={false} />
                     <YAxis dataKey="name" type="category" width={110} fontSize={10} stroke={axisColor} />
                     <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ backgroundColor: tooltipBg, color: tooltipText, border: isDarkMode ? '1px solid #475569' : 'none' }} itemStyle={{ color: tooltipText }} labelStyle={{ color: tooltipText }} />
-                    <Bar dataKey="count" name="Ocorrências" fill="#6366f1" radius={[0, 4, 4, 0]} barSize={20} />
+                    <Bar 
+                      dataKey="count" 
+                      name="Ocorrências" 
+                      fill="#6366f1" 
+                      radius={[0, 4, 4, 0]} 
+                      barSize={20} 
+                      style={{ cursor: 'pointer' }}
+                      onClick={(barData: any) => {
+                        if (!barData.name) return;
+                        setDrillDown({
+                          label: `Motivo: ${barData.name}`,
+                          reason: barData.name,
+                          filterKey: 'reasons'
+                        });
+                      }}
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (

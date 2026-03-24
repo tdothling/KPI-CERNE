@@ -8,9 +8,10 @@ import { getStatusColor } from '../utils';
 
 export interface DrillDownPayload {
   label: string;        // e.g. "Arquitetura (Exec)"
-  discipline: Discipline;
+  discipline?: Discipline;
   phase?: string;
-  filterKey: 'ftt' | 'volume' | 'execution'; // which chart was clicked
+  reason?: string;
+  filterKey: 'ftt' | 'volume' | 'execution' | 'reasons'; // which chart was clicked
 }
 
 interface DrillDownModalProps {
@@ -57,10 +58,14 @@ function exportCSV(rows: ProjectFile[], label: string) {
 export const DrillDownModal: React.FC<DrillDownModalProps> = ({ payload, projects, holidays, onClose }) => {
   // Filter projects matching the clicked bar
   const rows = useMemo(() => {
-    const disc = payload.discipline;
-    const phase = payload.phase;
     return projects.filter(p => {
-      if (p.discipline !== disc) return false;
+      if (payload.filterKey === 'reasons') {
+        return p.revisions?.some(rev => rev.reason === payload.reason);
+      }
+
+      const disc = payload.discipline;
+      const phase = payload.phase;
+      if (disc && p.discipline !== disc) return false;
       if (phase) {
         const pPhase = p.phase ?? 'Executivo';
         const shortPhase = pPhase === 'Preliminar' ? 'Prel' : 'Exec';
@@ -110,7 +115,7 @@ export const DrillDownModal: React.FC<DrillDownModalProps> = ({ payload, project
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-700 shrink-0">
           <div className="flex items-center gap-3">
-            <span className={`w-3 h-3 rounded-full ${DISCIPLINE_BG[payload.discipline] || 'bg-slate-400'}`} />
+            <span className={`w-3 h-3 rounded-full ${payload.discipline ? DISCIPLINE_BG[payload.discipline] : 'bg-[#6366f1]'}`} />
             <h3 className="font-bold text-slate-800 dark:text-white text-base">{payload.label}</h3>
             <span className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full">{rows.length} arquivos</span>
           </div>
