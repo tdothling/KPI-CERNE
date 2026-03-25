@@ -71,7 +71,9 @@ export default function App() {
   const [isFolderUpload, setIsFolderUpload] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const isReadOnly = !currentUser;
+  // Apenas o Thiago Dothling é o administrador do sistema
+  const isAdmin = currentUser?.email?.startsWith('thiago.dothling');
+  const isReadOnly = !isAdmin;
   const showPurchasesTab = currentUser?.email?.startsWith('thiago.dothling');
 
   useEffect(() => {
@@ -450,7 +452,7 @@ export default function App() {
         </div>
 
         <div className="mt-6 print:mt-0">
-          {!isReadOnly && activeTab === 'dashboard' && <DataMigration projects={projects} materials={materials} onUpdateProject={updateProject} onUpdateMaterial={updateMaterial} />}
+          {isAdmin && activeTab === 'dashboard' && <DataMigration projects={projects} materials={materials} onUpdateProject={updateProject} onUpdateMaterial={updateMaterial} />}
           {activeTab === 'dashboard' && <div className="animate-in fade-in zoom-in-95 duration-200"><Dashboard data={filteredProjects} materials={filteredMaterials} clients={clients} isDarkMode={isDarkMode} holidays={holidays} /></div>}
           {activeTab === 'timeline' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectTimeline projects={filteredProjects} holidays={holidays} clients={clients} /></div>}
           {activeTab === 'projects' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectList projects={filteredProjects} onUpdate={updateProject} onDelete={deleteProject} onAddRevision={addProjectRevision} onPromote={promoteProjectToExecutive} holidays={holidays} readOnly={isReadOnly} /></div>}
