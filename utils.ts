@@ -157,25 +157,6 @@ export const extractMetadataFromMaterialFilename = (filename: string, defaultCli
     return { discipline, client: defaultClient };
 };
 
-export const generateRevisionFilename = (name: string): string => {
-    const regex = /^(.*)\s\[R(\d+)\](\.[^.]*)?$/;
-    const match = name.match(regex);
-    if (match) {
-        const base = match[1];
-        const num = parseInt(match[2], 10) + 1;
-        const ext = match[3] || '';
-        return `${base} [R${num}]${ext}`;
-    } else {
-        const lastDotIndex = name.lastIndexOf('.');
-        if (lastDotIndex !== -1) {
-            const base = name.substring(0, lastDotIndex);
-            const ext = name.substring(lastDotIndex);
-            return `${base} [R1]${ext}`;
-        }
-        return `${name} [R1]`;
-    }
-};
-
 // Security: Whitelist de extensões permitidas
 export const ALLOWED_EXTENSIONS = ['.dwg', '.rvt', '.pln', '.pdf', '.dxf', '.csv', '.xlsx', '.xls'];
 

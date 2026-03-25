@@ -54,6 +54,8 @@ export interface ProjectPause {
 
 export interface ProjectFile {
   id: string;
+  groupId?: string; // NOVO: Relaciona a familia de revisões
+  revision?: number; // NOVO: Número exato da revisão (0, 1, 2...)
   filename: string;
   client: string;
   base: string; // Nova coluna: Base / Setor / Bloco
@@ -89,6 +91,8 @@ export type MaterialStatus = 'IN_PROGRESS' | 'DONE' | 'REVISED';
 
 export interface MaterialDoc {
   id: string;
+  groupId?: string; // NOVO: Relaciona a familia de revisões
+  revision?: number; // NOVO: Número exato da revisão
   client: string;
   filename: string;
   base: string; // Nova coluna adicionada

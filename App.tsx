@@ -12,6 +12,7 @@ import { MaterialList } from './components/MaterialList';
 import { PurchaseList } from './components/PurchaseList';
 import { LoginModal } from './components/LoginModal';
 import { AdvancedFilter } from './components/AdvancedFilter';
+import { DataMigration } from './components/DataMigration';
 import { CerneLogo } from './components/CerneLogo';
 import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Package, FileSpreadsheet, Database, LogIn, LogOut, ShoppingCart, HardHat, Search, ChevronDown, CheckSquare, Square, FileText, MoreHorizontal } from 'lucide-react';
 import { format } from 'date-fns';
@@ -162,8 +163,12 @@ export default function App() {
             if (detected) discipline = detected;
           }
 
+          const cleanFilename = f.name.replace(/\.[^/.]+$/, "");
+
           return addProject({
-            filename: f.name,
+            filename: cleanFilename,
+            groupId: crypto.randomUUID(),
+            revision: 0,
             client: finalClientName,
             base: finalBaseName,
             discipline: discipline,
@@ -179,8 +184,12 @@ export default function App() {
       } else if (importType === 'MATERIAL_LIST') {
         const promises = validFiles.map(async (f: any) => {
           const metadata = extractMetadataFromMaterialFilename(f.name, finalClientName);
+          const cleanFilename = f.name.replace(/\.[^/.]+$/, "");
+
           return addMaterial({
-            filename: f.name,
+            filename: cleanFilename,
+            groupId: crypto.randomUUID(),
+            revision: 0,
             client: finalClientName,
             base: finalBaseName,
             discipline: metadata.discipline,
@@ -441,6 +450,7 @@ export default function App() {
         </div>
 
         <div className="mt-6 print:mt-0">
+          {!isReadOnly && activeTab === 'dashboard' && <DataMigration projects={projects} materials={materials} onUpdateProject={updateProject} onUpdateMaterial={updateMaterial} />}
           {activeTab === 'dashboard' && <div className="animate-in fade-in zoom-in-95 duration-200"><Dashboard data={filteredProjects} materials={filteredMaterials} clients={clients} isDarkMode={isDarkMode} holidays={holidays} /></div>}
           {activeTab === 'timeline' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectTimeline projects={filteredProjects} holidays={holidays} clients={clients} /></div>}
           {activeTab === 'projects' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectList projects={filteredProjects} onUpdate={updateProject} onDelete={deleteProject} onAddRevision={addProjectRevision} onPromote={promoteProjectToExecutive} holidays={holidays} readOnly={isReadOnly} /></div>}

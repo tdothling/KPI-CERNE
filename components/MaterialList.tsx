@@ -15,7 +15,8 @@ interface MaterialListProps {
 
 // Optimization: Memoized Row Component
 const MaterialRow = memo(({ doc, readOnly, setPendingCompletion, handleOpenRevisionModal, handleOpenEditModal, handleDelete }: any) => {
-    const revNum = getRevisionNumber(doc.filename); 
+    // Para retrocompatibilidade durante a transição: tenta ler a propriedade doc.revision, se não existir faz o parse do título.
+    const revNum = doc.revision !== undefined ? doc.revision : getRevisionNumber(doc.filename); 
     const isRevision = revNum > 0;
 
     const displayDate = (date: string, period?: Period) => {
@@ -30,7 +31,7 @@ const MaterialRow = memo(({ doc, readOnly, setPendingCompletion, handleOpenRevis
 
     return (
         <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
-          <td className="px-6 py-4 font-medium text-slate-800 dark:text-slate-200"><div className="flex items-center gap-2">{isRevision && <CornerDownRight size={14} className="text-slate-400" />}<FileText size={16} className="text-slate-400" /><span className={doc.status === 'REVISED' ? 'line-through text-slate-400' : ''}>{doc.filename}</span></div></td>
+          <td className="px-6 py-4 font-medium text-slate-800 dark:text-slate-200"><div className="flex items-center gap-2">{isRevision && <CornerDownRight size={14} className="text-slate-400" />}<FileText size={16} className="text-slate-400" /><span className={doc.status === 'REVISED' ? 'line-through text-slate-400' : ''}>{doc.filename} {revNum > 0 && <span className="ml-1 text-xs font-bold bg-amber-100 text-amber-700 px-1 py-0.5 rounded-md dark:bg-amber-900/50 dark:text-amber-400 border border-amber-200 dark:border-amber-800">[R{revNum}]</span>}</span></div></td>
           <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{doc.client}</td>
           <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{doc.base || '-'}</td>
           <td className="px-6 py-4 text-slate-600 dark:text-slate-400"><span className="bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded text-xs">{doc.discipline}</span></td>
@@ -92,8 +93,18 @@ export const MaterialList: React.FC<MaterialListProps> = ({ materials, onUpdate,
   const filteredDocs = useMemo(() => {
     const filtered = materials.filter(doc => doc.client.toLowerCase().includes(search.toLowerCase()) || doc.filename.toLowerCase().includes(search.toLowerCase()) || doc.discipline.toLowerCase().includes(search.toLowerCase()) || (doc.base && doc.base.toLowerCase().includes(search.toLowerCase())));
     const groups: Record<string, MaterialDoc[]> = {};
-    filtered.forEach(doc => { const base = getProjectBaseName(doc.filename).toLowerCase(); if (!groups[base]) groups[base] = []; groups[base].push(doc); });
-    Object.values(groups).forEach(group => { group.sort((a, b) => getRevisionNumber(a.filename) - getRevisionNumber(b.filename)); });
+    filtered.forEach(doc => { 
+        const key = doc.groupId || getProjectBaseName(doc.filename).toLowerCase(); 
+        if (!groups[key]) groups[key] = []; 
+        groups[key].push(doc); 
+    });
+    Object.values(groups).forEach(group => { 
+        group.sort((a, b) => {
+            const revA = a.revision !== undefined ? a.revision : getRevisionNumber(a.filename);
+            const revB = b.revision !== undefined ? b.revision : getRevisionNumber(b.filename);
+            return revA - revB;
+        }); 
+    });
     const sortedGroups = Object.values(groups).sort((a, b) => { return a[0].filename.localeCompare(b[0].filename); });
     return sortedGroups.flat();
   }, [materials, search]);

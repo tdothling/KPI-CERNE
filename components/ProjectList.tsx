@@ -18,11 +18,11 @@ interface ProjectListProps {
 
 // Optimization: Memoized Row Component
 const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHistoryProject, setPendingCompletion, setPendingSend, setPendingApproval, setPendingRejection, setActiveRevModal, setDetailsProject, setEditingProject, setProjectToDelete, onPromote, onTogglePause, executiveExistenceMap, clientsMap, isChildRow }: any) => {
-    const revNumber = getRevisionNumber(project.filename);
+    const revNumber = project.revision !== undefined ? project.revision : getRevisionNumber(project.filename);
     const isRevision = revNumber > 0;
-    const currentBase = getProjectBaseName(project.filename);
+    const currentBase = project.groupId || getProjectBaseName(project.filename);
     const nextProject = sortedProjects[index + 1];
-    const isLastInGroup = (!nextProject || getProjectBaseName(nextProject.filename) !== currentBase);
+    const isLastInGroup = (!nextProject || (nextProject.groupId || getProjectBaseName(nextProject.filename)) !== currentBase);
     const canCreateRevision = isLastInGroup || project.status === Status.REJECTED;
 
     // Lógica de Promoção:
@@ -30,8 +30,8 @@ const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHist
     // 2. Deve estar Concluído, Aguardando Aprovação ou Aprovado (Permite fluxo flexível)
     // 3. NÃO pode existir um Executivo correspondente (verificado via mapa)
 
-    // Normaliza o nome para verificar no mapa (remove _EXEC se por acaso tiver, e remove espaços)
-    const baseNameKey = getProjectBaseName(project.filename).replace(/_EXEC/gi, '').replace(/\s*\[R\d+\]/gi, '').trim().toLowerCase();
+    // Normaliza o nome para verificar no mapa
+    const baseNameKey = project.groupId || getProjectBaseName(project.filename).replace(/_EXEC/gi, '').replace(/\s*\[R\d+\]/gi, '').trim().toLowerCase();
     const uniqueKey = `${project.client}|${project.discipline}|${baseNameKey}`;
     const hasExecutiveVersion = executiveExistenceMap.has(uniqueKey);
 
@@ -85,7 +85,7 @@ const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHist
                 <div className="flex items-center space-x-2 overflow-hidden" title={project.filename}>
                     {isRevision && <CornerDownRight size={14} className="text-slate-400 flex-shrink-0" />}
                     {isRevision ? (<button onClick={() => setViewHistoryProject(project)} className="flex-shrink-0 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-[10px] font-bold px-1.5 py-0.5 rounded cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors duration-150" aria-label={`Ver histórico de revisão ${revNumber}`}>R{revNumber}</button>) : (<span className="w-5"></span>)}
-                    <span className={`truncate select-all ${isRevision ? 'text-slate-500 dark:text-slate-400 text-[11px]' : 'text-slate-800 dark:text-slate-200 text-sm'} ${isChildRow ? 'opacity-80' : ''}`}>{project.filename}</span>
+                    <span className={`truncate select-all ${isRevision ? 'text-slate-500 dark:text-slate-400 text-[11px]' : 'text-slate-800 dark:text-slate-200 text-sm'} ${isChildRow ? 'opacity-80' : ''}`}>{project.filename} {isRevision && `[R${revNumber}]`}</span>
                     {project.phase === ProjectPhase.PRELIMINARY && <span className="flex-shrink-0 text-[9px] uppercase font-bold text-slate-500 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-600">Prel</span>}
                     {project.phase === ProjectPhase.EXECUTIVE && <span className="flex-shrink-0 text-[9px] uppercase font-bold text-violet-600 bg-violet-50 dark:bg-violet-900/30 px-1.5 py-0.5 rounded border border-violet-100 dark:border-violet-800">Exec</span>}
                 </div>
@@ -248,7 +248,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
         const map = new Set<string>();
         projects.forEach(p => {
             if (p.phase === ProjectPhase.EXECUTIVE) {
-                const baseName = getProjectBaseName(p.filename).replace(/_EXEC/gi, '').replace(/\s*\[R\d+\]/gi, '').trim().toLowerCase();
+                const baseName = p.groupId || getProjectBaseName(p.filename).replace(/_EXEC/gi, '').replace(/\s*\[R\d+\]/gi, '').trim().toLowerCase();
                 const key = `${p.client}|${p.discipline}|${baseName}`;
                 map.add(key);
             }
@@ -261,13 +261,19 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
         const filtered = projects.filter(p => p.filename.toLowerCase().includes(search.toLowerCase()) || p.client.toLowerCase().includes(search.toLowerCase()) || p.discipline.toLowerCase().includes(search.toLowerCase()) || (p.base && p.base.toLowerCase().includes(search.toLowerCase())));
         const rawGroups: Record<string, ProjectFile[]> = {};
         filtered.forEach(p => {
-            const baseName = getProjectBaseName(p.filename).toLowerCase();
+            const baseName = p.groupId || getProjectBaseName(p.filename).toLowerCase();
             const phase = p.phase || ProjectPhase.PRELIMINARY;
             const groupKey = `${baseName}|${phase}`;
             if (!rawGroups[groupKey]) { rawGroups[groupKey] = []; }
             rawGroups[groupKey].push(p);
         });
-        Object.values(rawGroups).forEach(group => { group.sort((a, b) => getRevisionNumber(a.filename) - getRevisionNumber(b.filename)); });
+        Object.values(rawGroups).forEach(group => { 
+            group.sort((a, b) => {
+                const revA = a.revision !== undefined ? a.revision : getRevisionNumber(a.filename);
+                const revB = b.revision !== undefined ? b.revision : getRevisionNumber(b.filename);
+                return revA - revB;
+            }); 
+        });
         const sortedRawGroups = Object.values(rawGroups).sort((groupA, groupB) => {
             const fileA = groupA[0]; const fileB = groupB[0];
             let valA = fileA[sortConfig.key]; let valB = fileB[sortConfig.key];
@@ -278,7 +284,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
         return sortedRawGroups.map(group => {
             const latest = group[group.length - 1];
             const children = group.slice(0, group.length - 1);
-            const baseName = getProjectBaseName(latest.filename).toLowerCase();
+            const baseName = latest.groupId || getProjectBaseName(latest.filename).toLowerCase();
             const phase = latest.phase || ProjectPhase.PRELIMINARY;
             const groupKey = `${baseName}|${phase}`;
             return { baseName: groupKey, discipline: latest.discipline, latestProject: latest, children, allProjects: group };
@@ -596,13 +602,13 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                                                                     {/* Remaining data cells */}
                                                                     {(() => {
                                                                         const project = group.latestProject;
-                                                                        const revNumber = getRevisionNumber(project.filename);
+                                                                        const revNumber = project.revision !== undefined ? project.revision : getRevisionNumber(project.filename);
                                                                         const isRevision = revNumber > 0;
-                                                                        const currentBase = getProjectBaseName(project.filename);
+                                                                        const currentBase = project.groupId || getProjectBaseName(project.filename);
                                                                         const nextProject = sortedProjects[latestIdx + 1];
-                                                                        const isLastInGroup = (!nextProject || getProjectBaseName(nextProject.filename) !== currentBase);
+                                                                        const isLastInGroup = (!nextProject || (nextProject.groupId || getProjectBaseName(nextProject.filename)) !== currentBase);
                                                                         const canCreateRevision = isLastInGroup || project.status === Status.REJECTED;
-                                                                        const baseNameKey = getProjectBaseName(project.filename).replace(/_EXEC/gi, '').replace(/\s*\[R\d+\]/gi, '').trim().toLowerCase();
+                                                                        const baseNameKey = project.groupId || getProjectBaseName(project.filename).replace(/_EXEC/gi, '').replace(/\s*\[R\d+\]/gi, '').trim().toLowerCase();
                                                                         const uniqueKey = `${project.client}|${project.discipline}|${baseNameKey}`;
                                                                         const hasExecutiveVersion = executiveExistenceMap.has(uniqueKey);
                                                                         const canPromote = onPromote && project.phase === ProjectPhase.PRELIMINARY && (project.status === Status.DONE || project.status === Status.WAITING_APPROVAL || project.status === Status.APPROVED) && !hasExecutiveVersion && isLastInGroup;

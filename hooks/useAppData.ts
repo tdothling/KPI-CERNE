@@ -4,7 +4,7 @@ import { subscribeToProjects, addProject, updateProjectInDb, deleteProjectFromDb
 import { subscribeToAuth } from '../services/auth';
 import { db } from '../firebase';
 import { User } from 'firebase/auth';
-import { generateRevisionFilename, canTransitionTo } from '../utils';
+import { canTransitionTo } from '../utils';
 
 export function useAppData(projectFilter: ProjectFilterState) {
     const [projects, setProjects] = useState<ProjectFile[]>([]);
@@ -55,7 +55,9 @@ export function useAppData(projectFilter: ProjectFilterState) {
 
         addProject({
             ...projectData,
-            filename: generateRevisionFilename(originalProject.filename),
+            filename: originalProject.filename,
+            groupId: originalProject.groupId || crypto.randomUUID(),
+            revision: (originalProject.revision || 0) + 1,
             status: Status.IN_PROGRESS,
             startDate: new Date().toISOString().split('T')[0],
             startPeriod: currentPeriod,
@@ -75,22 +77,10 @@ export function useAppData(projectFilter: ProjectFilterState) {
         const newStartDate = new Date().toISOString().split('T')[0];
         const currentPeriod: Period = new Date().getHours() < 12 ? 'MANHA' : 'TARDE';
 
-        let newFilename = original.filename;
-        // Remove a marcação de revisão (ex: [R1]) para o arquivo executivo
-        newFilename = newFilename.replace(/\s*\[R\d+\]/gi, '');
-
-        if (!newFilename.toLowerCase().includes('exec') && !newFilename.toLowerCase().includes('rev')) {
-            const parts = newFilename.split('.');
-            if (parts.length > 1) {
-                const ext = parts.pop();
-                newFilename = `${parts.join('.')}_EXEC.${ext}`;
-            } else {
-                newFilename = `${newFilename}_EXEC`;
-            }
-        }
-
         addProject({
-            filename: newFilename,
+            filename: original.filename,
+            groupId: original.groupId || crypto.randomUUID(),
+            revision: 0,
             client: original.client,
             base: original.base,
             discipline: original.discipline,
@@ -114,7 +104,9 @@ export function useAppData(projectFilter: ProjectFilterState) {
 
         addMaterial({
             ...materialData,
-            filename: generateRevisionFilename(original.filename),
+            filename: original.filename,
+            groupId: original.groupId || crypto.randomUUID(),
+            revision: (original.revision || 0) + 1,
             status: 'IN_PROGRESS',
             startDate: new Date().toISOString().split('T')[0], endDate: '',
             startPeriod: currentPeriod,
