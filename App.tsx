@@ -71,9 +71,9 @@ export default function App() {
   const [isFolderUpload, setIsFolderUpload] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Apenas o Thiago Dothling é o administrador do sistema
-  const isAdmin = currentUser?.email?.startsWith('thiago.dothling');
-  const isReadOnly = !isAdmin;
+  // Todos os usuários agora têm acesso total às ferramentas e ações, exceto à aba de compras
+  const isAdmin = true;
+  const isReadOnly = false;
   const showPurchasesTab = currentUser?.email?.startsWith('thiago.dothling');
 
   useEffect(() => {
