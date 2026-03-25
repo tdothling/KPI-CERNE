@@ -586,9 +586,12 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                                                                             ) : (
                                                                                 <span className="w-[22px] flex-shrink-0"></span>
                                                                             )}
-                                                                            {getRevisionNumber(group.latestProject.filename) > 0 && (
-                                                                                <button onClick={() => setViewHistoryProject(group.latestProject)} className="flex-shrink-0 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-[10px] font-bold px-1.5 py-0.5 rounded cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors duration-150" aria-label={`Ver histórico de revisão ${getRevisionNumber(group.latestProject.filename)}`}>R{getRevisionNumber(group.latestProject.filename)}</button>
-                                                                            )}
+                                                                            {(() => {
+                                                                                const latestRevNum = group.latestProject.revision !== undefined ? group.latestProject.revision : getRevisionNumber(group.latestProject.filename);
+                                                                                return latestRevNum > 0 ? (
+                                                                                    <button onClick={() => setViewHistoryProject(group.latestProject)} className="flex-shrink-0 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-[10px] font-bold px-1.5 py-0.5 rounded cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors duration-150" aria-label={`Ver histórico de revisão ${latestRevNum}`}>R{latestRevNum}</button>
+                                                                                ) : null;
+                                                                            })()}
                                                                             <span className={`truncate select-all text-slate-800 dark:text-slate-200 text-sm`}>{group.latestProject.filename}</span>
                                                                             {group.latestProject.phase === ProjectPhase.PRELIMINARY && <span className="flex-shrink-0 text-[9px] uppercase font-bold text-slate-500 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-600">Prel</span>}
                                                                             {group.latestProject.phase === ProjectPhase.EXECUTIVE && <span className="flex-shrink-0 text-[9px] uppercase font-bold text-violet-600 bg-violet-50 dark:bg-violet-900/30 px-1.5 py-0.5 rounded border border-violet-100 dark:border-violet-800">Exec</span>}
