@@ -79,51 +79,67 @@ export const calculateNetExecutionDuration = (
 ): number => {
     if (!project.startDate || !isValid(parseISO(project.startDate))) return 0;
     
-    const start = parseISO(project.startDate);
-    const end = (project.endDate && isValid(parseISO(project.endDate))) ? parseISO(project.endDate) : new Date();
+    let start = parseISO(project.startDate);
+    let end = (project.endDate && isValid(parseISO(project.endDate))) ? parseISO(project.endDate) : new Date();
 
-    // Duração bruta (Lead Time)
-    const grossDuration = calculateBusinessDaysWithHolidays(
-        start, 
-        end, 
-        holidays, 
-        project.startPeriod, 
-        project.endPeriod
-    );
+    if (start > end) return 0;
 
-    if (!project.pauses || project.pauses.length === 0) {
-        return grossDuration;
-    }
-
-    // Calcula total de dias pausados (Touch Time = Gross - Paused)
-    let totalPausedDays = 0;
+    const holidaySet = new Set(holidays);
+    const startStr = format(start, 'yyyy-MM-dd');
+    const endStr = format(end, 'yyyy-MM-dd');
     
-    for (const pause of project.pauses) {
-        if (!pause.startDate || !isValid(parseISO(pause.startDate))) continue;
-        
-        const pauseStart = parseISO(pause.startDate);
-        // Se a pausa não tem fim, considera que está pausado até o momento atual (se o projeto não acabou) ou até o fim do projeto.
-        let pauseEnd = new Date();
-        if (pause.endDate && isValid(parseISO(pause.endDate))) {
-            pauseEnd = parseISO(pause.endDate);
+    const projStartSlot = `${startStr}_${project.startPeriod || 'MANHA'}`;
+    const projEndSlot = `${endStr}_${project.endPeriod || 'TARDE'}`;
+
+    let cursorDate = start;
+    let netSlots = 0;
+    const periods: Period[] = ['MANHA', 'TARDE'];
+
+    for (let i = 0; i < 10000; i++) { // safety limit
+        const dateStr = format(cursorDate, 'yyyy-MM-dd');
+
+        if (!isWeekend(cursorDate) && !holidaySet.has(dateStr)) {
+            for (const p of periods) {
+                const currentSlot = `${dateStr}_${p}`;
+
+                if (currentSlot >= projStartSlot && currentSlot <= projEndSlot) {
+                    let inPause = false;
+                    
+                    if (project.pauses && project.pauses.length > 0) {
+                        for (const pause of project.pauses) {
+                            if (!pause.startDate) continue;
+                            const pStartStr = pause.startDate;
+                            const pStartSlot = `${pStartStr}_${pause.startPeriod || 'MANHA'}`;
+                            
+                            if (!pause.endDate) {
+                                if (currentSlot >= pStartSlot) {
+                                    inPause = true;
+                                    break;
+                                }
+                            } else {
+                                const pEndSlot = `${pause.endDate}_${pause.endPeriod || 'MANHA'}`;
+                                if (currentSlot >= pStartSlot && currentSlot < pEndSlot) {
+                                    inPause = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if (!inPause) {
+                        netSlots++;
+                    }
+                }
+            }
         }
-        
-        // Garante que a pausa não ultrapasse o fim do projeto para o cálculo retroativo
-        if (pauseEnd > end) pauseEnd = end;
-        
-        // Se a pausa começou depois do fim do projeto (anomalia de dados), ignora
-        if (pauseStart > end) continue;
 
-        const pStart = pauseStart < start ? start : pauseStart;
-        
-        const pStartPeriod = pause.startPeriod || 'MANHA';
-        const pEndPeriod = pause.endPeriod || 'TARDE';
-
-        const pausedDuration = calculateBusinessDaysWithHolidays(pStart, pauseEnd, holidays, pStartPeriod, pEndPeriod);
-        totalPausedDays += pausedDuration;
+        if (dateStr >= endStr) {
+            break;
+        }
+        cursorDate = addDays(cursorDate, 1);
     }
 
-    return Math.max(0, grossDuration - totalPausedDays);
+    return netSlots * 0.5;
 };
 
 export const getStatusColor = (status: string) => {
