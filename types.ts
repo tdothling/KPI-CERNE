@@ -48,7 +48,9 @@ export interface Revision {
 export interface ProjectPause {
   id: string;
   startDate: string; // ISO Date
+  startPeriod?: Period; // Novo
   endDate?: string; // ISO Date (se vazio, a pausa está em andamento)
+  endPeriod?: Period; // Novo
   reason?: string; // Opcional, para descrever o motivo
 }
 

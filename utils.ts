@@ -115,8 +115,11 @@ export const calculateNetExecutionDuration = (
         if (pauseStart > end) continue;
 
         const pStart = pauseStart < start ? start : pauseStart;
+        
+        const pStartPeriod = pause.startPeriod || 'MANHA';
+        const pEndPeriod = pause.endPeriod || 'TARDE';
 
-        const pausedDuration = calculateBusinessDaysWithHolidays(pStart, pauseEnd, holidays, 'MANHA', 'TARDE');
+        const pausedDuration = calculateBusinessDaysWithHolidays(pStart, pauseEnd, holidays, pStartPeriod, pEndPeriod);
         totalPausedDays += pausedDuration;
     }
 
