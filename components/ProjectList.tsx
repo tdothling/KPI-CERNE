@@ -417,7 +417,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
         });
     };
 
-    const handleUpdatePause = (pauseId: string, field: 'startDate' | 'endDate' | 'reason', value: string) => {
+    const handleUpdatePause = (pauseId: string, field: 'startDate' | 'endDate' | 'reason' | 'startPeriod' | 'endPeriod', value: string) => {
         if (!editingProject || !editingProject.pauses) return;
         const updatedPauses = editingProject.pauses.map(p => 
             p.id === pauseId ? { ...p, [field]: value } : p
@@ -809,21 +809,27 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                                         {editingProject.pauses.map((pause, idx) => (
                                             <div key={pause.id} className="grid grid-cols-12 gap-3 items-center bg-white dark:bg-slate-800 p-2.5 rounded border border-slate-200 dark:border-slate-600">
                                                 <div className="col-span-1 text-center font-bold text-slate-400 text-xs">#{idx + 1}</div>
-                                                <div className="col-span-3">
+                                                <div className="col-span-4">
                                                     <label className="block text-[10px] text-slate-500 uppercase mb-0.5">Início</label>
-                                                    <input type="date" value={pause.startDate} onChange={(e) => handleUpdatePause(pause.id, 'startDate', e.target.value)} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded px-2 py-1 text-xs dark:[color-scheme:dark]" />
+                                                    <div className="flex">
+                                                        <input type="date" value={pause.startDate} onChange={(e) => handleUpdatePause(pause.id, 'startDate', e.target.value)} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-l px-2 py-1 text-xs dark:[color-scheme:dark]" />
+                                                        <PeriodSelector value={pause.startPeriod} onChange={(v) => handleUpdatePause(pause.id, 'startPeriod', v)} />
+                                                    </div>
                                                 </div>
-                                                <div className="col-span-3">
+                                                <div className="col-span-4">
                                                     <label className="block text-[10px] text-slate-500 uppercase mb-0.5">Retomada</label>
                                                     {pause.endDate ? (
-                                                        <input type="date" value={pause.endDate} onChange={(e) => handleUpdatePause(pause.id, 'endDate', e.target.value)} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded px-2 py-1 text-xs dark:[color-scheme:dark]" />
+                                                        <div className="flex">
+                                                            <input type="date" value={pause.endDate} onChange={(e) => handleUpdatePause(pause.id, 'endDate', e.target.value)} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-l px-2 py-1 text-xs dark:[color-scheme:dark]" />
+                                                            <PeriodSelector value={pause.endPeriod} onChange={(v) => handleUpdatePause(pause.id, 'endPeriod', v)} />
+                                                        </div>
                                                     ) : (
                                                         <button onClick={() => handleEndPause(pause.id)} className="w-full bg-emerald-100 hover:bg-emerald-200 text-emerald-700 text-xs py-1 rounded border border-emerald-200 transition-colors font-medium">
                                                             Registrar Retomada
                                                         </button>
                                                     )}
                                                 </div>
-                                                <div className="col-span-4">
+                                                <div className="col-span-2">
                                                     <label className="block text-[10px] text-slate-500 uppercase mb-0.5">Motivo</label>
                                                     <input type="text" value={pause.reason || ''} onChange={(e) => handleUpdatePause(pause.id, 'reason', e.target.value)} placeholder="Opcional..." className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded px-2 py-1 text-xs" />
                                                 </div>
