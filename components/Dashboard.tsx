@@ -70,12 +70,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
 
     // Usa filteredProjects em vez de data para reagir aos filtros
     filteredProjects.forEach(project => {
-      // C2: Excluir projetos REVISADOS dos cálculos de tempo e volume ativo
-      const isRevised = project.status === Status.REVISED;
+
 
       // 1. Execution Time Calculation (Split by Phase)
       // C2: Conta projetos com startDate (ciclo aberto usa today como fim)
-      if (!isRevised && project.startDate && isValid(parseISO(project.startDate))) {
+      // Inclui TODOS os projetos (inclusive REVISED) no cálculo de tempo médio de execução
+      if (project.startDate && isValid(parseISO(project.startDate))) {
         const start = parseISO(project.startDate);
         let end = (project.endDate && isValid(parseISO(project.endDate)))
             ? parseISO(project.endDate)
@@ -104,7 +104,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
 
       // 2. Client Response Time
       // C3: Usar days > 0 para excluir zeros falsos (valor padrão sem cálculo real)
-      if (!isRevised && project.blockedDays !== undefined && project.blockedDays !== null) {
+      if (project.blockedDays !== undefined && project.blockedDays !== null) {
           const days = Number(project.blockedDays);
           if (days > 0 && (project.feedbackDate || project.status === Status.APPROVED || project.status === Status.REJECTED)) {
               if (!clientResponseMap[project.client]) {
@@ -133,8 +133,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
          reasonsMap[rev.reason] = (reasonsMap[rev.reason] || 0) + 1;
       });
 
-      // 4. Volume Logic (exclui REVISED para não inflar contagem)
-      if (!isRevised) {
+      // 4. Volume Logic — inclui TODOS os projetos para refletir dados reais
+      {
         if (!volumeMap[project.client]) {
           volumeMap[project.client] = { name: project.client, total: 0 };
         }
@@ -142,8 +142,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
         volumeMap[project.client][project.discipline] = (volumeMap[project.client][project.discipline] || 0) + 1;
       }
 
-      // S3: Cycle Time (startDate → feedbackDate) — apenas projetos com ciclo completo
-      if (!isRevised && project.startDate && project.feedbackDate && 
+      // S3: Cycle Time (startDate → feedbackDate) — inclui todos os projetos com ciclo completo
+      if (project.startDate && project.feedbackDate && 
           isValid(parseISO(project.startDate)) && isValid(parseISO(project.feedbackDate))) {
           const start = parseISO(project.startDate);
           const feedback = parseISO(project.feedbackDate);
