@@ -119,7 +119,7 @@ const ClientDetailGantt = ({ clientName, projects, holidays, clients, onClose }:
                 const duration = calculateBusinessDaysWithHolidays(start, end, holidays, f.startPeriod, f.endPeriod || (f.endDate ? 'TARDE' : 'TARDE'));
                 const netDuration = calculateNetExecutionDuration(f, holidays);
                 
-                fileRows.push({ id: f.id, type: 'FILE', label: f.filename, discipline: f.discipline, status: f.status, start, end, duration, netDuration, plannedEnd, deadlineDays, pauses: f.pauses || [] });
+                fileRows.push({ id: f.id, type: 'FILE', label: f.filename, revision: f.revision, discipline: f.discipline, status: f.status, start, end, duration, netDuration, plannedEnd, deadlineDays, pauses: f.pauses || [] });
             });
             fileRows.sort((a, b) => a.start.getTime() - b.start.getTime());
             if (discDates.length > 0) {
@@ -190,7 +190,12 @@ const ClientDetailGantt = ({ clientName, projects, holidays, clients, onClose }:
                                                     <span className="text-[9px] md:text-[10px] px-1.5 py-0.5 bg-slate-200 dark:bg-slate-600 rounded-full text-slate-600 dark:text-slate-300 ml-auto hidden md:inline-block">{row.children.length} arq</span>
                                                 </button>
                                             ) : (
-                                                <div className="pl-4 md:pl-6 flex items-center space-x-2 text-xs md:text-sm text-slate-600 dark:text-slate-400 w-full overflow-hidden">
+                                                <div className="pl-4 md:pl-6 flex items-center gap-1.5 text-xs md:text-sm text-slate-600 dark:text-slate-400 w-full overflow-hidden">
+                                                    {row.revision !== undefined && (
+                                                        <span className="flex-shrink-0 text-[9px] font-bold px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-200 leading-none">
+                                                            R{row.revision}
+                                                        </span>
+                                                    )}
                                                     <span className={`truncate flex-1 ${row.status === Status.DONE ? 'line-through opacity-70' : ''}`} title={row.label}>{row.label}</span>
                                                     {isDone && <CheckCircle2 size={12} className="text-emerald-500 flex-shrink-0" />}
                                                 </div>
