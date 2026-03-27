@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { ProjectFile, Discipline, Status, MaterialDoc, ProjectPhase, ClientDoc } from '../types';
-import { parseISO, isValid, isAfter, isSameDay, addDays, startOfDay } from 'date-fns';
+import { format, parseISO, isValid, isAfter, isSameDay, addDays, startOfDay } from 'date-fns';
 import { LayoutDashboard, FileDown } from 'lucide-react';
 import { getProjectBaseName, getRevisionNumber, calculateBusinessDaysWithHolidays, calculateNetExecutionDuration, calculateDeadlineDate } from '../utils';
 import { useDashboardFilters } from '../hooks/useDashboardFilters';
@@ -74,14 +74,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
       const isRevised = project.status === Status.REVISED;
 
       // 1. Execution Time Calculation (Split by Phase)
-      // C2: Só conta projetos com ciclo completo (tem endDate) e que não são REVISED
-      if (!isRevised && project.startDate && project.endDate && isValid(parseISO(project.startDate)) && isValid(parseISO(project.endDate))) {
+      // C2: Conta projetos com startDate (ciclo aberto usa today como fim)
+      if (!isRevised && project.startDate && isValid(parseISO(project.startDate))) {
         const start = parseISO(project.startDate);
-        let end = parseISO(project.endDate);
+        let end = (project.endDate && isValid(parseISO(project.endDate)))
+            ? parseISO(project.endDate)
+            : today;
         if (end < start) end = start;
         
         const duration = calculateNetExecutionDuration(
-            project, 
+            { ...project, endDate: project.endDate || format(today, 'yyyy-MM-dd') },
             holidays
         );
 
