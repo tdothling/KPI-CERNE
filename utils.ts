@@ -79,63 +79,57 @@ export const calculateNetExecutionDuration = (
 ): number => {
     if (!project.startDate || !isValid(parseISO(project.startDate))) return 0;
     
-    let start = parseISO(project.startDate);
-    let end = (project.endDate && isValid(parseISO(project.endDate))) ? parseISO(project.endDate) : new Date();
+    const start = parseISO(project.startDate);
+    const end = (project.endDate && isValid(parseISO(project.endDate))) 
+        ? parseISO(project.endDate) 
+        : new Date();
 
     if (start > end) return 0;
 
     const holidaySet = new Set(holidays);
     const startStr = format(start, 'yyyy-MM-dd');
     const endStr = format(end, 'yyyy-MM-dd');
-    
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+
+    // Project boundary slots
     const projStartSlot = `${startStr}_${project.startPeriod || 'MANHA'}`;
     const projEndSlot = `${endStr}_${project.endPeriod || 'TARDE'}`;
+
+    // Pre-compute pause boundary slots
+    const pauseSlots = (project.pauses ?? [])
+        .filter(p => !!p.startDate)
+        .map(p => ({
+            start: `${p.startDate}_${p.startPeriod || 'MANHA'}`,
+            end:   `${p.endDate || todayStr}_${p.endPeriod || 'TARDE'}`,
+        }));
 
     let cursorDate = start;
     let netSlots = 0;
     const periods: Period[] = ['MANHA', 'TARDE'];
 
-    for (let i = 0; i < 10000; i++) { // safety limit
+    while (cursorDate <= end) {
         const dateStr = format(cursorDate, 'yyyy-MM-dd');
 
         if (!isWeekend(cursorDate) && !holidaySet.has(dateStr)) {
             for (const p of periods) {
                 const currentSlot = `${dateStr}_${p}`;
 
-                if (currentSlot >= projStartSlot && currentSlot <= projEndSlot) {
-                    let inPause = false;
-                    
-                    if (project.pauses && project.pauses.length > 0) {
-                        for (const pause of project.pauses) {
-                            if (!pause.startDate) continue;
-                            const pStartStr = pause.startDate;
-                            const pStartSlot = `${pStartStr}_${pause.startPeriod || 'MANHA'}`;
-                            
-                            if (!pause.endDate) {
-                                if (currentSlot >= pStartSlot) {
-                                    inPause = true;
-                                    break;
-                                }
-                            } else {
-                                const pEndSlot = `${pause.endDate}_${pause.endPeriod || 'MANHA'}`;
-                                if (currentSlot >= pStartSlot && currentSlot < pEndSlot) {
-                                    inPause = true;
-                                    break;
-                                }
-                            }
-                        }
-                    }
+                // Project window check
+                if (currentSlot < projStartSlot || currentSlot > projEndSlot) {
+                    continue;
+                }
 
-                    if (!inPause) {
-                        netSlots++;
-                    }
+                // Pause check (INCLUSIVE)
+                const inPause = pauseSlots.some(
+                    ps => currentSlot >= ps.start && currentSlot <= ps.end
+                );
+
+                if (!inPause) {
+                    netSlots++;
                 }
             }
         }
 
-        if (dateStr >= endStr) {
-            break;
-        }
         cursorDate = addDays(cursorDate, 1);
     }
 

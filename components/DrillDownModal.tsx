@@ -3,7 +3,7 @@ import { X, FileText, CheckCircle2, XCircle, Clock, Download } from 'lucide-reac
 import { ProjectFile, Status, Discipline } from '../types';
 import { format, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { calculateBusinessDaysWithHolidays } from '../utils';
+import { calculateBusinessDaysWithHolidays, calculateNetExecutionDuration } from '../utils';
 import { getStatusColor } from '../utils';
 
 export interface DrillDownPayload {
@@ -81,7 +81,7 @@ export const DrillDownModal: React.FC<DrillDownModalProps> = ({ payload, project
     const withRevision = rows.filter(p => p.revisions?.length > 0 || p.status === Status.REJECTED);
     const withDuration = rows.filter(p => p.startDate && p.endDate);
     const totalDuration = withDuration.reduce((acc, p) => {
-      return acc + calculateBusinessDaysWithHolidays(parseISO(p.startDate), parseISO(p.endDate), holidays, p.startPeriod, p.endPeriod || 'TARDE');
+      return acc + calculateNetExecutionDuration(p, holidays);
     }, 0);
     return {
       total: rows.length,

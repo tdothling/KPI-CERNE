@@ -4,7 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { ProjectFile, Discipline, Status, MaterialDoc, ProjectPhase, ClientDoc } from '../types';
 import { parseISO, isValid, isAfter, isSameDay, addDays, startOfDay } from 'date-fns';
 import { LayoutDashboard, FileDown } from 'lucide-react';
-import { getProjectBaseName, getRevisionNumber, calculateBusinessDaysWithHolidays, calculateDeadlineDate } from '../utils';
+import { getProjectBaseName, getRevisionNumber, calculateBusinessDaysWithHolidays, calculateNetExecutionDuration, calculateDeadlineDate } from '../utils';
 import { useDashboardFilters } from '../hooks/useDashboardFilters';
 import { DashboardFilters } from './DashboardFilters';
 import { DrillDownModal, DrillDownPayload } from './DrillDownModal';
@@ -80,12 +80,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
         let end = parseISO(project.endDate);
         if (end < start) end = start;
         
-        const duration = calculateBusinessDaysWithHolidays(
-            start, 
-            end, 
-            holidays, 
-            project.startPeriod, 
-            project.endPeriod || 'TARDE' 
+        const duration = calculateNetExecutionDuration(
+            project, 
+            holidays
         );
 
         if (!timeByDiscipline[project.discipline]) {
