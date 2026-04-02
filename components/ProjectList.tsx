@@ -731,7 +731,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
 
                 {/* Pagination Footer */}
                 {totalPages > 1 && (
-                    <div className="px-4 py-2.5 border-t border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-700/20 flex items-center justify-between text-sm">
+                    <div className="px-4 py-2.5 border-t border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-700/20 flex flex-wrap items-center justify-between gap-2 text-sm">
                         <span className="text-xs text-slate-500 dark:text-slate-400">
                             {((currentPage - 1) * ITEMS_PER_PAGE) + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, projectGroups.length)} de {projectGroups.length} projetos
                         </span>
@@ -743,7 +743,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                             >
                                 ← Anterior
                             </button>
-                            <span className="px-3 py-1 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                            <span className="px-3 py-1 text-xs font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
                                 {currentPage} / {totalPages}
                             </span>
                             <button

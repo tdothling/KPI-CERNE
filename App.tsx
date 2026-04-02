@@ -327,16 +327,16 @@ export default function App() {
         </div>
 
         {/* Layer 2: Functional Toolbar */}
-        <div className="w-full px-4 sm:px-6 lg:px-8 h-12 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/20">
-          <nav className="flex space-x-1 h-full items-center" aria-label="Tabs">
-            <NavTab active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutDashboard size={16} />} label="Indicadores" />
-            <NavTab active={activeTab === 'timeline'} onClick={() => setActiveTab('timeline')} icon={<Calendar size={16} />} label="Cronograma" />
-            <NavTab active={activeTab === 'projects'} onClick={() => setActiveTab('projects')} icon={<List size={16} />} label="Projetos" />
-            <NavTab active={activeTab === 'materials'} onClick={() => setActiveTab('materials')} icon={<Package size={16} />} label="Materiais" />
-            {showPurchasesTab && <NavTab active={activeTab === 'purchases'} onClick={() => setActiveTab('purchases')} icon={<ShoppingCart size={16} />} label="Compras" />}
+        <div className="w-full px-4 sm:px-6 lg:px-8 h-12 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/20 overflow-hidden">
+          <nav className="flex space-x-1 h-full items-center overflow-x-auto custom-scrollbar flex-1 min-w-0 pr-4" aria-label="Tabs">
+            <NavTab active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutDashboard size={16} className="min-w-[16px]" />} label="Indicadores" />
+            <NavTab active={activeTab === 'timeline'} onClick={() => setActiveTab('timeline')} icon={<Calendar size={16} className="min-w-[16px]" />} label="Cronograma" />
+            <NavTab active={activeTab === 'projects'} onClick={() => setActiveTab('projects')} icon={<List size={16} className="min-w-[16px]" />} label="Projetos" />
+            <NavTab active={activeTab === 'materials'} onClick={() => setActiveTab('materials')} icon={<Package size={16} className="min-w-[16px]" />} label="Materiais" />
+            {showPurchasesTab && <NavTab active={activeTab === 'purchases'} onClick={() => setActiveTab('purchases')} icon={<ShoppingCart size={16} className="min-w-[16px]" />} label="Compras" />}
           </nav>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0 pl-2">
             {/* Filters Group */}
             <div className="flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-0.5 overflow-hidden">
                <FilterButton active={selectedClients.length > 0} onClick={() => { setIsClientFilterOpen(!isClientFilterOpen); setIsDisciplineFilterOpen(false); }}>
@@ -687,12 +687,12 @@ function NavTab({ active, onClick, icon, label }: { active: boolean, onClick: ()
   return (
     <button 
       onClick={onClick} 
-      className={`h-full px-4 flex items-center gap-2 text-xs font-bold transition-all relative ${
+      className={`h-full px-4 flex-shrink-0 flex items-center gap-2 text-xs font-bold transition-all relative ${
         active ? 'text-brand-700 dark:text-brand-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
       }`}
     >
       {icon}
-      <span>{label}</span>
+      <span className="whitespace-nowrap">{label}</span>
       {active && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-600 dark:bg-brand-500 rounded-t-full"></div>}
     </button>
   );
