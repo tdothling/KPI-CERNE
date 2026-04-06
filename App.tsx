@@ -327,7 +327,7 @@ export default function App() {
         </div>
 
         {/* Layer 2: Functional Toolbar */}
-        <div className="w-full px-4 sm:px-6 lg:px-8 h-12 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/20 overflow-hidden">
+        <div className="w-full px-4 sm:px-6 lg:px-8 h-12 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/20">
           <nav className="flex space-x-1 h-full items-center overflow-x-auto custom-scrollbar flex-1 min-w-0 pr-4" aria-label="Tabs">
             <NavTab active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutDashboard size={16} className="min-w-[16px]" />} label="Indicadores" />
             <NavTab active={activeTab === 'timeline'} onClick={() => setActiveTab('timeline')} icon={<Calendar size={16} className="min-w-[16px]" />} label="Cronograma" />

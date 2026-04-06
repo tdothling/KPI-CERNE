@@ -818,7 +818,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                                                 </div>
                                                 <div className="col-span-4">
                                                     <label className="block text-[10px] text-slate-500 uppercase mb-0.5">Retomada</label>
-                                                    {pause.endDate ? (
+                                                    {pause.endDate !== undefined ? (
                                                         <div className="flex">
                                                             <input type="date" value={pause.endDate} onChange={(e) => handleUpdatePause(pause.id, 'endDate', e.target.value)} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-l px-2 py-1 text-xs dark:[color-scheme:dark]" />
                                                             <PeriodSelector value={pause.endPeriod} onChange={(v) => handleUpdatePause(pause.id, 'endPeriod', v)} />
