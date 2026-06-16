@@ -63,13 +63,14 @@ const ProjectRow = memo(({ project, index, sortedProjects, readOnly, setViewHist
     const clientData = clientsMap[project.client];
     const contractDate = clientData?.contractDate;
     const deadlineDays = clientData?.deadlineDays;
+    const obraCompleted = !!clientData?.completedAt;
 
     const deadlineDate = contractDate && deadlineDays !== undefined
         ? calculateDeadlineDate(contractDate, deadlineDays)
         : null;
 
     let isOverdue = false;
-    if (deadlineDate) {
+    if (deadlineDate && !obraCompleted) {
         const deadlineStr = format(deadlineDate, 'yyyy-MM-dd');
         if (project.endDate && project.status !== Status.REVISED) {
             isOverdue = project.endDate > deadlineStr;

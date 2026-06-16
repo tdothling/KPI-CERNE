@@ -155,6 +155,9 @@ export interface ClientDoc {
   // SLA Padrão da Obra
   contractDate?: string; // Data de Assinatura do Contrato para esta obra
   deadlineDays?: number; // Dias corridos previstos para execução
+
+  // Ciclo de Vida da Obra
+  completedAt?: string; // ISO Date — quando a obra foi marcada como concluída; suprime alertas SLA
 }
 
 export interface KPISummary {

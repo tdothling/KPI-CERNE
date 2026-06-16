@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
-import { X, Building2, MapPin, Plus, Trash2, Edit2, Save, HardHat } from 'lucide-react';
+import { X, Building2, MapPin, Plus, Trash2, Edit2, Save, HardHat, CheckCircle2, RotateCcw } from 'lucide-react';
 import { ClientDoc, SiteType } from '../types';
+import { format } from 'date-fns';
 
 interface ClientManagerModalProps {
   clients: ClientDoc[];
@@ -83,21 +84,30 @@ export const ClientManagerModal: React.FC<ClientManagerModalProps> = ({ clients,
              <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-white dark:bg-slate-800"><span className="text-sm font-medium text-slate-500 dark:text-slate-400">{clients.length} registros encontrados</span></div>
              <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 {clients.length === 0 ? (<div className="text-center py-20 text-slate-400"><Building2 size={48} className="mx-auto mb-3 opacity-50" /><p>Nenhum cliente cadastrado.</p></div>) : (clients.map(client => (
-                        <div key={client.id} className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm flex justify-between items-center group hover:border-brand-300 dark:hover:border-brand-700 transition-all">
+                        <div key={client.id} className={`bg-white dark:bg-slate-800 p-4 rounded-lg border shadow-sm flex justify-between items-center group transition-all ${client.completedAt ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50/30 dark:bg-emerald-900/10' : 'border-slate-200 dark:border-slate-700 hover:border-brand-300 dark:hover:border-brand-700'}`}>
                             <div className="flex items-start gap-3">
-                                <div className={`mt-1 p-2 rounded-full ${client.type === SiteType.CONSTRUCTION_SITE ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'}`}>{client.type === SiteType.CONSTRUCTION_SITE ? <HardHat size={18} /> : <Building2 size={18} />}</div>
+                                <div className={`mt-1 p-2 rounded-full ${client.completedAt ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : client.type === SiteType.CONSTRUCTION_SITE ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'}`}>{client.completedAt ? <CheckCircle2 size={18} /> : client.type === SiteType.CONSTRUCTION_SITE ? <HardHat size={18} /> : <Building2 size={18} />}</div>
                                 <div>
-                                    <h4 className="font-bold text-slate-800 dark:text-white">{client.name}</h4>
+                                    <div className="flex items-center gap-2">
+                                        <h4 className="font-bold text-slate-800 dark:text-white">{client.name}</h4>
+                                        {client.completedAt && <span className="text-[10px] font-bold uppercase bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">Obra Concluída</span>}
+                                    </div>
                                     <div className="flex items-center flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400 mt-1">
                                         <span className="flex items-center gap-1"><MapPin size={12} /> {client.location || 'Local não informado'}</span>
                                         <span>•</span>
                                         <span>{client.type === SiteType.CONSTRUCTION_SITE ? 'Canteiro' : 'Base'}</span>
                                         {client.type === SiteType.OPERATIONAL_BASE && (<><span>•</span><span className="font-semibold text-slate-700 dark:text-slate-300">{client.numberOfBases} Bases</span></>)}
                                         {(client.contractDate || client.deadlineDays !== undefined) && <><span>•</span><span className="font-semibold text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/20 px-1.5 py-0.5 rounded border border-brand-100 dark:border-brand-900/30">SLA: {client.deadlineDays ?? '-'} dias</span></>}
+                                        {client.completedAt && <><span>•</span><span className="text-emerald-600 dark:text-emerald-400">Concluída em {format(new Date(client.completedAt), 'dd/MM/yyyy')}</span></>}
                                     </div>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                {client.completedAt ? (
+                                    <button onClick={() => { if (window.confirm(`Reabrir a obra "${client.name}"?\n\nOs alertas de SLA voltarão a ser exibidos.`)) onUpdateClient({ ...client, completedAt: '' }); }} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors" aria-label="Reabrir obra" title="Reabrir Obra"><RotateCcw size={16} /></button>
+                                ) : (
+                                    <button onClick={() => { if (window.confirm(`Confirma a conclusão da obra "${client.name}"?\n\nIsso irá suprimir todos os alertas de SLA desta obra.`)) onUpdateClient({ ...client, completedAt: new Date().toISOString().split('T')[0] }); }} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors" aria-label="Concluir obra" title="Concluir Obra"><CheckCircle2 size={16} /></button>
+                                )}
                                 <button onClick={() => handleEdit(client)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors" aria-label="Editar"><Edit2 size={16} /></button>
                                 <button onClick={() => onDeleteClient(client.id)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full text-slate-400 hover:text-rose-600 transition-colors" aria-label="Excluir"><Trash2 size={16} /></button>
                             </div>

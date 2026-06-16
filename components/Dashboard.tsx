@@ -163,19 +163,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
       }
 
       // 5. OTD and SLA Alerts
-      // Atrasos e OTD exigem que o cliente daquele projeto tenha uma SLA associada 
+      // Atrasos e OTD exigem que o cliente daquele projeto tenha uma SLA associada
       const clientData = clientsMap[project.client];
       const hasSLA = clientData?.contractDate && clientData?.deadlineDays !== undefined;
-      
+      const obraCompleted = !!clientData?.completedAt;
+
       if (hasSLA) {
           const deadlineDate = calculateDeadlineDate(clientData.contractDate as string, clientData.deadlineDays as number);
-          
+
           if (deadlineDate) {
               const deadline = deadlineDate;
               const isDone = project.status === Status.DONE || project.status === Status.APPROVED;
 
-              // Kanban Alert calculation string conditions: Vencendo Hoje or Atrasado
-              if (!isDone && project.status !== Status.REJECTED && project.status !== Status.WAITING_APPROVAL) {
+              // Kanban Alert: omite alertas de atraso quando a obra já foi concluída
+              if (!obraCompleted && !isDone && project.status !== Status.REJECTED && project.status !== Status.WAITING_APPROVAL) {
                   if (isAfter(today, deadline)) {
                       alerts.push({ ...project, _tempSlaStatus: 'ATRASADO' } as any);
                   } else if (isSameDay(today, deadline) || isSameDay(addDays(today, 1), deadline)) {
@@ -190,7 +191,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
                   if (!isAfter(parseISO(project.feedbackDate), deadline)) {
                       totalOnTime++;
                   }
-              } else if (!isDone && isAfter(today, deadline)) {
+              } else if (!obraCompleted && !isDone && isAfter(today, deadline)) {
                   // Active project that is already late also negatively hits the OTD rate
                   totalSlaMeasured++;
               }
