@@ -214,7 +214,9 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
     const [currentPage, setCurrentPage] = useState(1);
     const ITEMS_PER_PAGE = 100;
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-    const [expandedDisciplines, setExpandedDisciplines] = useState<Set<Discipline>>(new Set(Object.values(Discipline)));
+    // Inicia recolhido para uma entrada mais limpa; a busca expande automaticamente
+    const [expandedDisciplines, setExpandedDisciplines] = useState<Set<Discipline>>(new Set());
+    const [statusFilter, setStatusFilter] = useState<Status | 'ALL' | 'OVERDUE'>('ALL');
 
     const [clientsList, setClientsList] = useState<{ id: string, name: string }[]>([]);
     const [clientsMap, setClientsMap] = useState<Record<string, any>>({});
@@ -231,6 +233,39 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
         });
         return () => unsub();
     }, []);
+
+    // Determina se um projeto está atrasado em relação ao prazo (SLA) da obra
+    const isProjectOverdue = (project: ProjectFile): boolean => {
+        const clientData = clientsMap[project.client];
+        const contractDate = clientData?.contractDate;
+        const deadlineDays = clientData?.deadlineDays;
+        const obraCompleted = !!clientData?.completedAt;
+        if (!contractDate || deadlineDays === undefined || obraCompleted) return false;
+        const deadlineDate = calculateDeadlineDate(contractDate, deadlineDays);
+        if (!deadlineDate) return false;
+        const deadlineStr = format(deadlineDate, 'yyyy-MM-dd');
+        if (project.endDate && project.status !== Status.REVISED) {
+            return project.endDate > deadlineStr;
+        }
+        if (project.status !== Status.DONE && project.status !== Status.WAITING_APPROVAL && project.status !== Status.APPROVED && project.status !== Status.REVISED) {
+            return new Date().toISOString().split('T')[0] > deadlineStr;
+        }
+        return false;
+    };
+
+    // Contadores globais para os cards de resumo (independentes do filtro ativo)
+    const summaryCounts = useMemo(() => {
+        const counts = { total: projects.length, inProgress: 0, done: 0, waiting: 0, approved: 0, rejected: 0, overdue: 0 };
+        projects.forEach(p => {
+            if (p.status === Status.IN_PROGRESS) counts.inProgress++;
+            else if (p.status === Status.DONE) counts.done++;
+            else if (p.status === Status.WAITING_APPROVAL) counts.waiting++;
+            else if (p.status === Status.APPROVED) counts.approved++;
+            else if (p.status === Status.REJECTED) counts.rejected++;
+            if (isProjectOverdue(p)) counts.overdue++;
+        });
+        return counts;
+    }, [projects, clientsMap]);
 
     const [pendingCompletion, setPendingCompletion] = useState<{ id: string, date: string, period: Period } | null>(null);
     const [pendingSend, setPendingSend] = useState<{ id: string, date: string, period: Period } | null>(null);
@@ -259,7 +294,14 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
 
     // Build grouped project data
     const projectGroups = useMemo((): ProjectGroup[] => {
-        const filtered = projects.filter(p => p.filename.toLowerCase().includes(search.toLowerCase()) || p.client.toLowerCase().includes(search.toLowerCase()) || p.discipline.toLowerCase().includes(search.toLowerCase()) || (p.base && p.base.toLowerCase().includes(search.toLowerCase())));
+        const term = search.toLowerCase();
+        const filtered = projects.filter(p => {
+            const matchesSearch = p.filename.toLowerCase().includes(term) || p.client.toLowerCase().includes(term) || p.discipline.toLowerCase().includes(term) || (p.base && p.base.toLowerCase().includes(term));
+            if (!matchesSearch) return false;
+            if (statusFilter === 'ALL') return true;
+            if (statusFilter === 'OVERDUE') return isProjectOverdue(p);
+            return p.status === statusFilter;
+        });
         const rawGroups: Record<string, ProjectFile[]> = {};
         filtered.forEach(p => {
             const baseName = p.groupId || getProjectBaseName(p.filename).toLowerCase();
@@ -290,7 +332,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
             const groupKey = `${baseName}|${phase}`;
             return { baseName: groupKey, discipline: latest.discipline, latestProject: latest, children, allProjects: group };
         });
-    }, [projects, sortConfig, search]);
+    }, [projects, sortConfig, search, statusFilter, clientsMap]);
 
     const disciplineGroups = useMemo((): DisciplineGroup[] => {
         const disciplineMap: Partial<Record<Discipline, Partial<Record<ProjectPhase, ProjectGroup[]>>>> = {};
@@ -339,6 +381,15 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
         });
     };
 
+    const allDisciplinesExpanded = expandedDisciplines.size > 0;
+    const toggleAllDisciplines = () => {
+        if (allDisciplinesExpanded) {
+            setExpandedDisciplines(new Set());
+        } else {
+            setExpandedDisciplines(new Set(disciplineGroups.map(d => d.discipline)));
+        }
+    };
+
     // Pagination (counts groups, not individual rows)
     const totalPages = Math.max(1, Math.ceil(projectGroups.length / ITEMS_PER_PAGE));
     const paginatedGroups = useMemo(() => {
@@ -347,14 +398,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
     }, [projectGroups, currentPage, ITEMS_PER_PAGE]);
 
     // Reset page when search/filter changes
-    useEffect(() => { setCurrentPage(1); }, [search, projects]);
-
-    // Status summary counts (all projects, not just visible)
-    const statusCounts = useMemo(() => {
-        const counts: Record<string, number> = {};
-        sortedProjects.forEach(p => { counts[p.status] = (counts[p.status] || 0) + 1; });
-        return counts;
-    }, [sortedProjects]);
+    useEffect(() => { setCurrentPage(1); }, [search, projects, statusFilter]);
 
     const projectHistory = useMemo(() => { if (!viewHistoryProject) return []; const baseName = getProjectBaseName(viewHistoryProject.filename); const lineage = projects.filter(p => getProjectBaseName(p.filename) === baseName); const historyEvents = lineage.flatMap(p => { const revNum = p.revision !== undefined ? p.revision : getRevisionNumber(p.filename); return p.revisions.map(rev => ({ ...rev, fileId: p.id, filename: p.filename, revisionNumber: revNum })); }); return historyEvents.sort((a, b) => b.revisionNumber - a.revisionNumber); }, [viewHistoryProject, projects]);
     const detailsHistory = useMemo(() => { if (!detailsProject) return []; const baseName = getProjectBaseName(detailsProject.filename); const lineage = projects.filter(p => getProjectBaseName(p.filename) === baseName); const historyEvents = lineage.flatMap(p => { const revNum = p.revision !== undefined ? p.revision : getRevisionNumber(p.filename); return p.revisions.map(rev => ({ ...rev, fileId: p.id, filename: p.filename, revisionNumber: revNum })); }); return historyEvents.sort((a, b) => b.revisionNumber - a.revisionNumber); }, [detailsProject, projects]);
@@ -483,19 +527,35 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
             </div>
 
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden transition-colors duration-200">
-                <div className="p-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-700/30 flex flex-wrap items-center gap-3">
-                    <div className="relative flex-1 min-w-[200px] max-w-sm">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                        <input type="text" placeholder="Buscar por cliente, arquivo ou disciplina..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-9 pr-4 py-1.5 text-sm border border-slate-200 dark:border-slate-600 rounded-lg focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 bg-white dark:bg-slate-800 text-slate-900 dark:text-white transition-all duration-150" />
+                <div className="p-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-700/30 space-y-3">
+                    {/* Cards de resumo — clicáveis para filtrar por status */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                        <SummaryCard color="slate" icon={<List size={16} />} label="Todos" value={summaryCounts.total} active={statusFilter === 'ALL'} onClick={() => setStatusFilter('ALL')} />
+                        <SummaryCard color="blue" icon={<Play size={16} />} label="Em andamento" value={summaryCounts.inProgress} active={statusFilter === Status.IN_PROGRESS} onClick={() => setStatusFilter(prev => prev === Status.IN_PROGRESS ? 'ALL' : Status.IN_PROGRESS)} />
+                        <SummaryCard color="amber" icon={<Send size={16} />} label="Aguardando" value={summaryCounts.waiting} active={statusFilter === Status.WAITING_APPROVAL} onClick={() => setStatusFilter(prev => prev === Status.WAITING_APPROVAL ? 'ALL' : Status.WAITING_APPROVAL)} />
+                        <SummaryCard color="emerald" icon={<BadgeCheck size={16} />} label="Aprovados" value={summaryCounts.approved} active={statusFilter === Status.APPROVED} onClick={() => setStatusFilter(prev => prev === Status.APPROVED ? 'ALL' : Status.APPROVED)} />
+                        <SummaryCard color="rose" icon={<ThumbsDown size={16} />} label="Reprovados" value={summaryCounts.rejected} active={statusFilter === Status.REJECTED} onClick={() => setStatusFilter(prev => prev === Status.REJECTED ? 'ALL' : Status.REJECTED)} />
+                        <SummaryCard color="red" icon={<AlertTriangle size={16} />} label="Atrasados" value={summaryCounts.overdue} active={statusFilter === 'OVERDUE'} onClick={() => setStatusFilter(prev => prev === 'OVERDUE' ? 'ALL' : 'OVERDUE')} />
                     </div>
-                    <div className="flex items-center gap-2 flex-wrap text-[11px]">
-                        <span className="text-slate-500 dark:text-slate-400 font-medium">{sortedProjects.length} registros ({projectGroups.length} projetos)</span>
-                        <span className="text-slate-300 dark:text-slate-600">|</span>
-                        {statusCounts[Status.IN_PROGRESS] > 0 && <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 font-medium">{statusCounts[Status.IN_PROGRESS]} em andamento</span>}
-                        {statusCounts[Status.DONE] > 0 && <span className="px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400 font-medium">{statusCounts[Status.DONE]} concluídos</span>}
-                        {statusCounts[Status.WAITING_APPROVAL] > 0 && <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 font-medium">{statusCounts[Status.WAITING_APPROVAL]} aguardando</span>}
-                        {statusCounts[Status.APPROVED] > 0 && <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 font-medium">{statusCounts[Status.APPROVED]} aprovados</span>}
-                        {statusCounts[Status.REJECTED] > 0 && <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 font-medium">{statusCounts[Status.REJECTED]} reprovados</span>}
+
+                    {/* Busca + controles */}
+                    <div className="flex flex-wrap items-center gap-3">
+                        <div className="relative flex-1 min-w-[200px] max-w-sm">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                            <input type="text" placeholder="Buscar por cliente, arquivo ou disciplina..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-9 pr-4 py-1.5 text-sm border border-slate-200 dark:border-slate-600 rounded-lg focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 bg-white dark:bg-slate-800 text-slate-900 dark:text-white transition-all duration-150" />
+                        </div>
+
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">{sortedProjects.length} registros ({projectGroups.length} projetos)</span>
+
+                        {statusFilter !== 'ALL' && (
+                            <button onClick={() => setStatusFilter('ALL')} className="flex items-center gap-1 text-[11px] font-bold text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 px-2 py-1 rounded-full hover:bg-brand-100 transition-colors">
+                                <X size={12} /> Limpar filtro
+                            </button>
+                        )}
+
+                        <button onClick={toggleAllDisciplines} className="ml-auto flex items-center gap-1.5 text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 px-2.5 py-1.5 rounded-lg hover:border-brand-300 transition-colors">
+                            {allDisciplinesExpanded ? <><ChevronRight size={14} /> Recolher tudo</> : <><ChevronDown size={14} /> Expandir tudo</>}
+                        </button>
                     </div>
                 </div>
 
@@ -518,7 +578,8 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                             {disciplineGroups.map((dg) => {
-                                const isDisciplineExpanded = expandedDisciplines.has(dg.discipline);
+                                // Durante a busca ou com filtro de status ativo, expande automaticamente para revelar os resultados
+                                const isDisciplineExpanded = expandedDisciplines.has(dg.discipline) || !!search.trim() || statusFilter !== 'ALL';
                                 // Check if any projects in this discipline are in the current page
                                 const hasProjectsInPage = dg.phaseGroups.some(pg => 
                                     pg.groups.some(g => paginatedGroups.includes(g))
@@ -922,3 +983,32 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
         </div>
     );
 };
+
+// --- Card de resumo / filtro rápido por status ---
+type CardColor = 'slate' | 'blue' | 'amber' | 'emerald' | 'rose' | 'red';
+
+const CARD_STYLES: Record<CardColor, { active: string; iconActive: string; iconIdle: string; value: string }> = {
+    slate:   { active: 'border-slate-400 bg-slate-100 dark:bg-slate-700/60 dark:border-slate-400 ring-1 ring-slate-300 dark:ring-slate-500', iconActive: 'bg-slate-200 text-slate-700 dark:bg-slate-600 dark:text-slate-200', iconIdle: 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400', value: 'text-slate-800 dark:text-slate-100' },
+    blue:    { active: 'border-blue-400 bg-blue-50 dark:bg-blue-900/30 dark:border-blue-500 ring-1 ring-blue-300 dark:ring-blue-600', iconActive: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300', iconIdle: 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400', value: 'text-blue-700 dark:text-blue-400' },
+    amber:   { active: 'border-amber-400 bg-amber-50 dark:bg-amber-900/30 dark:border-amber-500 ring-1 ring-amber-300 dark:ring-amber-600', iconActive: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300', iconIdle: 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400', value: 'text-amber-700 dark:text-amber-400' },
+    emerald: { active: 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 dark:border-emerald-500 ring-1 ring-emerald-300 dark:ring-emerald-600', iconActive: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300', iconIdle: 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400', value: 'text-emerald-700 dark:text-emerald-400' },
+    rose:    { active: 'border-rose-400 bg-rose-50 dark:bg-rose-900/30 dark:border-rose-500 ring-1 ring-rose-300 dark:ring-rose-600', iconActive: 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300', iconIdle: 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400', value: 'text-rose-700 dark:text-rose-400' },
+    red:     { active: 'border-red-500 bg-red-50 dark:bg-red-900/30 dark:border-red-500 ring-1 ring-red-300 dark:ring-red-600', iconActive: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300', iconIdle: 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400', value: 'text-red-600 dark:text-red-400' },
+};
+
+function SummaryCard({ color, icon, label, value, active, onClick }: { color: CardColor; icon: React.ReactNode; label: string; value: number; active: boolean; onClick: () => void }) {
+    const s = CARD_STYLES[color];
+    return (
+        <button
+            onClick={onClick}
+            aria-pressed={active}
+            className={`flex items-center gap-2.5 p-2.5 rounded-lg border text-left transition-all duration-150 hover:shadow-sm active:scale-[0.98] ${active ? s.active : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'}`}
+        >
+            <span className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${active ? s.iconActive : s.iconIdle}`}>{icon}</span>
+            <span className="flex flex-col min-w-0">
+                <span className={`text-lg font-bold leading-none ${active ? s.value : 'text-slate-700 dark:text-slate-200'}`}>{value}</span>
+                <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-tight truncate">{label}</span>
+            </span>
+        </button>
+    );
+}
