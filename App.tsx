@@ -7,6 +7,7 @@ import { BatchEditModal } from './components/BatchEditModal';
 import { MaterialBatchEditModal } from './components/MaterialBatchEditModal';
 import { HolidayManagerModal } from './components/HolidayManagerModal';
 import { ClientManagerModal } from './components/ClientManagerModal';
+import { ObrasPage } from './components/ObrasPage';
 import { DateRangeFilter } from './components/DateRangeFilter';
 import { MaterialList } from './components/MaterialList';
 import { PurchaseList } from './components/PurchaseList';
@@ -22,7 +23,7 @@ import { useAppData } from './hooks/useAppData';
 import { useAppFilters } from './hooks/useAppFilters';
 import { addProject, addMaterial } from './services/db';
 
-type Tab = 'dashboard' | 'timeline' | 'projects' | 'materials' | 'purchases';
+type Tab = 'dashboard' | 'timeline' | 'obras' | 'projects' | 'materials' | 'purchases';
 type ImportType = 'PROJECT' | 'MATERIAL_LIST';
 
 export default function App() {
@@ -331,6 +332,7 @@ export default function App() {
           <nav className="flex space-x-1 h-full items-center overflow-x-auto custom-scrollbar flex-1 min-w-0 pr-4" aria-label="Tabs">
             <NavTab active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutDashboard size={16} className="min-w-[16px]" />} label="Indicadores" />
             <NavTab active={activeTab === 'timeline'} onClick={() => setActiveTab('timeline')} icon={<Calendar size={16} className="min-w-[16px]" />} label="Cronograma" />
+            <NavTab active={activeTab === 'obras'} onClick={() => setActiveTab('obras')} icon={<HardHat size={16} className="min-w-[16px]" />} label="Obras" />
             <NavTab active={activeTab === 'projects'} onClick={() => setActiveTab('projects')} icon={<List size={16} className="min-w-[16px]" />} label="Projetos" />
             <NavTab active={activeTab === 'materials'} onClick={() => setActiveTab('materials')} icon={<Package size={16} className="min-w-[16px]" />} label="Materiais" />
             {showPurchasesTab && <NavTab active={activeTab === 'purchases'} onClick={() => setActiveTab('purchases')} icon={<ShoppingCart size={16} className="min-w-[16px]" />} label="Compras" />}
@@ -362,10 +364,10 @@ export default function App() {
 
             {/* Actions Group */}
             <div className="flex items-center gap-2 ml-2">
-              {!isReadOnly && activeTab !== 'dashboard' && (
-                <button 
-                  onClick={handleOpenUploadModal} 
-                  disabled={!dbConnected} 
+              {!isReadOnly && activeTab !== 'dashboard' && activeTab !== 'obras' && (
+                <button
+                  onClick={handleOpenUploadModal}
+                  disabled={!dbConnected}
                   className="bg-brand-700 hover:bg-brand-800 disabled:bg-slate-300 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-2"
                 >
                   <UploadCloud size={14} />
@@ -402,7 +404,7 @@ export default function App() {
                           )}
                           {activeTab !== 'dashboard' && (
                             <>
-                              <ActionMenuItem icon={<HardHat size={16} />} label="Registro de Obra" onClick={() => { setIsClientManagerOpen(true); setIsActionsMenuOpen(false); }} />
+                              <ActionMenuItem icon={<HardHat size={16} />} label="Controle de Obras" onClick={() => { setActiveTab('obras'); setIsActionsMenuOpen(false); }} />
                               <ActionMenuItem icon={<CalendarDays size={16} />} label="Gerenciar Feriados" onClick={() => { setIsHolidayManagerOpen(true); setIsActionsMenuOpen(false); }} />
                             </>
                           )}
@@ -445,16 +447,19 @@ export default function App() {
       </header>
 
       <main className="w-full px-4 sm:px-6 lg:px-8 py-6 print:p-0 print:w-full print:max-w-none">
-        <div className="mb-6 flex flex-col sm:flex-row gap-4 justify-between items-end print:hidden">
-            <div className="w-full lg:w-auto">
-               <DateRangeFilter filterType={dateFilterType} setFilterType={setDateFilterType} referenceDate={referenceDate} setReferenceDate={setReferenceDate} customRange={customRange} setCustomRange={setCustomRange} />
-            </div>
-        </div>
+        {activeTab !== 'obras' && (
+          <div className="mb-6 flex flex-col sm:flex-row gap-4 justify-between items-end print:hidden">
+              <div className="w-full lg:w-auto">
+                 <DateRangeFilter filterType={dateFilterType} setFilterType={setDateFilterType} referenceDate={referenceDate} setReferenceDate={setReferenceDate} customRange={customRange} setCustomRange={setCustomRange} />
+              </div>
+          </div>
+        )}
 
         <div className="mt-6 print:mt-0">
           {isAdmin && activeTab === 'dashboard' && <DataMigration projects={projects} materials={materials} onUpdateProject={updateProject} onUpdateMaterial={updateMaterial} />}
           {activeTab === 'dashboard' && <div className="animate-in fade-in zoom-in-95 duration-200"><Dashboard data={filteredProjects} materials={filteredMaterials} clients={clients} isDarkMode={isDarkMode} holidays={holidays} /></div>}
           {activeTab === 'timeline' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectTimeline projects={filteredProjects} holidays={holidays} clients={clients} /></div>}
+          {activeTab === 'obras' && <div className="animate-in fade-in zoom-in-95 duration-200"><ObrasPage clients={clients} projectCount={(name) => projects.filter(p => p.client === name).length} onAddClient={handleAddClient} onUpdateClient={handleUpdateClient} onDeleteClient={handleDeleteClient} /></div>}
           {activeTab === 'projects' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectList projects={filteredProjects} onUpdate={updateProject} onDelete={deleteProject} onAddRevision={addProjectRevision} onPromote={promoteProjectToExecutive} holidays={holidays} readOnly={isReadOnly} /></div>}
           {activeTab === 'materials' && <div className="animate-in fade-in zoom-in-95 duration-200"><MaterialList materials={filteredMaterials} onUpdate={updateMaterial} onDelete={deleteMaterial} onAddRevision={addMaterialRevision} readOnly={isReadOnly} /></div>}
           {activeTab === 'purchases' && showPurchasesTab && <div className="animate-in fade-in zoom-in-95 duration-200"><PurchaseList purchases={filteredPurchases} onAdd={handleAddPurchase} onUpdate={handleUpdatePurchase} onDelete={handleDeletePurchase} currentUser={currentUser ? formatUsername(currentUser.email) : ''} holidays={holidays} readOnly={isReadOnly} /></div>}

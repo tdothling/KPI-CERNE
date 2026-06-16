@@ -145,19 +145,30 @@ export enum SiteType {
   OPERATIONAL_BASE = 'Bases Operacionais'
 }
 
+export enum ObraStatus {
+  ACTIVE = 'Em andamento',
+  PAUSED = 'Pausada',
+  COMPLETED = 'Concluída',
+  CANCELLED = 'Cancelada'
+}
+
 export interface ClientDoc {
   id: string;
-  name: string; // Nome do Cliente
-  location: string; // Local da Obra
+  name: string;
+  location: string;
   type: SiteType;
-  numberOfBases?: number; // Apenas se type for OPERATIONAL_BASE
+  numberOfBases?: number;
 
   // SLA Padrão da Obra
-  contractDate?: string; // Data de Assinatura do Contrato para esta obra
-  deadlineDays?: number; // Dias corridos previstos para execução
+  contractDate?: string;
+  deadlineDays?: number;
 
   // Ciclo de Vida da Obra
-  completedAt?: string; // ISO Date — quando a obra foi marcada como concluída; suprime alertas SLA
+  obraStatus?: ObraStatus;
+  completedAt?: string; // ISO Date — suprime alertas SLA quando COMPLETED ou CANCELLED
+  expectedCompletionDate?: string; // Prazo previsto de conclusão (campo editorial, independente do SLA)
+  responsavel?: string;
+  observacoes?: string;
 }
 
 export interface KPISummary {

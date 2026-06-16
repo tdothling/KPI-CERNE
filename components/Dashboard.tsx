@@ -1,7 +1,8 @@
 
 import React, { useMemo, useState, useCallback } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { ProjectFile, Discipline, Status, MaterialDoc, ProjectPhase, ClientDoc } from '../types';
+import { ProjectFile, Discipline, Status, MaterialDoc, ProjectPhase, ClientDoc, ObraStatus } from '../types';
+import { getEffectiveStatus } from './ObrasPage';
 import { format, parseISO, isValid, isAfter, isSameDay, addDays, startOfDay } from 'date-fns';
 import { LayoutDashboard, FileDown } from 'lucide-react';
 import { getProjectBaseName, getRevisionNumber, calculateBusinessDaysWithHolidays, calculateNetExecutionDuration, calculateDeadlineDate } from '../utils';
@@ -166,7 +167,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
       // Atrasos e OTD exigem que o cliente daquele projeto tenha uma SLA associada
       const clientData = clientsMap[project.client];
       const hasSLA = clientData?.contractDate && clientData?.deadlineDays !== undefined;
-      const obraCompleted = !!clientData?.completedAt;
+      const effectiveObraStatus = clientData ? getEffectiveStatus(clientData) : ObraStatus.ACTIVE;
+      const obraCompleted = effectiveObraStatus === ObraStatus.COMPLETED || effectiveObraStatus === ObraStatus.CANCELLED || effectiveObraStatus === ObraStatus.PAUSED;
 
       if (hasSLA) {
           const deadlineDate = calculateDeadlineDate(clientData.contractDate as string, clientData.deadlineDays as number);
