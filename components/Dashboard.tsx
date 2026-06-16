@@ -43,6 +43,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
   const [drillDown, setDrillDown] = useState<DrillDownPayload | null>(null);
   const closeDrillDown = useCallback(() => setDrillDown(null), []);
 
+  // --- SLA alerts collapse + pagination ---
+  const [slaCollapsed, setSlaCollapsed] = useState(true);
+  const [slaPage, setSlaPage] = useState(0);
+  const SLA_PAGE_SIZE = 8;
+
 
   const handlePrint = () => {
       window.print();
@@ -312,34 +317,101 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
         onClearAll={clearAllFilters}
       />
 
-      {stats.alerts.length > 0 && (
-          <div className="mb-6 bg-rose-50 dark:bg-rose-900/10 border border-rose-200 dark:border-rose-800 rounded-xl p-6 shadow-sm">
-             <h3 className="text-lg font-bold text-rose-800 dark:text-rose-400 mb-4 flex items-center gap-2">
-                 <span className="flex h-3 w-3 relative"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span></span>
-                 Projetos Atrasados ou Próximos do Vencimento (Kanban SLA)
-             </h3>
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                 {stats.alerts.map((alert: any) => (
-                     <div key={alert.id} className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg p-4 shadow-sm flex flex-col justify-between">
-                         <div>
-                             <div className="flex justify-between items-start mb-2">
-                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${alert._tempSlaStatus === 'ATRASADO' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400'}`}>
-                                     {alert._tempSlaStatus}
-                                 </span>
-                                 <span className="text-[10px] bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300 px-1.5 py-0.5 rounded">{alert.discipline}</span>
-                             </div>
-                             <h4 className="font-semibold text-sm text-slate-800 dark:text-slate-200 line-clamp-2" title={alert.filename}>{alert.filename}</h4>
-                             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{alert.client} - {alert.base}</p>
-                         </div>
-                         <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
-                             <span className="text-xs font-medium text-slate-600 dark:text-slate-400">{alert.status}</span>
-                             <span className="text-xs font-bold text-rose-600 dark:text-rose-400">Verificar URGs</span>
-                         </div>
-                     </div>
-                 ))}
-             </div>
-          </div>
-      )}
+      {stats.alerts.length > 0 && (() => {
+          const totalPages = Math.ceil(stats.alerts.length / SLA_PAGE_SIZE);
+          const pageAlerts = stats.alerts.slice(slaPage * SLA_PAGE_SIZE, (slaPage + 1) * SLA_PAGE_SIZE);
+          const atrasadoCount = stats.alerts.filter((a: any) => a._tempSlaStatus === 'ATRASADO').length;
+          const vencendoCount = stats.alerts.length - atrasadoCount;
+          return (
+            <div className="mb-6 bg-rose-50 dark:bg-rose-900/10 border border-rose-200 dark:border-rose-800 rounded-xl shadow-sm overflow-hidden">
+              <button
+                onClick={() => { setSlaCollapsed(c => !c); setSlaPage(0); }}
+                className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-rose-100/50 dark:hover:bg-rose-900/20 transition-colors"
+              >
+                <span className="flex items-center gap-3">
+                  <span className="flex h-3 w-3 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
+                  </span>
+                  <span className="text-base font-bold text-rose-800 dark:text-rose-400">
+                    Projetos Atrasados ou Próximos do Vencimento (Kanban SLA)
+                  </span>
+                  <span className="flex items-center gap-1.5 ml-1">
+                    {atrasadoCount > 0 && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-200 text-rose-800 dark:bg-rose-900/60 dark:text-rose-300">
+                        {atrasadoCount} atrasado{atrasadoCount !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                    {vencendoCount > 0 && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300">
+                        {vencendoCount} vencendo
+                      </span>
+                    )}
+                  </span>
+                </span>
+                <span className="text-rose-600 dark:text-rose-400 ml-4 flex-shrink-0">
+                  {slaCollapsed ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </span>
+              </button>
+
+              {!slaCollapsed && (
+                <div className="px-6 pb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {pageAlerts.map((alert: any) => (
+                      <div key={alert.id} className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg p-4 shadow-sm flex flex-col justify-between">
+                        <div>
+                          <div className="flex justify-between items-start mb-2">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${alert._tempSlaStatus === 'ATRASADO' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400'}`}>
+                              {alert._tempSlaStatus}
+                            </span>
+                            <span className="text-[10px] bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300 px-1.5 py-0.5 rounded">{alert.discipline}</span>
+                          </div>
+                          <h4 className="font-semibold text-sm text-slate-800 dark:text-slate-200 line-clamp-2" title={alert.filename}>{alert.filename}</h4>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{alert.client} - {alert.base}</p>
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                          <span className="text-xs font-medium text-slate-600 dark:text-slate-400">{alert.status}</span>
+                          <span className="text-xs font-bold text-rose-600 dark:text-rose-400">Verificar URGs</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {totalPages > 1 && (
+                    <div className="mt-4 flex items-center justify-center gap-3">
+                      <button
+                        onClick={() => setSlaPage(p => Math.max(0, p - 1))}
+                        disabled={slaPage === 0}
+                        className="px-3 py-1.5 text-xs font-medium rounded-lg border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-rose-100 dark:hover:bg-rose-900/30 transition-colors"
+                      >
+                        ← Anterior
+                      </button>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                        {slaPage + 1} / {totalPages}
+                        <span className="ml-1 text-slate-400">({stats.alerts.length} total)</span>
+                      </span>
+                      <button
+                        onClick={() => setSlaPage(p => Math.min(totalPages - 1, p + 1))}
+                        disabled={slaPage === totalPages - 1}
+                        className="px-3 py-1.5 text-xs font-medium rounded-lg border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-rose-100 dark:hover:bg-rose-900/30 transition-colors"
+                      >
+                        Próxima →
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+      })()}
 
       <div className="space-y-6 mb-8">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 print:grid-cols-3">
