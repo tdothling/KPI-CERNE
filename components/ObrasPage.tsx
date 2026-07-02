@@ -347,6 +347,7 @@ function StatCard({ label, value, color, alert }: { label: string; value: number
 // ─── ObraCard ────────────────────────────────────────────────────────────────
 
 interface ObraCardProps {
+  key?: string; // sem @types/react instalado, o TS não injeta o atributo especial "key" automaticamente
   client: ClientDoc;
   projCount: number;
   isCompleting: boolean;

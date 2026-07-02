@@ -14,6 +14,7 @@ import { PurchaseList } from './components/PurchaseList';
 import { LoginModal } from './components/LoginModal';
 import { AdvancedFilter } from './components/AdvancedFilter';
 import { DataMigration } from './components/DataMigration';
+import { ImportReviewModal, StagingRow } from './components/ImportReviewModal';
 import { CerneLogo } from './components/CerneLogo';
 import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Package, FileSpreadsheet, Database, LogIn, LogOut, ShoppingCart, HardHat, Search, ChevronDown, CheckSquare, Square, FileText, MoreHorizontal } from 'lucide-react';
 import { format } from 'date-fns';
@@ -25,6 +26,7 @@ import { addProject, addMaterial } from './services/db';
 
 type Tab = 'dashboard' | 'timeline' | 'obras' | 'projects' | 'materials' | 'purchases';
 type ImportType = 'PROJECT' | 'MATERIAL_LIST';
+type EntryMode = 'FILES' | 'PASTE';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
@@ -70,6 +72,11 @@ export default function App() {
   const [uploadClient, setUploadClient] = useState<string>('');
   const [uploadBase, setUploadBase] = useState<string>('');
   const [isFolderUpload, setIsFolderUpload] = useState(false);
+  const [entryMode, setEntryMode] = useState<EntryMode>('FILES');
+  const [pasteText, setPasteText] = useState('');
+  const [stagingRows, setStagingRows] = useState<StagingRow[] | null>(null);
+  const [stagingContext, setStagingContext] = useState<{ client: string; base: string }>({ client: '', base: '' });
+  const [stagingSaving, setStagingSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Todos os usuários agora têm acesso total às ferramentas e ações, exceto à aba de compras
@@ -121,6 +128,8 @@ export default function App() {
     setUploadPhase(ProjectPhase.PRELIMINARY);
     setIsFolderUpload(false);
     setImportType('PROJECT');
+    setEntryMode('FILES');
+    setPasteText('');
   };
 
   const triggerFileSelect = () => {
@@ -159,31 +168,28 @@ export default function App() {
 
     try {
       if (importType === 'PROJECT') {
-        const promises = validFiles.map(async (f: any) => {
-          let discipline = uploadDiscipline;
+        // Nada é salvo aqui: monta as linhas e abre a etapa de conferência
+        const today = new Date().toISOString().split('T')[0];
+        const rows: StagingRow[] = validFiles.map((f: any) => {
+          let discipline = detectDiscipline(f.name) || uploadDiscipline;
           if (isFolderUpload && f.webkitRelativePath) {
             const detected = detectDiscipline(f.webkitRelativePath);
             if (detected) discipline = detected;
           }
-
-          const cleanFilename = f.name.replace(/\.[^/.]+$/, "");
-
-          return addProject({
-            filename: cleanFilename,
-            groupId: crypto.randomUUID(),
-            revision: 0,
-            client: finalClientName,
-            base: finalBaseName,
-            discipline: discipline,
+          return {
+            tempId: crypto.randomUUID(),
+            filename: f.name.replace(/\.[^/.]+$/, ""),
+            discipline,
             phase: uploadPhase,
-            status: Status.IN_PROGRESS,
-            startDate: new Date().toISOString().split('T')[0],
+            startDate: today,
             startPeriod: autoPeriod,
-            endDate: '', sendDate: '', feedbackDate: '', blockedDays: 0, revisions: []
-          });
+          };
         });
-        await Promise.all(promises);
-        setActiveTab('projects');
+        setIsUploadModalOpen(false);
+        setStagingContext({ client: finalClientName, base: finalBaseName });
+        setStagingRows(rows);
+        event.target.value = '';
+        return;
       } else if (importType === 'MATERIAL_LIST') {
         const promises = validFiles.map(async (f: any) => {
           const metadata = extractMetadataFromMaterialFilename(f.name, finalClientName);
@@ -211,6 +217,75 @@ export default function App() {
 
     setIsUploadModalOpen(false);
     event.target.value = '';
+  };
+
+  // Cadastro por lista colada (sem arquivos físicos): um nome por linha
+  const handlePasteReview = () => {
+    if (!uploadClient.trim()) {
+      alert("Por favor, selecione um Cliente (Registro de Obra).");
+      return;
+    }
+    const names = pasteText
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l.length > 0);
+
+    if (names.length === 0) {
+      alert("Cole ao menos um nome de projeto (um por linha).");
+      return;
+    }
+
+    const finalClientName = uploadClient.trim();
+    const clientDoc = clients.find(c => c.name === finalClientName);
+    let finalBaseName = 'Geral';
+    if (clientDoc && clientDoc.type === SiteType.OPERATIONAL_BASE) {
+      finalBaseName = uploadBase.trim() || 'Geral';
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    const autoPeriod: Period = new Date().getHours() < 12 ? 'MANHA' : 'TARDE';
+
+    const rows: StagingRow[] = names.map(name => ({
+      tempId: crypto.randomUUID(),
+      filename: name.replace(/\.[^/.]+$/, ""),
+      discipline: detectDiscipline(name) || uploadDiscipline,
+      phase: uploadPhase,
+      startDate: today,
+      startPeriod: autoPeriod,
+    }));
+
+    setIsUploadModalOpen(false);
+    setStagingContext({ client: finalClientName, base: finalBaseName });
+    setStagingRows(rows);
+    setPasteText('');
+  };
+
+  // Grava os projetos conferidos na etapa de revisão
+  const handleConfirmStaging = async () => {
+    if (!stagingRows || stagingRows.length === 0) return;
+    setStagingSaving(true);
+    try {
+      await Promise.all(stagingRows.map(row => addProject({
+        filename: row.filename.trim(),
+        groupId: crypto.randomUUID(),
+        revision: 0,
+        client: stagingContext.client,
+        base: stagingContext.base,
+        discipline: row.discipline,
+        phase: row.phase,
+        status: Status.IN_PROGRESS,
+        startDate: row.startDate,
+        startPeriod: row.startPeriod,
+        endDate: '', sendDate: '', feedbackDate: '', blockedDays: 0, revisions: []
+      })));
+      setStagingRows(null);
+      setActiveTab('projects');
+    } catch (error) {
+      console.error("Erro ao cadastrar projetos:", error);
+      alert("Ocorreu um erro ao salvar os projetos. Verifique sua conexão e permissões. Nenhuma linha foi perdida — tente confirmar novamente.");
+    } finally {
+      setStagingSaving(false);
+    }
   };
 
   const handleExportCSV = () => setIsExportModalOpen(true);
@@ -552,6 +627,33 @@ export default function App() {
               )}
 
               {importType === 'PROJECT' && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Como deseja cadastrar?</label>
+                  <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-slate-900/50 rounded-lg">
+                    <button onClick={() => setEntryMode('FILES')} className={`flex items-center justify-center gap-2 py-2 rounded-md text-sm font-semibold transition-all ${entryMode === 'FILES' ? 'bg-white dark:bg-slate-700 text-brand-700 dark:text-brand-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>
+                      <UploadCloud size={16} /> Arquivos
+                    </button>
+                    <button onClick={() => setEntryMode('PASTE')} className={`flex items-center justify-center gap-2 py-2 rounded-md text-sm font-semibold transition-all ${entryMode === 'PASTE' ? 'bg-white dark:bg-slate-700 text-brand-700 dark:text-brand-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>
+                      <FileText size={16} /> Colar Lista
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {importType === 'PROJECT' && entryMode === 'PASTE' && (
+                <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Nomes dos projetos <span className="text-xs font-normal text-slate-400">(um por linha — pode colar do Excel)</span></label>
+                  <textarea
+                    value={pasteText}
+                    onChange={(e) => setPasteText(e.target.value)}
+                    placeholder={"PLANTA BAIXA ELETRICA\nDETALHAMENTO HIDRAULICA\nCORTE AA ESTRUTURA..."}
+                    className="w-full h-32 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-sm rounded-lg focus:ring-brand-500 focus:border-brand-500 p-3 resize-none font-mono"
+                  />
+                  <p className="text-xs text-slate-400 mt-1">{pasteText.split('\n').filter(l => l.trim()).length} projeto(s) detectado(s). A disciplina será sugerida pelo nome e você poderá conferir tudo antes de salvar.</p>
+                </div>
+              )}
+
+              {importType === 'PROJECT' && entryMode === 'FILES' && (
                 <div className="bg-brand-50 dark:bg-slate-700/50 p-3 rounded-lg border border-brand-100 dark:border-slate-600">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2"><FolderInput className="text-brand-600 dark:text-brand-400" size={20} /><div><span className="text-sm font-semibold text-slate-800 dark:text-slate-200 block">Modo Pasta (Auto-Tag)</span><span className="text-xs text-slate-500 dark:text-slate-400 block">Detecta Disciplina pelo nome da pasta</span></div></div>
@@ -573,10 +675,26 @@ export default function App() {
 
             <div className="flex justify-end space-x-3">
               <button onClick={() => setIsUploadModalOpen(false)} className="px-6 py-2.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg font-medium transition-colors">Cancelar</button>
-              <button onClick={triggerFileSelect} className="px-6 py-2.5 bg-brand-700 hover:bg-brand-800 text-white rounded-lg font-semibold shadow-md transition-all flex items-center">Selecionar Arquivos {importType === 'MATERIAL_LIST' && 'Excel'}</button>
+              {importType === 'PROJECT' && entryMode === 'PASTE' ? (
+                <button onClick={handlePasteReview} className="px-6 py-2.5 bg-brand-700 hover:bg-brand-800 text-white rounded-lg font-semibold shadow-md transition-all flex items-center">Revisar Lista</button>
+              ) : (
+                <button onClick={triggerFileSelect} className="px-6 py-2.5 bg-brand-700 hover:bg-brand-800 text-white rounded-lg font-semibold shadow-md transition-all flex items-center">Selecionar Arquivos {importType === 'MATERIAL_LIST' && 'Excel'}</button>
+              )}
             </div>
           </div>
         </div>
+      )}
+
+      {stagingRows && (
+        <ImportReviewModal
+          rows={stagingRows}
+          client={stagingContext.client}
+          base={stagingContext.base}
+          saving={stagingSaving}
+          onChangeRows={setStagingRows}
+          onConfirm={handleConfirmStaging}
+          onCancel={() => { if (!stagingSaving) setStagingRows(null); }}
+        />
       )}
 
       {isExportModalOpen && (
