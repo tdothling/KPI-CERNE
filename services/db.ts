@@ -62,15 +62,16 @@ export const subscribeToProjects = (callback: (data: ProjectFile[]) => void, fil
 
     // Se tiver filtro, aumentamos o limite para garantir que o usuário ache o que procura,
     // mas mantemos um teto para segurança de cota.
-    constraints.push(limit(150));
+    constraints.push(limit(1000));
 
-    // Queries com 'where' muitas vezes não suportam 'orderBy' sem índice criado. 
+    // Queries com 'where' muitas vezes não suportam 'orderBy' sem índice criado.
     // Removemos 'orderBy' aqui e ordenamos no callback.
     q = query(collection(db, COLL_PROJECTS), ...constraints);
 
   } else {
-    // Padrão: 50 últimos projetos (Monitoramento Diário)
-    q = query(collection(db, COLL_PROJECTS), limit(200));
+    // Padrão: mais recentes primeiro. Sem orderBy o Firestore ordena por ID (aleatório),
+    // e com limit isso escondia projetos recém-cadastrados quando a coleção passava do teto.
+    q = query(collection(db, COLL_PROJECTS), orderBy("startDate", "desc"), limit(1000));
   }
 
   const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
@@ -131,11 +132,11 @@ export const subscribeToMaterials = (callback: (data: MaterialDoc[]) => void, fi
       constraints.push(where("client", "in", safeClients));
     }
 
-    constraints.push(limit(150));
+    constraints.push(limit(1000));
     q = query(collection(db, COLL_MATERIALS), ...constraints);
 
   } else {
-    q = query(collection(db, COLL_MATERIALS), limit(200));
+    q = query(collection(db, COLL_MATERIALS), orderBy("startDate", "desc"), limit(1000));
   }
 
   const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
