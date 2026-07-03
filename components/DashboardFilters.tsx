@@ -2,6 +2,15 @@ import React, { useState } from 'react';
 import { Discipline, Status, ProjectPhase } from '../types';
 import { DashboardFilterState } from '../hooks/useDashboardFilters';
 import { SlidersHorizontal, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { format, subDays, subMonths, startOfYear } from 'date-fns';
+
+// Atalhos de período: definem "Início a partir de" e limpam o "Até" (janela aberta até hoje)
+const DATE_PRESETS: { label: string; getFrom: () => string }[] = [
+  { label: '30 dias', getFrom: () => format(subDays(new Date(), 30), 'yyyy-MM-dd') },
+  { label: '90 dias', getFrom: () => format(subDays(new Date(), 90), 'yyyy-MM-dd') },
+  { label: 'Este ano', getFrom: () => format(startOfYear(new Date()), 'yyyy-MM-dd') },
+  { label: '12 meses', getFrom: () => format(subMonths(new Date(), 12), 'yyyy-MM-dd') },
+];
 
 const DISCIPLINE_COLORS: Record<string, string> = {
   [Discipline.ARCHITECTURE]: 'bg-[#8e1c3e] text-white',
@@ -161,6 +170,37 @@ export const DashboardFilters: React.FC<DashboardFiltersProps> = ({
                   {status}
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* Date presets */}
+          <div>
+            <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Período rápido</p>
+            <div className="flex flex-wrap gap-2">
+              {DATE_PRESETS.map(preset => {
+                const presetFrom = preset.getFrom();
+                const active = filters.dateFrom === presetFrom && !filters.dateTo;
+                return (
+                  <button
+                    key={preset.label}
+                    onClick={() => {
+                      if (active) {
+                        onSetDateFrom('');
+                      } else {
+                        onSetDateFrom(presetFrom);
+                        onSetDateTo('');
+                      }
+                    }}
+                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-all duration-150 ${
+                      active
+                        ? 'bg-brand-600 text-white border-brand-600 shadow-sm'
+                        : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600 hover:border-brand-300'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 

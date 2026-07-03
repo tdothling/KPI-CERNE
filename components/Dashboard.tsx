@@ -1,6 +1,6 @@
 
-import React, { useMemo, useState, useCallback } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, ReferenceLine } from 'recharts';
+import React, { useMemo, useState, useCallback, useRef } from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, ReferenceLine, ComposedChart } from 'recharts';
 import { ProjectFile, Discipline, Status, MaterialDoc, ProjectPhase, ClientDoc, ObraStatus, RevisionReason } from '../types';
 import { getEffectiveStatus } from './ObrasPage';
 import { format, parseISO, isValid, isAfter, isSameDay, addDays, startOfDay, endOfDay, subMonths, startOfMonth, differenceInCalendarDays } from 'date-fns';
@@ -75,8 +75,14 @@ const SectionHeader: React.FC<{ label: string }> = ({ label }) => (
   </div>
 );
 
-const KpiTile: React.FC<{ label: string; value: React.ReactNode; sub?: React.ReactNode; accent?: string; icon: React.ReactNode }> = ({ label, value, sub, accent, icon }) => (
-  <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col gap-0.5 print:shadow-none print:border-slate-300">
+const KpiTile: React.FC<{ label: string; value: React.ReactNode; sub?: React.ReactNode; accent?: string; icon: React.ReactNode; onClick?: () => void }> = ({ label, value, sub, accent, icon, onClick }) => (
+  <div
+    onClick={onClick}
+    role={onClick ? 'button' : undefined}
+    tabIndex={onClick ? 0 : undefined}
+    onKeyDown={onClick ? (e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }) : undefined}
+    className={`bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col gap-0.5 print:shadow-none print:border-slate-300 ${onClick ? 'cursor-pointer hover:border-brand-300 dark:hover:border-brand-500 hover:shadow-md transition-all' : ''}`}
+  >
     <div className="flex items-center justify-between mb-1">
       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">{label}</span>
       <span className="text-slate-300 dark:text-slate-600">{icon}</span>
@@ -109,6 +115,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
   const [slaPage, setSlaPage] = useState(0);
   const SLA_PAGE_SIZE = 8;
 
+  // Tiles executivos navegam até o painel correspondente
+  const alertsRef = useRef<HTMLDivElement>(null);
+  const wipRef = useRef<HTMLDivElement>(null);
+  const goToAlerts = useCallback(() => {
+    setSlaCollapsed(false);
+    setTimeout(() => alertsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  }, []);
+  const goToWip = useCallback(() => {
+    wipRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
 
   const handlePrint = () => {
       window.print();
@@ -134,6 +151,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
 
     const wipCandidates: Omit<WipItem, 'baseline'>[] = [];
     const deliveredMonthly: Record<string, number> = {};
+    const startedMonthly: Record<string, number> = {};
     let deliveries30 = 0;
     let deliveriesPrev30 = 0;
 
@@ -251,11 +269,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
           const mKey = format(dDate, 'yyyy-MM');
           deliveredMonthly[mKey] = (deliveredMonthly[mKey] || 0) + 1;
       }
+
+      // 7. Demanda: arquivos iniciados por mês (inclui revisões — trabalho que entrou na fila)
+      if (project.startDate && isValid(parseISO(project.startDate))) {
+          const sKey = format(parseISO(project.startDate), 'yyyy-MM');
+          startedMonthly[sKey] = (startedMonthly[sKey] || 0) + 1;
+      }
     });
 
     // --- Consolidação por entregável: IAPR, OTD e alertas usam só o arquivo mais recente ---
     const fttByDiscipline: Record<string, { totalGroups: number; successGroups: number }> = {};
     const otdMonthly: Record<string, { measured: number; onTime: number }> = {};
+    const iaprMonthly: Record<string, { closed: number; success: number }> = {};
     const alerts: SlaAlert[] = [];
     let totalSlaMeasured = 0;
     let totalOnTime = 0;
@@ -282,6 +307,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
             }
             fttByDiscipline[fttKey].totalGroups += 1;
             if (success) fttByDiscipline[fttKey].successGroups += 1;
+
+            // Tendência mensal do IAPR — mês de fechamento do ciclo (feedback ou fim da execução)
+            const closeDateStr = (latest.feedbackDate && isValid(parseISO(latest.feedbackDate)))
+                ? latest.feedbackDate
+                : (latest.endDate && isValid(parseISO(latest.endDate)) ? latest.endDate : null);
+            if (closeDateStr) {
+                const cKey = format(parseISO(closeDateStr), 'yyyy-MM');
+                if (!iaprMonthly[cKey]) iaprMonthly[cKey] = { closed: 0, success: 0 };
+                iaprMonthly[cKey].closed++;
+                if (success) iaprMonthly[cKey].success++;
+            }
         }
 
         // OTD e alertas exigem SLA cadastrada na obra do cliente
@@ -373,18 +409,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
 
     const iaprGlobal = closedGroups > 0 ? Math.round((successGroupsTotal / closedGroups) * 100) : 0;
 
-    // Série mensal (últimos 12 meses): entregas + OTD do mês
-    const monthlyData: { key: string; label: string; entregas: number; otd: number | null; otdN: number }[] = [];
+    // Série mensal (últimos 12 meses): entregas, iniciados, OTD e IAPR do mês
+    const monthlyData: { key: string; label: string; entregas: number; iniciados: number; otd: number | null; otdN: number; iapr: number | null; iaprN: number }[] = [];
     for (let i = 11; i >= 0; i--) {
         const mDate = subMonths(startOfMonth(today), i);
         const key = format(mDate, 'yyyy-MM');
         const otd = otdMonthly[key];
+        const iapr = iaprMonthly[key];
         monthlyData.push({
             key,
             label: format(mDate, 'MMM/yy', { locale: ptBR }),
             entregas: deliveredMonthly[key] || 0,
+            iniciados: startedMonthly[key] || 0,
             otd: otd && otd.measured > 0 ? Math.round((otd.onTime / otd.measured) * 100) : null,
             otdN: otd?.measured || 0,
+            iapr: iapr && iapr.closed > 0 ? Math.round((iapr.success / iapr.closed) * 100) : null,
+            iaprN: iapr?.closed || 0,
         });
     }
 
@@ -483,6 +523,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
         onClearAll={clearAllFilters}
       />
 
+      {/* Filtro de status muda a base de cálculo de OTD/IAPR — avisar para não ler número distorcido */}
+      {filters.statuses.length > 0 && (
+        <div className="mb-4 -mt-2 flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2 print:hidden">
+          <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+          <span>Filtro de <strong>status</strong> ativo: OTD e IAPR passam a ser calculados só sobre os arquivos filtrados e podem ficar distorcidos. Use-o para investigar, não para reportar indicadores.</span>
+        </div>
+      )}
+
       {/* Leitura executiva: os 6 números da rotina */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3 mb-6 print:grid-cols-6">
         <KpiTile
@@ -490,6 +538,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
           value={stats.groupsInProgress}
           sub={`${stats.totalWipFiles} arquivo${stats.totalWipFiles !== 1 ? 's' : ''} WIP`}
           icon={<Activity size={15} />}
+          onClick={goToWip}
         />
         <KpiTile
           label="Aguardando Cliente"
@@ -503,6 +552,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
           sub="prazo da obra vencido"
           accent={stats.alerts.some(a => a.slaStatus === 'ATRASADO') ? 'text-rose-500' : 'text-emerald-500'}
           icon={<AlertTriangle size={15} />}
+          onClick={stats.alerts.length > 0 ? goToAlerts : undefined}
         />
         <KpiTile
           label="Entregas (30d)"
@@ -536,7 +586,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
           const atrasadoCount = stats.alerts.filter(a => a.slaStatus === 'ATRASADO').length;
           const vencendoCount = stats.alerts.length - atrasadoCount;
           return (
-            <div className="mb-6 bg-rose-50 dark:bg-rose-900/10 border border-rose-200 dark:border-rose-800 rounded-xl shadow-sm overflow-hidden">
+            <div ref={alertsRef} className="mb-6 scroll-mt-4 bg-rose-50 dark:bg-rose-900/10 border border-rose-200 dark:border-rose-800 rounded-xl shadow-sm overflow-hidden">
               <button
                 onClick={() => { setSlaCollapsed(c => !c); setSlaPage(0); }}
                 className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-rose-100/50 dark:hover:bg-rose-900/20 transition-colors"
@@ -663,17 +713,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
         </div>
 
         <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 print:break-inside-avoid print:shadow-none print:border-slate-300">
-            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">Entregas por Mês</h3>
-            <p className="text-xs text-slate-400 mb-4">Arquivos enviados ao cliente — últimos 12 meses</p>
+            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">Fluxo Mensal: Iniciados × Entregues</h3>
+            <p className="text-xs text-slate-400 mb-4">Linha acima das barras = demanda entrando mais rápido que a capacidade (fila cresce)</p>
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                <BarChart data={stats.monthlyData}>
+                <ComposedChart data={stats.monthlyData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
                   <XAxis dataKey="label" stroke={axisColor} fontSize={9} interval={1} />
                   <YAxis stroke={axisColor} fontSize={11} allowDecimals={false} width={28} />
-                  <Tooltip cursor={{ fill: isDarkMode ? '#334155' : '#f1f5f9' }} contentStyle={tooltipStyle} itemStyle={{ color: tooltipText }} labelStyle={{ color: tooltipText }} formatter={(value: number) => [value, 'Entregas']} />
-                  <Bar dataKey="entregas" name="Entregas" fill={isDarkMode ? '#f43f5e' : '#8e1c3e'} radius={[4, 4, 0, 0]} />
-                </BarChart>
+                  <Tooltip cursor={{ fill: isDarkMode ? '#334155' : '#f1f5f9' }} contentStyle={tooltipStyle} itemStyle={{ color: tooltipText }} labelStyle={{ color: tooltipText }} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="entregas" name="Entregues" fill={isDarkMode ? '#f43f5e' : '#8e1c3e'} radius={[4, 4, 0, 0]} />
+                  <Line dataKey="iniciados" name="Iniciados" stroke={isDarkMode ? '#38bdf8' : '#0284c7'} strokeWidth={2} dot={{ r: 2.5 }} />
+                </ComposedChart>
               </ResponsiveContainer>
             </div>
         </div>
@@ -704,7 +756,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
 
       {/* ===== QUALIDADE ===== */}
       <SectionHeader label="Qualidade" />
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 print:grid-cols-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 print:grid-cols-2">
         <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 print:break-inside-avoid print:shadow-none print:border-slate-300">
           <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">Aprovação de Primeira (IAPR)</h3>
           <p className="text-xs text-slate-400 mb-4">Entregáveis aprovados sem revisão — apenas ciclos concluídos · Meta ≥ {META_IAPR}% · clique para detalhar</p>
@@ -742,6 +794,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
                 <div className="h-full flex items-center justify-center text-slate-400 text-sm italic">
                     Nenhum ciclo concluído para medir IAPR
                 </div>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 print:break-inside-avoid print:shadow-none print:border-slate-300">
+          <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">IAPR por Mês</h3>
+          <p className="text-xs text-slate-400 mb-4">% de aprovação sem revisão por mês de fechamento do ciclo</p>
+          <div className="h-60">
+            {stats.monthlyData.some(m => m.iapr !== null) ? (
+              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                <LineChart data={stats.monthlyData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
+                  <XAxis dataKey="label" stroke={axisColor} fontSize={9} interval={1} />
+                  <YAxis domain={[0, 100]} unit="%" stroke={axisColor} fontSize={11} width={38} />
+                  <ReferenceLine y={META_IAPR} stroke="#10b981" strokeDasharray="4 4" label={{ value: `Meta ${META_IAPR}%`, fontSize: 10, fill: '#10b981', position: 'insideBottomRight' }} />
+                  <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: tooltipText }} labelStyle={{ color: tooltipText }} formatter={(value: number, _name: string, props: any) => [`${value}% (n=${props.payload.iaprN})`, 'IAPR']} />
+                  <Line dataKey="iapr" name="IAPR" stroke={isDarkMode ? '#34d399' : '#059669'} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-slate-400 text-sm italic">
+                Sem ciclos fechados para medir tendência
+              </div>
             )}
           </div>
         </div>
@@ -877,7 +952,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
       </div>
 
       {/* Aging WIP */}
-      <div className="mt-6 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 print:break-inside-avoid print:shadow-none print:border-slate-300">
+      <div ref={wipRef} className="mt-6 scroll-mt-4 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 print:break-inside-avoid print:shadow-none print:border-slate-300">
         <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">Projetos em Aberto — Aging WIP</h3>
         <p className="text-xs text-slate-400 mb-4">
           Dias úteis em execução (pausas descontadas) comparados à média histórica da disciplina/fase — os 8 mais antigos de {stats.totalWipFiles} em andamento

@@ -43,7 +43,8 @@ function exportCSV(rows: ProjectFile[], label: string) {
     p.endDate ? format(parseISO(p.endDate), 'dd/MM/yyyy') : '-',
     p.phase ?? 'Executivo',
   ].join(';'));
-  const csv = [headers.join(';'), ...lines].join('\n');
+  // BOM para o Excel pt-BR reconhecer UTF-8 e não corromper acentos
+  const csv = '\ufeff' + [headers.join(';'), ...lines].join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -77,7 +78,6 @@ export const DrillDownModal: React.FC<DrillDownModalProps> = ({ payload, project
 
   // Mini KPIs
   const miniStats = useMemo(() => {
-    const approved = rows.filter(p => p.status === Status.APPROVED || p.status === Status.DONE || p.status === Status.WAITING_APPROVAL);
     const withRevision = rows.filter(p => p.revisions?.length > 0 || p.status === Status.REJECTED);
     const withDuration = rows.filter(p => p.startDate && p.endDate);
     const totalDuration = withDuration.reduce((acc, p) => {
@@ -136,7 +136,8 @@ export const DrillDownModal: React.FC<DrillDownModalProps> = ({ payload, project
         <div className="grid grid-cols-3 gap-px bg-slate-100 dark:bg-slate-700 border-b border-slate-100 dark:border-slate-700 shrink-0">
           {[
             { label: 'Total', value: miniStats.total },
-            { label: 'IAPR', value: `${miniStats.iapr}%` },
+            // Aqui a conta é por arquivo (não por entregável como o IAPR do painel) — rótulo diferente de propósito
+            { label: '% sem revisão', value: `${miniStats.iapr}%` },
             { label: 'Média (dias)', value: miniStats.avgDuration },
           ].map(kpi => (
             <div key={kpi.label} className="flex flex-col items-center py-3 bg-white dark:bg-slate-800">
@@ -160,7 +161,7 @@ export const DrillDownModal: React.FC<DrillDownModalProps> = ({ payload, project
                   <th className="px-4 py-2.5 text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wide hidden md:table-cell">Cliente</th>
                   <th className="px-4 py-2.5 text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wide">Status</th>
                   <th className="px-4 py-2.5 text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wide hidden sm:table-cell">Início</th>
-                  <th className="px-4 py-2.5 text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wide hidden sm:table-cell">IAPR</th>
+                  <th className="px-4 py-2.5 text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wide hidden sm:table-cell">Sem revisão</th>
                 </tr>
               </thead>
               <tbody>
