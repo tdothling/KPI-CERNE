@@ -80,6 +80,7 @@ export interface ProjectFile {
   blockedDays: number; // Days waiting for client
   revisions: Revision[];
   pauses?: ProjectPause[]; // Array de pausas de execução do time
+  predecessorIds?: string[]; // IDs de arquivos que precisam terminar antes deste começar
 }
 
 // Interface para o Filtro Avançado

@@ -1072,6 +1072,23 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                                 </div>
                                 <div><label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Dias Bloq.</label><input type="number" step="0.5" value={editingProject.blockedDays} onChange={(e) => updateEditingField('blockedDays', e.target.value)} className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded px-2 py-1.5 text-sm" /></div>
                             </div>
+
+                            <div className="md:col-span-2">
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Predecessores (arquivos que precisam terminar antes)</label>
+                                <select
+                                    multiple
+                                    value={editingProject.predecessorIds || []}
+                                    onChange={(e) => updateEditingField('predecessorIds', Array.from(e.target.selectedOptions).map((o: HTMLOptionElement) => o.value))}
+                                    className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2 h-32"
+                                >
+                                    {projects
+                                        .filter(p => p.client === editingProject.client && p.id !== editingProject.id && p.status !== Status.REVISED)
+                                        .map(p => (
+                                            <option key={p.id} value={p.id}>{p.filename}</option>
+                                        ))}
+                                </select>
+                                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Ctrl/Cmd + clique para selecionar múltiplos. Usado no Cronograma para caminho crítico.</p>
+                            </div>
                         </div>
                         <div className="mt-8 flex justify-end space-x-3 pt-4 border-t border-slate-100 dark:border-slate-700">
                             <button onClick={() => setEditingProject(null)} className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Cancelar</button>

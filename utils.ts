@@ -226,6 +226,20 @@ export const isTerminalStatus = (status: Status): boolean => {
     return status === Status.REVISED;
 };
 
+// Soma N dias úteis a uma data, pulando fins de semana e feriados
+export const addBusinessDaysWithHolidays = (from: Date, businessDays: number, holidays: string[]): Date => {
+    const holidaySet = new Set(holidays);
+    let date = from;
+    let remaining = businessDays;
+    let guard = 0;
+    while (remaining > 0 && guard < 3650) {
+        date = addDays(date, 1);
+        guard++;
+        if (!isWeekend(date) && !holidaySet.has(format(date, 'yyyy-MM-dd'))) remaining--;
+    }
+    return date;
+};
+
 // Calcula a data limite somando dias corridos à data do contrato
 export const calculateDeadlineDate = (contractDate?: string, deadlineDays?: number | string): Date | null => {
     if (!contractDate || !isValid(parseISO(contractDate)) || deadlineDays === undefined || deadlineDays === null || deadlineDays === '') {
