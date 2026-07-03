@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ProjectFile, MaterialDoc, PurchaseDoc, ClientDoc, Status, RevisionReason, ProjectPhase, Period, ProjectFilterState } from '../types';
 import { subscribeToProjects, addProject, updateProjectInDb, deleteProjectFromDb, subscribeToMaterials, addMaterial, updateMaterialInDb, deleteMaterialFromDb, subscribeToPurchases, addPurchase, updatePurchaseInDb, deletePurchaseFromDb, subscribeToClients, addClient, updateClientInDb, deleteClientFromDb, subscribeToHolidays, saveHolidaysToDb } from '../services/db';
 import { subscribeToAuth } from '../services/auth';
 import { db } from '../firebase';
 import { User } from 'firebase/auth';
-import { canTransitionTo } from '../utils';
+import { canTransitionTo, getExecutiveMatchKey } from '../utils';
 
 export function useAppData(projectFilter: ProjectFilterState) {
     const [projects, setProjects] = useState<ProjectFile[]>([]);
@@ -42,6 +42,27 @@ export function useAppData(projectFilter: ProjectFilterState) {
         };
     }, [projectFilter]);
 
+    // Padronização do ciclo: se o Executivo foi criado antes de o Preliminar ser
+    // enviado ao cliente (via promoção ou importação), o envio torna-se
+    // desnecessário e o Preliminar é finalizado como 'Executivo Gerado'.
+    // Também regulariza registros antigos já existentes no banco.
+    const supersededSynced = useRef<Set<string>>(new Set());
+    useEffect(() => {
+        const executiveKeys = new Set(
+            projects.filter(p => p.phase === ProjectPhase.EXECUTIVE).map(getExecutiveMatchKey)
+        );
+        if (executiveKeys.size === 0) return;
+        projects.forEach(p => {
+            const phase = p.phase || ProjectPhase.PRELIMINARY;
+            if (phase !== ProjectPhase.PRELIMINARY) return;
+            if (p.status !== Status.DONE || p.sendDate) return;
+            if (!executiveKeys.has(getExecutiveMatchKey(p))) return;
+            if (supersededSynced.current.has(p.id)) return;
+            supersededSynced.current.add(p.id);
+            updateProjectInDb({ ...p, status: Status.SUPERSEDED });
+        });
+    }, [projects]);
+
     const updateProject = (updated: ProjectFile) => updateProjectInDb(updated);
     const deleteProject = (id: string) => { deleteProjectFromDb(id); };
 
@@ -70,7 +91,11 @@ export function useAppData(projectFilter: ProjectFilterState) {
         const original = projects.find(p => p.id === id);
         if (!original) return;
 
-        if (!confirm(`Deseja gerar a versão EXECUTIVA a partir de "${original.filename}"? \n\nIsso criará um novo registro limpo, mantendo o histórico da fase Preliminar.`)) {
+        const closesPreliminary = !original.sendDate;
+        const extraInfo = closesPreliminary
+            ? '\n\nComo o Preliminar ainda não foi enviado ao cliente, seu ciclo será encerrado como "Executivo Gerado" (envio desnecessário).'
+            : '';
+        if (!confirm(`Deseja gerar a versão EXECUTIVA a partir de "${original.filename}"? \n\nIsso criará um novo registro limpo, mantendo o histórico da fase Preliminar.${extraInfo}`)) {
             return;
         }
 
@@ -90,6 +115,10 @@ export function useAppData(projectFilter: ProjectFilterState) {
             startPeriod: currentPeriod,
             endDate: '', sendDate: '', feedbackDate: '', blockedDays: 0, revisions: []
         });
+
+        if (closesPreliminary) {
+            updateProjectInDb({ ...original, status: Status.SUPERSEDED });
+        }
     };
 
     const updateMaterial = (updated: MaterialDoc) => updateMaterialInDb(updated);

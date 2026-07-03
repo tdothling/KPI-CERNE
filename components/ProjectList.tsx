@@ -4,7 +4,7 @@ import { ProjectFile, Status, Discipline, RevisionReason, Period, ProjectPhase }
 import { format, parseISO, isValid } from 'date-fns';
 import { Trash2, GitBranch, History, CornerDownRight, AlertTriangle, Edit2, Save, X, Eye, ArrowUpDown, ArrowUp, ArrowDown, BadgeCheck, Send, CheckSquare, ThumbsDown, List, Search, ArrowUpCircle, ChevronRight, ChevronDown, Play, Pause, ListTree, LayoutList, ClipboardList, Minimize2, Maximize2, CheckCircle2 } from 'lucide-react';
 import { subscribeToClients } from '../services/db';
-import { getProjectBaseName, getRevisionNumber, formatDateDisplay, calculateBusinessDaysWithHolidays, getStatusColor, inferStatusFromDates, calculateDeadlineDate, canTransitionTo } from '../utils';
+import { getProjectBaseName, getRevisionNumber, formatDateDisplay, calculateBusinessDaysWithHolidays, getStatusColor, inferStatusFromDates, calculateDeadlineDate, canTransitionTo, getExecutiveMatchKey } from '../utils';
 
 interface ProjectListProps {
     projects: ProjectFile[];
@@ -38,9 +38,7 @@ const ProjectRow = memo(({ project, isLatest, isChildRow, groupToggle, groupEnd,
     // 1. Deve ser Preliminar
     // 2. Deve estar Concluído, Aguardando Aprovação ou Aprovado (Permite fluxo flexível)
     // 3. NÃO pode existir um Executivo correspondente (verificado via mapa)
-    const baseNameKey = project.groupId || getProjectBaseName(project.filename).replace(/_EXEC/gi, '').replace(/\s*\[R\d+\]/gi, '').trim().toLowerCase();
-    const uniqueKey = `${project.client}|${project.discipline}|${baseNameKey}`;
-    const hasExecutiveVersion = executiveExistenceMap.has(uniqueKey);
+    const hasExecutiveVersion = executiveExistenceMap.has(getExecutiveMatchKey(project));
 
     const canPromote = onPromote &&
         project.phase === ProjectPhase.PRELIMINARY &&
@@ -355,9 +353,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
         const map = new Set<string>();
         projects.forEach(p => {
             if (p.phase === ProjectPhase.EXECUTIVE) {
-                const baseName = p.groupId || getProjectBaseName(p.filename).replace(/_EXEC/gi, '').replace(/\s*\[R\d+\]/gi, '').trim().toLowerCase();
-                const key = `${p.client}|${p.discipline}|${baseName}`;
-                map.add(key);
+                map.add(getExecutiveMatchKey(p));
             }
         });
         return map;

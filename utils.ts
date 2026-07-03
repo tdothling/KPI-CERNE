@@ -144,6 +144,7 @@ export const getStatusColor = (status: string) => {
         case 'Execução Concluída': return 'text-violet-700 bg-violet-100 border-violet-300 dark:bg-violet-900/40 dark:border-violet-700 dark:text-violet-400';
         case 'Em Andamento': return 'text-brand-700 bg-brand-50 border-brand-200 dark:bg-brand-900/40 dark:border-brand-800 dark:text-brand-400';
         case 'Revisado': return 'text-slate-500 bg-slate-200 border-slate-300 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-400 line-through decoration-slate-400 decoration-2';
+        case 'Executivo Gerado': return 'text-teal-700 bg-teal-50 border-teal-200 dark:bg-teal-900/30 dark:border-teal-800 dark:text-teal-400';
         case 'Comprado': return 'text-blue-700 bg-blue-100 border-blue-200 dark:bg-blue-900/40 dark:border-blue-700 dark:text-blue-400';
         case 'Entregue': return 'text-emerald-700 bg-emerald-100 border-emerald-200 dark:bg-emerald-900/40 dark:border-emerald-700 dark:text-emerald-400';
         case 'Pendente': return 'text-amber-700 bg-amber-100 border-amber-200 dark:bg-amber-900/40 dark:border-amber-700 dark:text-amber-400';
@@ -191,8 +192,9 @@ export const validateFile = (file: File): boolean => {
 export const inferStatusFromDates = (project: Partial<ProjectFile>): Status => {
     const currentStatus = project.status;
 
-    // Status terminal: REVISED nunca deve ser sobrescrito automaticamente
+    // Status terminais: REVISED e SUPERSEDED nunca devem ser sobrescritos automaticamente
     if (currentStatus === Status.REVISED) return Status.REVISED;
+    if (currentStatus === Status.SUPERSEDED) return Status.SUPERSEDED;
 
     if (project.feedbackDate) {
         // Se tem feedback, preserva APPROVED ou REJECTED; caso contrário, assume APPROVED
@@ -223,7 +225,14 @@ export const canTransitionTo = (currentStatus: Status, action: 'COMPLETE' | 'SEN
 
 // Identifica se um status é terminal (não deveria receber mais edições automáticas)
 export const isTerminalStatus = (status: Status): boolean => {
-    return status === Status.REVISED;
+    return status === Status.REVISED || status === Status.SUPERSEDED;
+};
+
+// Chave para casar Preliminar ↔ Executivo do mesmo entregável:
+// Cliente + Disciplina + nome base limpo (sem _EXEC e sem [Rn])
+export const getExecutiveMatchKey = (p: Pick<ProjectFile, 'groupId' | 'filename' | 'client' | 'discipline'>): string => {
+    const baseName = p.groupId || getProjectBaseName(p.filename).replace(/_EXEC/gi, '').replace(/\s*\[R\d+\]/gi, '').trim().toLowerCase();
+    return `${p.client}|${p.discipline}|${baseName}`;
 };
 
 // Soma N dias úteis a uma data, pulando fins de semana e feriados

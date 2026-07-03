@@ -22,7 +22,8 @@ export enum Status {
   WAITING_APPROVAL = 'Aguardando Aprovação', // Novo
   APPROVED = 'Aprovado', // Novo
   REJECTED = 'Reprovado', // Novo
-  REVISED = 'Revisado' // Novo: Indica que este arquivo gerou uma revisão
+  REVISED = 'Revisado', // Novo: Indica que este arquivo gerou uma revisão
+  SUPERSEDED = 'Executivo Gerado' // Preliminar finalizado sem envio: o executivo foi criado antes, tornando o envio desnecessário
 }
 
 export enum RevisionReason {
