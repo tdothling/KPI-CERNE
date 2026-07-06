@@ -428,7 +428,7 @@ function ObraCard({
                     SLA: {client.deadlineDays} dias
                   </span>
                 )}
-                {sla && (
+                {sla && !isDone && (
                   <span className={`font-medium ${sla.isOverdue ? 'text-rose-600 dark:text-rose-400' : sla.isAtRisk ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400'}`}>
                     {sla.isOverdue
                       ? `Venceu há ${Math.abs(sla.remaining)} dias`
