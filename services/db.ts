@@ -1,6 +1,6 @@
 
 import { db, auth } from "../firebase";
-import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc, query, orderBy, limit, QuerySnapshot, DocumentData, getDoc, getDocs, where } from "firebase/firestore";
+import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc, query, orderBy, limit, QuerySnapshot, DocumentData, getDoc, getDocs, where, writeBatch } from "firebase/firestore";
 import { ProjectFile, MaterialDoc, PurchaseDoc, ClientDoc, ProjectFilterState } from "../types";
 
 const COLL_PROJECTS = "projects";
@@ -27,6 +27,11 @@ const checkAuth = () => {
   }
   return true;
 };
+
+// Normaliza nomes de obra para comparação tolerante a maiúsculas/minúsculas e espaços.
+// Necessário porque o nome da obra é denormalizado (copiado) no campo `client` de cada
+// projeto/material/compra, e dados importados podem ter capitalização/espaçamento diferente.
+const normalizeName = (s: string | undefined | null) => (s || '').trim().toLowerCase();
 
 // Security Helper: Remove campos undefined que podem quebrar o Firestore ou causar inconsistência
 const sanitizeData = (data: any) => {
@@ -112,6 +117,27 @@ export const updateProjectInDb = async (project: ProjectFile) => {
     await updateDoc(docRef, sanitizeData(data));
   } catch (e) { console.error("Erro ao atualizar projeto:", e); throw e; }
 };
+
+// Atualização em lote: grava TODAS as mudanças de cada documento em uma única escrita.
+// Substitui o padrão antigo de várias chamadas updateProjectInDb com o documento inteiro,
+// que reescrevia campos a partir do estado local desatualizado e desfazia as gravações
+// anteriores (última escrita vencia — datas "voltavam" ao valor antigo na edição em lote).
+export interface BatchDocPatch { id: string; changes: Record<string, any>; }
+
+const batchUpdateCollection = async (collName: string, patches: BatchDocPatch[]) => {
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+  const CHUNK = 400; // Firestore limita writeBatch a 500 operações
+  for (let i = 0; i < patches.length; i += CHUNK) {
+    const batch = writeBatch(db);
+    patches.slice(i, i + CHUNK).forEach(({ id, changes }) => {
+      batch.update(doc(db, collName, id), sanitizeData(changes));
+    });
+    await batch.commit();
+  }
+};
+
+export const batchUpdateProjectsInDb = (patches: BatchDocPatch[]) => batchUpdateCollection(COLL_PROJECTS, patches);
+export const batchUpdateMaterialsInDb = (patches: BatchDocPatch[]) => batchUpdateCollection(COLL_MATERIALS, patches);
 
 export const deleteProjectFromDb = async (id: string) => {
   if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
@@ -284,28 +310,31 @@ export const updateClientInDb = async (client: ClientDoc) => {
     // 2. Atualiza o cadastro do cliente
     await updateDoc(docRef, sanitizeData(data));
 
-    // 3. Se o nome mudou, atualiza em cascata (Cascading Update) todas as coleções vinculadas
+    // 3. Se o nome mudou, atualiza em cascata (Cascading Update) todas as coleções vinculadas.
     if (oldName && newName && oldName !== newName) {
       console.log(`Iniciando atualização em cascata: ${oldName} -> ${newName}`);
+      const target = normalizeName(oldName);
 
-      // Prepara queries para encontrar documentos com o nome antigo
-      const pQuery = query(collection(db, COLL_PROJECTS), where("client", "==", oldName));
-      const mQuery = query(collection(db, COLL_MATERIALS), where("client", "==", oldName));
-      const cQuery = query(collection(db, COLL_PURCHASES), where("client", "==", oldName));
-
-      // Executa leituras em paralelo
+      // Varre as coleções inteiras e casa por nome NORMALIZADO (ignora maiúsc./espaços).
+      // O `where("client","==",oldName)` exato deixava para trás registros importados com
+      // capitalização/espaçamento diferente — que continuavam aparecendo com o nome antigo.
       const [pSnap, mSnap, cSnap] = await Promise.all([
-        getDocs(pQuery),
-        getDocs(mQuery),
-        getDocs(cQuery)
+        getDocs(collection(db, COLL_PROJECTS)),
+        getDocs(collection(db, COLL_MATERIALS)),
+        getDocs(collection(db, COLL_PURCHASES))
       ]);
 
       const updatePromises: Promise<void>[] = [];
-
-      // Adiciona promessas de atualização para cada documento encontrado
-      pSnap.forEach(d => updatePromises.push(updateDoc(d.ref, { client: newName })));
-      mSnap.forEach(d => updatePromises.push(updateDoc(d.ref, { client: newName })));
-      cSnap.forEach(d => updatePromises.push(updateDoc(d.ref, { client: newName })));
+      const collectMatches = (snap: QuerySnapshot<DocumentData>) => {
+        snap.docs.forEach(d => {
+          if (normalizeName((d.data() as any).client) === target) {
+            updatePromises.push(updateDoc(d.ref, { client: newName }));
+          }
+        });
+      };
+      collectMatches(pSnap);
+      collectMatches(mSnap);
+      collectMatches(cSnap);
 
       if (updatePromises.length > 0) {
         await Promise.all(updatePromises);
@@ -314,6 +343,22 @@ export const updateClientInDb = async (client: ClientDoc) => {
     }
 
   } catch (e) { console.error("Erro ao atualizar cliente e vínculos:", e); throw e; }
+};
+
+// Conta registros vinculados a uma obra lendo DIRETO do banco (não do cache local, que é
+// limitado a 1000 docs e pode estar filtrado pelo servidor). Casa por nome normalizado.
+// Usado para bloquear a exclusão de obras que ainda possuem projetos/materiais/compras.
+export const countLinkedRecords = async (clientName: string): Promise<{ projects: number; materials: number; purchases: number }> => {
+  if (!isDbActive()) return { projects: 0, materials: 0, purchases: 0 };
+  const target = normalizeName(clientName);
+  const [pSnap, mSnap, cSnap] = await Promise.all([
+    getDocs(collection(db, COLL_PROJECTS)),
+    getDocs(collection(db, COLL_MATERIALS)),
+    getDocs(collection(db, COLL_PURCHASES))
+  ]);
+  const count = (snap: QuerySnapshot<DocumentData>) =>
+    snap.docs.filter(d => normalizeName((d.data() as any).client) === target).length;
+  return { projects: count(pSnap), materials: count(mSnap), purchases: count(cSnap) };
 };
 
 export const deleteClientFromDb = async (id: string) => {

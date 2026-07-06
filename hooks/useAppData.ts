@@ -1,10 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { ProjectFile, MaterialDoc, PurchaseDoc, ClientDoc, Status, RevisionReason, ProjectPhase, Period, ProjectFilterState } from '../types';
-import { subscribeToProjects, addProject, updateProjectInDb, deleteProjectFromDb, subscribeToMaterials, addMaterial, updateMaterialInDb, deleteMaterialFromDb, subscribeToPurchases, addPurchase, updatePurchaseInDb, deletePurchaseFromDb, subscribeToClients, addClient, updateClientInDb, deleteClientFromDb, subscribeToHolidays, saveHolidaysToDb } from '../services/db';
+import { subscribeToProjects, addProject, updateProjectInDb, deleteProjectFromDb, subscribeToMaterials, addMaterial, updateMaterialInDb, deleteMaterialFromDb, subscribeToPurchases, addPurchase, updatePurchaseInDb, deletePurchaseFromDb, subscribeToClients, addClient, updateClientInDb, deleteClientFromDb, countLinkedRecords, subscribeToHolidays, saveHolidaysToDb, batchUpdateProjectsInDb, batchUpdateMaterialsInDb } from '../services/db';
 import { subscribeToAuth } from '../services/auth';
 import { db } from '../firebase';
 import { User } from 'firebase/auth';
-import { canTransitionTo, getExecutiveMatchKey } from '../utils';
+import { canTransitionTo, getExecutiveMatchKey, calculateBusinessDaysWithHolidays } from '../utils';
+import { parseISO, isValid } from 'date-fns';
+
+export interface ProjectBatchPatch { id: string; changes: Partial<ProjectFile>; }
+export interface MaterialBatchPatch { id: string; changes: Partial<MaterialDoc>; }
 
 export function useAppData(projectFilter: ProjectFilterState) {
     const [projects, setProjects] = useState<ProjectFile[]>([]);
@@ -153,35 +157,48 @@ export function useAppData(projectFilter: ProjectFilterState) {
     const handleAddClient = (client: Omit<ClientDoc, 'id'>) => addClient(client);
     const handleUpdateClient = (client: ClientDoc) => updateClientInDb(client);
 
-    const handleDeleteClient = (id: string) => {
+    const handleDeleteClient = async (id: string) => {
         const clientToDelete = clients.find(c => c.id === id);
         if (!clientToDelete) return;
 
-        const associatedProjects = projects.filter(p => p.client === clientToDelete.name).length;
-        const associatedMaterials = materials.filter(m => m.client === clientToDelete.name).length;
-        const associatedPurchases = purchases.filter(p => p.client === clientToDelete.name).length;
-
-        if (associatedProjects > 0 || associatedMaterials > 0 || associatedPurchases > 0) {
-            alert(`Não é possível excluir o cliente "${clientToDelete.name}".\n\nExistem registros vinculados:\n- ${associatedProjects} Projetos\n- ${associatedMaterials} Listas de Materiais\n- ${associatedPurchases} Compras\n\nPor favor, exclua ou reatribua esses registros antes de remover o cliente.`);
+        // Conta os vínculos DIRETO no banco. O cache local `projects/materials/purchases`
+        // vem limitado a 1000 docs e pode estar filtrado pelo servidor, o que fazia a
+        // contagem dar 0 e permitir apagar o cadastro deixando registros órfãos com o nome antigo.
+        let counts;
+        try {
+            counts = await countLinkedRecords(clientToDelete.name);
+        } catch (e) {
+            console.error("Erro ao verificar registros vinculados:", e);
+            alert("Não foi possível verificar os registros vinculados a esta obra. Tente novamente.");
             return;
         }
 
-        if (confirm(`Tem certeza que deseja excluir o cliente "${clientToDelete.name}"?`)) {
+        const total = counts.projects + counts.materials + counts.purchases;
+        if (total > 0) {
+            alert(`Não é possível excluir a obra "${clientToDelete.name}".\n\nExistem registros vinculados:\n- ${counts.projects} Projetos\n- ${counts.materials} Listas de Materiais\n- ${counts.purchases} Compras\n\nPor favor, exclua ou reatribua esses registros antes de remover a obra.`);
+            return;
+        }
+
+        if (confirm(`Tem certeza que deseja excluir a obra "${clientToDelete.name}"?`)) {
             deleteClientFromDb(id);
         }
     };
 
-    const handleBatchUpdate = (ids: string[], field: keyof ProjectFile, value: any) => {
-        ids.forEach(id => {
-            const project = projects.find(p => p.id === id);
-            if (project) {
-                updateProjectInDb({ ...project, [field]: value });
-            }
-        });
+    // Edição em lote: recebe patches prontos (todas as mudanças de cada documento juntas)
+    // e grava tudo em uma única operação atômica por documento via writeBatch.
+    const handleBatchUpdate = async (patches: ProjectBatchPatch[]) => {
+        if (patches.length === 0) return;
+        try {
+            await batchUpdateProjectsInDb(patches);
+        } catch (e) {
+            console.error("Erro na edição em lote de projetos:", e);
+            alert("Erro ao aplicar a edição em lote. Nenhuma alteração parcial foi mantida — verifique sua conexão e tente novamente.");
+        }
     };
 
-    const handleBatchWorkflow = (ids: string[], action: 'COMPLETE' | 'SEND' | 'APPROVE' | 'REJECT', date: string) => {
+    const handleBatchWorkflow = async (ids: string[], action: 'COMPLETE' | 'SEND' | 'APPROVE' | 'REJECT', date: string, period: Period = 'TARDE') => {
         let skipped = 0;
+        const patches: ProjectBatchPatch[] = [];
         ids.forEach(id => {
             const project = projects.find(p => p.id === id);
             if (!project) return;
@@ -190,39 +207,61 @@ export function useAppData(projectFilter: ProjectFilterState) {
                 skipped++;
                 return;
             }
-            const updatedProject = { ...project };
-            if (action === 'COMPLETE') { updatedProject.status = Status.DONE; updatedProject.endDate = date; }
-            if (action === 'SEND') { updatedProject.status = Status.WAITING_APPROVAL; updatedProject.sendDate = date; }
-            if (action === 'APPROVE') { updatedProject.status = Status.APPROVED; updatedProject.feedbackDate = date; }
-            if (action === 'REJECT') { updatedProject.status = Status.REJECTED; updatedProject.feedbackDate = date; }
-            updateProjectInDb(updatedProject);
+            const changes: Partial<ProjectFile> = {};
+            if (action === 'COMPLETE') { changes.status = Status.DONE; changes.endDate = date; changes.endPeriod = period; }
+            if (action === 'SEND') { changes.status = Status.WAITING_APPROVAL; changes.sendDate = date; changes.sendPeriod = period; }
+            if (action === 'APPROVE' || action === 'REJECT') {
+                changes.status = action === 'APPROVE' ? Status.APPROVED : Status.REJECTED;
+                changes.feedbackDate = date;
+                changes.feedbackPeriod = period;
+                // Mesmo cálculo da edição individual: dias parados aguardando o cliente
+                if (project.sendDate) {
+                    const send = parseISO(project.sendDate);
+                    const feedback = parseISO(date);
+                    if (isValid(send) && isValid(feedback) && feedback >= send) {
+                        changes.blockedDays = calculateBusinessDaysWithHolidays(send, feedback, holidays, project.sendPeriod || 'MANHA', period);
+                    }
+                }
+            }
+            patches.push({ id, changes });
         });
+        try {
+            await batchUpdateProjectsInDb(patches);
+        } catch (e) {
+            console.error("Erro na ação de fluxo em lote:", e);
+            alert("Erro ao executar a ação em lote. Verifique sua conexão e tente novamente.");
+            return;
+        }
         if (skipped > 0) {
             alert(`${skipped} arquivo(s) foram ignorados porque não estavam no status correto para a ação "${action}".`);
         }
     };
 
-    const handleMaterialBatchUpdate = (ids: string[], field: keyof MaterialDoc, value: any) => {
-        ids.forEach(id => {
-            const material = materials.find(m => m.id === id);
-            if (material) {
-                updateMaterialInDb({ ...material, [field]: value });
-            }
-        });
+    const handleMaterialBatchUpdate = async (patches: MaterialBatchPatch[]) => {
+        if (patches.length === 0) return;
+        try {
+            await batchUpdateMaterialsInDb(patches);
+        } catch (e) {
+            console.error("Erro na edição em lote de materiais:", e);
+            alert("Erro ao aplicar a edição em lote. Nenhuma alteração parcial foi mantida — verifique sua conexão e tente novamente.");
+        }
     };
 
-    const handleMaterialBatchWorkflow = (ids: string[], action: 'COMPLETE', date: string) => {
+    const handleMaterialBatchWorkflow = async (ids: string[], action: 'COMPLETE', date: string, period: Period = 'TARDE') => {
+        const patches: MaterialBatchPatch[] = [];
         ids.forEach(id => {
             const material = materials.find(m => m.id === id);
             if (!material) return;
-
-            let updatedMaterial = { ...material };
             if (action === 'COMPLETE') {
-                updatedMaterial.status = 'DONE';
-                updatedMaterial.endDate = date;
-                updateMaterialInDb(updatedMaterial);
+                patches.push({ id, changes: { status: 'DONE', endDate: date, endPeriod: period } });
             }
         });
+        try {
+            await batchUpdateMaterialsInDb(patches);
+        } catch (e) {
+            console.error("Erro na conclusão em lote de materiais:", e);
+            alert("Erro ao executar a ação em lote. Verifique sua conexão e tente novamente.");
+        }
     };
 
     const handleUpdateHolidays = (newHolidays: string[]) => saveHolidaysToDb(newHolidays);

@@ -471,10 +471,15 @@ export default function App() {
                       {!isReadOnly && (
                         <>
                           {(activeTab === 'projects' || activeTab === 'materials') && (
-                            <ActionMenuItem 
-                              icon={<Layers size={16} />} 
-                              label="Edição em Lote" 
-                              onClick={() => { setIsBatchEditOpen(true); setIsMaterialBatchEditOpen(true); setIsActionsMenuOpen(false); }} 
+                            <ActionMenuItem
+                              icon={<Layers size={16} />}
+                              label={activeTab === 'projects' ? 'Edição em Lote (Projetos)' : 'Edição em Lote (Materiais)'}
+                              onClick={() => {
+                                // Abre apenas o modal correspondente à aba ativa (antes abria os dois sobrepostos)
+                                if (activeTab === 'projects') setIsBatchEditOpen(true);
+                                else setIsMaterialBatchEditOpen(true);
+                                setIsActionsMenuOpen(false);
+                              }}
                             />
                           )}
                           {activeTab !== 'dashboard' && (
@@ -776,11 +781,11 @@ export default function App() {
       )}
 
       {isBatchEditOpen && (
-        <BatchEditModal projects={filteredProjects} onClose={() => setIsBatchEditOpen(false)} onApply={handleBatchUpdate} onWorkflow={handleBatchWorkflow} holidays={holidays} />
+        <BatchEditModal projects={filteredProjects} onClose={() => setIsBatchEditOpen(false)} onApplyPatches={handleBatchUpdate} onWorkflow={handleBatchWorkflow} holidays={holidays} />
       )}
 
       {isMaterialBatchEditOpen && (
-        <MaterialBatchEditModal materials={filteredMaterials} onClose={() => setIsMaterialBatchEditOpen(false)} onApply={handleMaterialBatchUpdate} onWorkflow={handleMaterialBatchWorkflow} />
+        <MaterialBatchEditModal materials={filteredMaterials} onClose={() => setIsMaterialBatchEditOpen(false)} onApplyPatches={handleMaterialBatchUpdate} onWorkflow={handleMaterialBatchWorkflow} />
       )}
 
       {isHolidayManagerOpen && (
