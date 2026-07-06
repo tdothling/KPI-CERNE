@@ -1,13 +1,13 @@
 
 import React, { useState, useMemo, useEffect, memo } from 'react';
-import { ProjectFile, Status, Discipline, RevisionReason, Period, ProjectPhase } from '../types';
+import { ProjectFile, Status, Discipline, RevisionReason, Period, ProjectPhase, ClientDoc } from '../types';
 import { format, parseISO, isValid } from 'date-fns';
 import { Trash2, GitBranch, History, CornerDownRight, AlertTriangle, Edit2, Save, X, Eye, ArrowUpDown, ArrowUp, ArrowDown, BadgeCheck, Send, CheckSquare, ThumbsDown, List, Search, ArrowUpCircle, ChevronRight, ChevronDown, Play, Pause, ListTree, LayoutList, ClipboardList, Minimize2, Maximize2, CheckCircle2 } from 'lucide-react';
-import { subscribeToClients } from '../services/db';
 import { getProjectBaseName, getRevisionNumber, formatDateDisplay, calculateBusinessDaysWithHolidays, getStatusColor, inferStatusFromDates, calculateDeadlineDate, canTransitionTo, getExecutiveMatchKey } from '../utils';
 
 interface ProjectListProps {
     projects: ProjectFile[];
+    clients: ClientDoc[];
     onUpdate: (updated: ProjectFile) => void;
     onDelete: (id: string) => void;
     onAddRevision: (id: string, reason: RevisionReason, comment: string) => void;
@@ -248,7 +248,7 @@ const BATCH_META: Record<BatchAction, { title: string; description: string; conf
     REJECT: { title: 'Reprovar em Lote', description: 'A data de reprovação será aplicada a todos os projetos selecionados que estão "Aguardando Aprovação".', confirmLabel: 'Reprovar Selecionados', btnClass: 'bg-rose-600 hover:bg-rose-700', iconBg: 'bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400' },
 };
 
-export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, onDelete, onAddRevision, onPromote, holidays, readOnly = false }) => {
+export const ProjectList: React.FC<ProjectListProps> = ({ projects, clients, onUpdate, onDelete, onAddRevision, onPromote, holidays, readOnly = false }) => {
     const [activeRevModal, setActiveRevModal] = useState<string | null>(null);
     const [projectToDelete, setProjectToDelete] = useState<ProjectFile | null>(null);
     const [editingProject, setEditingProject] = useState<ProjectFile | null>(null);
@@ -288,21 +288,13 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [pendingBatch, setPendingBatch] = useState<{ action: BatchAction; date: string; period: Period } | null>(null);
 
-    const [clientsList, setClientsList] = useState<{ id: string, name: string }[]>([]);
-    const [clientsMap, setClientsMap] = useState<Record<string, any>>({});
-
-    useEffect(() => {
-        const unsub = subscribeToClients((data) => {
-            setClientsList(data.map(c => ({ id: c.id, name: c.name })));
-
-            const map: Record<string, any> = {};
-            data.forEach(c => {
-                map[c.name] = c;
-            });
-            setClientsMap(map);
-        });
-        return () => unsub();
-    }, []);
+    // Clientes vêm do App (assinatura única em useAppData) — antes esta aba abria um
+    // segundo listener da mesma coleção no Firestore
+    const clientsMap = useMemo(() => {
+        const map: Record<string, ClientDoc> = {};
+        clients.forEach(c => { map[c.name] = c; });
+        return map;
+    }, [clients]);
 
     // Determina se um projeto está atrasado em relação ao prazo (SLA) da obra
     const isProjectOverdue = (project: ProjectFile): boolean => {
@@ -980,7 +972,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, on
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Cliente</label>
                                 <select value={editingProject.client} onChange={(e) => updateEditingField('client', e.target.value)} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2">
                                     <option value={editingProject.client}>{editingProject.client} (Atual)</option>
-                                    {clientsList.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                    {clients.filter(c => c.name !== editingProject.client).map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                                 </select>
                             </div>
                             <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Base / Setor</label><input type="text" value={editingProject.base} onChange={(e) => updateEditingField('base', e.target.value)} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2" /></div>

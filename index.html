@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CERNE - EngPlot KPI</title>
-    
+
     <!-- Configurações PWA e Mobile -->
     <meta name="theme-color" content="#651830" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -15,64 +15,16 @@
     <!-- Ícone Quadrado para iOS e Favicon (Baseado na Identidade Cerne) -->
     <!-- SVG Quadrado (512x512) codificado para Data URI -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='512' height='512' fill='%23651830'/%3E%3Cpath d='M0 0L140 0L0 140Z' fill='%238e1c3e'/%3E%3Ctext x='50%25' y='55%25' fill='white' font-size='110' font-family='Arial, sans-serif' font-weight='bold' text-anchor='middle'%3ECERNE%3C/text%3E%3C/svg%3E" />
-    
+
     <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='512' height='512' fill='%23651830'/%3E%3Cpath d='M0 0L140 0L0 140Z' fill='%238e1c3e'/%3E%3Ctext x='50%25' y='55%25' fill='white' font-size='110' font-family='Arial, sans-serif' font-weight='bold' text-anchor='middle'%3ECERNE%3C/text%3E%3C/svg%3E" />
 
     <!-- Manifesto Web App (Inline para Android) -->
     <link rel="manifest" href="/manifest.json" />
 
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            colors: {
-              brand: {
-                50: '#fdf2f4',
-                100: '#fce7eb',
-                200: '#f8d2db',
-                300: '#f2aebf',
-                400: '#e87e9b',
-                500: '#d64d72',
-                600: '#b02a50', 
-                700: '#8e1c3e', 
-                800: '#651830', // CERNE Main Color
-                900: '#4a1526',
-                950: '#2a0912',
-              }
-            }
-          }
-        }
-      }
-    </script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-      body {
-        font-family: 'Inter', sans-serif;
-        overflow-x: hidden;
-        overscroll-behavior-y: none;
-      }
-    </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react": "https://aistudiocdn.com/react@^19.2.1",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
-    "react/": "https://aistudiocdn.com/react@^19.2.1/",
-    "recharts": "https://aistudiocdn.com/recharts@^3.5.1",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.556.0",
-    "date-fns": "https://aistudiocdn.com/date-fns@^4.1.0",
-    "date-fns/": "https://esm.sh/date-fns@^4.1.0/",
-    "firebase/app": "https://esm.sh/firebase@10.13.1/app",
-    "firebase/firestore": "https://esm.sh/firebase@10.13.1/firestore",
-    "firebase/auth": "https://esm.sh/firebase@10.13.1/auth",
-    "firebase/": "https://esm.sh/firebase@10.13.1/"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
-</head>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  </head>
   <body class="bg-slate-50 dark:bg-slate-900 transition-colors duration-200">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>

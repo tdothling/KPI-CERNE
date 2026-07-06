@@ -1,13 +1,13 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { PurchaseDoc, PurchaseStatus, Period } from '../types';
+import React, { useState, useMemo } from 'react';
+import { PurchaseDoc, PurchaseStatus, Period, ClientDoc } from '../types';
 import { Trash2, Edit2, ShoppingCart, Search, Plus, ExternalLink, CheckCircle2, Clock, Truck, XCircle, MapPin, Briefcase, Calendar, ArrowRight, CreditCard, CheckSquare, Eye, X } from 'lucide-react';
 import { format, parseISO, isValid, differenceInBusinessDays, isWeekend, isWithinInterval } from 'date-fns';
-import { subscribeToClients } from '../services/db';
 import { calculateBusinessDaysWithHolidays } from '../utils';
 
 interface PurchaseListProps {
   purchases: PurchaseDoc[];
+  clients: ClientDoc[];
   onAdd: (purchase: Omit<PurchaseDoc, 'id'>) => void;
   onUpdate: (updated: PurchaseDoc) => void;
   onDelete: (id: string) => void;
@@ -25,21 +25,11 @@ const formatDateDisplay = (dateStr: string, period?: Period) => {
     return d;
 };
 
-export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, onUpdate, onDelete, currentUser, holidays, readOnly = false }) => {
+export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, clients, onAdd, onUpdate, onDelete, currentUser, holidays, readOnly = false }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [clientsList, setClientsList] = useState<{id: string, name: string}[]>([]);
   const [detailsPurchase, setDetailsPurchase] = useState<PurchaseDoc | null>(null);
-
-  useEffect(() => {
-      if (isModalOpen) {
-          const unsub = subscribeToClients((data) => {
-              setClientsList(data.map(c => ({ id: c.id, name: c.name })));
-          });
-          return () => unsub();
-      }
-  }, [isModalOpen]);
 
   const [pendingBuy, setPendingBuy] = useState<{ id: string, date: string, period: Period } | null>(null);
   const [pendingDelivery, setPendingDelivery] = useState<{ id: string, date: string, period: Period } | null>(null);
@@ -183,7 +173,7 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({ purchases, onAdd, on
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Descrição da Solicitação *</label><input type="text" required value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2" placeholder="Ex: Material elétrico para o quadro QGBT" autoFocus /></div>
                         <div className="grid grid-cols-2 gap-4">
-                             <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Cliente *</label><select required value={formData.client} onChange={(e) => setFormData({...formData, client: e.target.value})} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2"><option value="" disabled>Selecione...</option>{clientsList.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}</select></div>
+                             <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Cliente *</label><select required value={formData.client} onChange={(e) => setFormData({...formData, client: e.target.value})} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2"><option value="" disabled>Selecione...</option>{clients.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}</select></div>
                              <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Base / Setor</label><input type="text" value={formData.base} onChange={(e) => setFormData({...formData, base: e.target.value})} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2" placeholder="Ex: Obra A, Galpão 1" /></div>
                         </div>
                         <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Aplicação / Uso</label><input type="text" value={formData.application} onChange={(e) => setFormData({...formData, application: e.target.value})} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2" placeholder="Ex: Infraestrutura de rede, Manutenção predial..." /></div>

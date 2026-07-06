@@ -1,12 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* CERNE KPI - Base Styles */
+
+body {
+  font-family: 'Inter', sans-serif;
+  overflow-x: hidden;
+  overscroll-behavior-y: none;
+}
 
 /* Utilitário para esconder a barra de rolagem mas permitir o scroll */
 .no-scrollbar::-webkit-scrollbar {
-    display: none;
+  display: none;
 }
 .no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 /* Estilos para rolagem customizada */

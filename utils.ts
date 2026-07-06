@@ -1,6 +1,14 @@
 
 import { format, parseISO, isValid, differenceInBusinessDays, isWeekend, isWithinInterval, addDays } from 'date-fns';
-import { Period, Discipline, Status, ProjectFile } from './types';
+import { Period, Discipline, Status, ProjectFile, ClientDoc, ObraStatus } from './types';
+
+// Status efetivo da obra: respeita o status explícito; obras antigas sem o campo
+// são inferidas pelo completedAt (retrocompatibilidade)
+export const getEffectiveStatus = (client: ClientDoc): ObraStatus => {
+    if (client.obraStatus) return client.obraStatus;
+    if (client.completedAt) return ObraStatus.COMPLETED;
+    return ObraStatus.ACTIVE;
+};
 
 export const getProjectBaseName = (filename: string): string => {
     const nameWithoutExt = filename.replace(/\.[^/.]+$/, "");

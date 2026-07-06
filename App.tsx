@@ -1,22 +1,31 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, Suspense, lazy } from 'react';
 import { ProjectFile, Discipline, Status, RevisionReason, DateFilterType, MaterialDoc, PurchaseDoc, ClientDoc, SiteType, ProjectFilterState, ProjectPhase, Period } from './types';
-import { Dashboard } from './components/Dashboard';
-import { ProjectList } from './components/ProjectList';
-import { ProjectTimeline } from './components/ProjectTimeline';
 import { BatchEditModal } from './components/BatchEditModal';
 import { MaterialBatchEditModal } from './components/MaterialBatchEditModal';
 import { HolidayManagerModal } from './components/HolidayManagerModal';
-import { ClientManagerModal } from './components/ClientManagerModal';
-import { ObrasPage } from './components/ObrasPage';
 import { DateRangeFilter } from './components/DateRangeFilter';
-import { MaterialList } from './components/MaterialList';
-import { PurchaseList } from './components/PurchaseList';
 import { LoginModal } from './components/LoginModal';
 import { AdvancedFilter } from './components/AdvancedFilter';
 import { DataMigration } from './components/DataMigration';
 import { ImportReviewModal, StagingRow } from './components/ImportReviewModal';
 import { CerneLogo } from './components/CerneLogo';
 import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Package, FileSpreadsheet, Database, LogIn, LogOut, ShoppingCart, HardHat, Search, ChevronDown, CheckSquare, Square, FileText, MoreHorizontal } from 'lucide-react';
+
+// Code-splitting por aba: cada tela pesada vira um chunk próprio (o Dashboard carrega
+// o recharts, por exemplo) e só é baixada quando o usuário abre a aba correspondente.
+const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
+const ProjectList = lazy(() => import('./components/ProjectList').then(m => ({ default: m.ProjectList })));
+const ProjectTimeline = lazy(() => import('./components/ProjectTimeline').then(m => ({ default: m.ProjectTimeline })));
+const ObrasPage = lazy(() => import('./components/ObrasPage').then(m => ({ default: m.ObrasPage })));
+const MaterialList = lazy(() => import('./components/MaterialList').then(m => ({ default: m.MaterialList })));
+const PurchaseList = lazy(() => import('./components/PurchaseList').then(m => ({ default: m.PurchaseList })));
+
+const TabLoading = () => (
+  <div className="flex items-center justify-center py-24 text-slate-400 text-sm">
+    <div className="animate-spin rounded-full h-6 w-6 border-2 border-brand-600 border-t-transparent mr-3"></div>
+    Carregando...
+  </div>
+);
 import { format } from 'date-fns';
 import { logoutUser, formatUsername } from './services/auth';
 import { detectDiscipline, extractMetadataFromMaterialFilename, validateFile } from './utils';
@@ -63,7 +72,6 @@ export default function App() {
   const [isBatchEditOpen, setIsBatchEditOpen] = useState(false);
   const [isMaterialBatchEditOpen, setIsMaterialBatchEditOpen] = useState(false);
   const [isHolidayManagerOpen, setIsHolidayManagerOpen] = useState(false);
-  const [isClientManagerOpen, setIsClientManagerOpen] = useState(false);
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
 
   const [importType, setImportType] = useState<ImportType>('PROJECT');
@@ -348,14 +356,6 @@ export default function App() {
               <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest border-l border-slate-200 dark:border-slate-700 pl-3 hidden sm:inline">KPI Tracker</span>
             </div>
             
-            <div className="hidden md:flex items-center relative max-w-xs ml-4">
-               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-               <input 
-                 type="text" 
-                 placeholder="Busca global..." 
-                 className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-full pl-9 pr-4 py-1.5 text-xs w-64 focus:outline-none focus:ring-1 focus:ring-brand-500/30 transition-all"
-               />
-            </div>
           </div>
 
           <div className="flex items-center space-x-3">
@@ -536,30 +536,22 @@ export default function App() {
         )}
 
         <div className="mt-6 print:mt-0">
-          {isAdmin && activeTab === 'dashboard' && <DataMigration projects={projects} materials={materials} onUpdateProject={updateProject} onUpdateMaterial={updateMaterial} />}
-          {activeTab === 'dashboard' && <div className="animate-in fade-in zoom-in-95 duration-200"><Dashboard data={filteredProjects} materials={filteredMaterials} clients={clients} isDarkMode={isDarkMode} holidays={holidays} /></div>}
-          {activeTab === 'timeline' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectTimeline projects={filteredProjects} holidays={holidays} clients={clients} /></div>}
-          {activeTab === 'obras' && <div className="animate-in fade-in zoom-in-95 duration-200"><ObrasPage clients={clients} projectCount={(name) => projects.filter(p => p.client === name).length} onAddClient={handleAddClient} onUpdateClient={handleUpdateClient} onDeleteClient={handleDeleteClient} /></div>}
-          {activeTab === 'projects' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectList projects={filteredProjects} onUpdate={updateProject} onDelete={deleteProject} onAddRevision={addProjectRevision} onPromote={promoteProjectToExecutive} holidays={holidays} readOnly={isReadOnly} /></div>}
-          {activeTab === 'materials' && <div className="animate-in fade-in zoom-in-95 duration-200"><MaterialList materials={filteredMaterials} onUpdate={updateMaterial} onDelete={deleteMaterial} onAddRevision={addMaterialRevision} readOnly={isReadOnly} /></div>}
-          {activeTab === 'purchases' && showPurchasesTab && <div className="animate-in fade-in zoom-in-95 duration-200"><PurchaseList purchases={filteredPurchases} onAdd={handleAddPurchase} onUpdate={handleUpdatePurchase} onDelete={handleDeletePurchase} currentUser={currentUser ? formatUsername(currentUser.email) : ''} holidays={holidays} readOnly={isReadOnly} /></div>}
+          <Suspense fallback={<TabLoading />}>
+            {isAdmin && activeTab === 'dashboard' && <DataMigration projects={projects} materials={materials} onUpdateProject={updateProject} onUpdateMaterial={updateMaterial} />}
+            {activeTab === 'dashboard' && <div className="animate-in fade-in zoom-in-95 duration-200"><Dashboard data={filteredProjects} materials={filteredMaterials} clients={clients} isDarkMode={isDarkMode} holidays={holidays} /></div>}
+            {activeTab === 'timeline' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectTimeline projects={filteredProjects} holidays={holidays} clients={clients} /></div>}
+            {activeTab === 'obras' && <div className="animate-in fade-in zoom-in-95 duration-200"><ObrasPage clients={clients} projectCount={(name) => projects.filter(p => p.client === name).length} onAddClient={handleAddClient} onUpdateClient={handleUpdateClient} onDeleteClient={handleDeleteClient} /></div>}
+            {activeTab === 'projects' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectList projects={filteredProjects} clients={clients} onUpdate={updateProject} onDelete={deleteProject} onAddRevision={addProjectRevision} onPromote={promoteProjectToExecutive} holidays={holidays} readOnly={isReadOnly} /></div>}
+            {activeTab === 'materials' && <div className="animate-in fade-in zoom-in-95 duration-200"><MaterialList materials={filteredMaterials} clients={clients} onUpdate={updateMaterial} onDelete={deleteMaterial} onAddRevision={addMaterialRevision} readOnly={isReadOnly} /></div>}
+            {activeTab === 'purchases' && showPurchasesTab && <div className="animate-in fade-in zoom-in-95 duration-200"><PurchaseList purchases={filteredPurchases} clients={clients} onAdd={handleAddPurchase} onUpdate={handleUpdatePurchase} onDelete={handleDeletePurchase} currentUser={currentUser ? formatUsername(currentUser.email) : ''} holidays={holidays} readOnly={isReadOnly} /></div>}
+          </Suspense>
         </div>
       </main>
 
-      {/* Hidden file input - triggered programmatically by triggerFileSelect */}
+      {/* Hidden file input - triggered programmatically by triggerFileSelect.
+          Os atributos webkitdirectory/directory são controlados pelo useEffect de isFolderUpload */}
       <input
-        ref={(el) => {
-          (fileInputRef as React.MutableRefObject<HTMLInputElement | null>).current = el;
-          if (el) {
-            if (isFolderUpload) {
-              el.setAttribute('webkitdirectory', '');
-              el.setAttribute('directory', '');
-            } else {
-              el.removeAttribute('webkitdirectory');
-              el.removeAttribute('directory');
-            }
-          }
-        }}
+        ref={fileInputRef}
         type="file"
         className="hidden"
         multiple
@@ -790,16 +782,6 @@ export default function App() {
 
       {isHolidayManagerOpen && (
         <HolidayManagerModal holidays={holidays} onUpdateHolidays={handleUpdateHolidays} onClose={() => setIsHolidayManagerOpen(false)} />
-      )}
-
-      {isClientManagerOpen && (
-        <ClientManagerModal
-          clients={clients}
-          onAddClient={handleAddClient}
-          onUpdateClient={handleUpdateClient}
-          onDeleteClient={handleDeleteClient}
-          onClose={() => setIsClientManagerOpen(false)}
-        />
       )}
 
       {isLoginModalOpen && (

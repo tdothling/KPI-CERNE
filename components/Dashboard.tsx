@@ -2,11 +2,10 @@
 import React, { useMemo, useState, useCallback, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, ReferenceLine, ComposedChart } from 'recharts';
 import { ProjectFile, Discipline, Status, MaterialDoc, ProjectPhase, ClientDoc, ObraStatus, RevisionReason } from '../types';
-import { getEffectiveStatus } from './ObrasPage';
 import { format, parseISO, isValid, isAfter, isSameDay, addDays, startOfDay, endOfDay, subMonths, startOfMonth, differenceInCalendarDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { LayoutDashboard, FileDown, Activity, Clock3, AlertTriangle, Send, Target, CheckCircle2 } from 'lucide-react';
-import { getProjectBaseName, getRevisionNumber, calculateBusinessDaysWithHolidays, calculateNetExecutionDuration, calculateDeadlineDate } from '../utils';
+import { getProjectBaseName, getRevisionNumber, calculateBusinessDaysWithHolidays, calculateNetExecutionDuration, calculateDeadlineDate, getEffectiveStatus } from '../utils';
 import { useDashboardFilters } from '../hooks/useDashboardFilters';
 import { DashboardFilters } from './DashboardFilters';
 import { DrillDownModal, DrillDownPayload } from './DrillDownModal';

@@ -6,14 +6,9 @@ import {
 } from 'lucide-react';
 import { ClientDoc, SiteType, ObraStatus } from '../types';
 import { format, parseISO, differenceInDays, addDays } from 'date-fns';
+import { getEffectiveStatus } from '../utils';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
-
-export function getEffectiveStatus(client: ClientDoc): ObraStatus {
-  if (client.obraStatus) return client.obraStatus;
-  if (client.completedAt) return ObraStatus.COMPLETED;
-  return ObraStatus.ACTIVE;
-}
 
 function getSlaInfo(client: ClientDoc) {
   if (!client.contractDate || client.deadlineDays === undefined) return null;

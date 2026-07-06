@@ -126,7 +126,9 @@ export function useAppData(projectFilter: ProjectFilterState) {
     };
 
     const updateMaterial = (updated: MaterialDoc) => updateMaterialInDb(updated);
-    const deleteMaterial = (id: string) => { console.log('HOOK: Chamando deleteMaterial com ID:', id); deleteMaterialFromDb(id); };
+    const deleteMaterial = (id: string) => {
+        deleteMaterialFromDb(id).catch(e => alert("Erro ao excluir o registro: " + (e?.message || e)));
+    };
     const addMaterialRevision = (id: string, reason: RevisionReason, comment: string) => {
         const original = materials.find(m => m.id === id);
         if (!original) return;
@@ -150,8 +152,9 @@ export function useAppData(projectFilter: ProjectFilterState) {
     const handleAddPurchase = (purchase: Omit<PurchaseDoc, 'id'>) => addPurchase(purchase);
     const handleUpdatePurchase = (updated: PurchaseDoc) => updatePurchaseInDb(updated);
     const handleDeletePurchase = (id: string) => {
-        console.log('HOOK: Chamando handleDeletePurchase com ID:', id);
-        if (confirm("Confirmar exclusão?")) deletePurchaseFromDb(id);
+        if (confirm("Confirmar exclusão?")) {
+            deletePurchaseFromDb(id).catch(e => alert("Erro ao excluir a compra: " + (e?.message || e)));
+        }
     };
 
     const handleAddClient = (client: Omit<ClientDoc, 'id'>) => addClient(client);

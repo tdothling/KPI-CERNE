@@ -1,12 +1,12 @@
 
-import React, { useState, useMemo, useEffect, memo } from 'react';
+import React, { useState, useMemo, memo } from 'react';
 import { Trash2, Edit2, Package, Search, Save, X, FileText, CheckCircle2, Clock, CheckSquare, GitBranch, CornerDownRight } from 'lucide-react';
-import { Discipline, RevisionReason, MaterialDoc, Period } from '../types';
-import { subscribeToClients } from '../services/db';
+import { Discipline, RevisionReason, MaterialDoc, Period, ClientDoc } from '../types';
 import { getProjectBaseName, getRevisionNumber, formatDateDisplay } from '../utils';
 
 interface MaterialListProps {
     materials: MaterialDoc[];
+    clients: ClientDoc[];
     onUpdate: (updated: MaterialDoc) => void;
     onDelete: (id: string) => void;
     onAddRevision: (id: string, reason: RevisionReason, comment: string) => void;
@@ -58,20 +58,10 @@ const MaterialRow = memo(({ doc, readOnly, setPendingCompletion, handleOpenRevis
       );
 });
 
-export const MaterialList: React.FC<MaterialListProps> = ({ materials, onUpdate, onDelete, onAddRevision, readOnly = false }) => {
+export const MaterialList: React.FC<MaterialListProps> = ({ materials, clients, onUpdate, onDelete, onAddRevision, readOnly = false }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [clientsList, setClientsList] = useState<{id: string, name: string}[]>([]);
-
-  useEffect(() => {
-      if (isModalOpen) {
-          const unsub = subscribeToClients((data) => {
-              setClientsList(data.map(c => ({ id: c.id, name: c.name })));
-          });
-          return () => unsub();
-      }
-  }, [isModalOpen]);
 
   const [pendingCompletion, setPendingCompletion] = useState<{ id: string, date: string, period: Period } | null>(null);
   const [activeRevModal, setActiveRevModal] = useState<string | null>(null);
@@ -182,7 +172,7 @@ export const MaterialList: React.FC<MaterialListProps> = ({ materials, onUpdate,
                <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" aria-label="Fechar"><X size={24} /></button>
             </div>
             <div className="space-y-4">
-              <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Cliente</label><select value={formData.client} onChange={e => setFormData({ ...formData, client: e.target.value })} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2"><option value="" disabled>Selecione...</option>{clientsList.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}</select></div>
+              <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Cliente</label><select value={formData.client} onChange={e => setFormData({ ...formData, client: e.target.value })} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2"><option value="" disabled>Selecione...</option>{clients.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}</select></div>
               <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Arquivo / Nome da Lista</label><input type="text" value={formData.filename} onChange={e => setFormData({ ...formData, filename: e.target.value })} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2" placeholder="Ex: LM-TorreA-V1.xlsx" /></div>
               <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Base / Setor</label><input type="text" value={formData.base} onChange={e => setFormData({ ...formData, base: e.target.value })} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2" placeholder="Ex: Torre A, Térreo" /></div>
               <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Disciplina</label><select value={formData.discipline} onChange={e => setFormData({ ...formData, discipline: e.target.value as Discipline })} className="w-full border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-2">{Object.values(Discipline).map(d => <option key={d} value={d} className="dark:bg-slate-800">{d}</option>)}</select></div>

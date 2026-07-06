@@ -204,20 +204,8 @@ export const updateMaterialInDb = async (material: MaterialDoc) => {
 };
 
 export const deleteMaterialFromDb = async (id: string) => {
-  console.log("Executando deleteMaterialFromDb com ID:", id);
-  if (!isDbActive() || !checkAuth()) {
-    console.log("Falha na validação dbAtivo ou Auth");
-    throw new Error("Acesso negado.");
-  }
-  try {
-    console.log("Chamando deleteDoc no firestore...");
-    await deleteDoc(doc(db, COLL_MATERIALS, id));
-    console.log("Documento deletado do firestore com sucesso.");
-  } catch (e: any) {
-    console.error("Erro ao excluir material:", e);
-    alert("ERRO AO EXCLUIR: " + e.message);
-    throw e;
-  }
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+  try { await deleteDoc(doc(db, COLL_MATERIALS, id)); } catch (e) { console.error("Erro ao excluir material:", e); throw e; }
 };
 
 export const subscribeToPurchases = (callback: (data: PurchaseDoc[]) => void) => {
@@ -253,20 +241,8 @@ export const updatePurchaseInDb = async (purchase: PurchaseDoc) => {
 };
 
 export const deletePurchaseFromDb = async (id: string) => {
-  console.log("Executando deletePurchaseFromDb com ID:", id);
-  if (!isDbActive() || !checkAuth()) {
-    console.log("Falha na validação dbAtivo ou Auth");
-    throw new Error("Acesso negado.");
-  }
-  try {
-    console.log("Chamando deleteDoc no firestore para compras...");
-    await deleteDoc(doc(db, COLL_PURCHASES, id));
-    console.log("Documento deletado do firestore com sucesso.");
-  } catch (e: any) {
-    console.error("Erro ao excluir compra:", e);
-    alert("ERRO AO EXCLUIR: " + e.message);
-    throw e;
-  }
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+  try { await deleteDoc(doc(db, COLL_PURCHASES, id)); } catch (e) { console.error("Erro ao excluir compra:", e); throw e; }
 };
 
 export const subscribeToClients = (callback: (data: ClientDoc[]) => void) => {
