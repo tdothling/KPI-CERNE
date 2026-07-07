@@ -1,15 +1,13 @@
 import React, { useState } from 'react';
-import { ProjectFile, MaterialDoc } from '../types';
+import { ProjectFile } from '../types';
 import { getProjectBaseName, getRevisionNumber } from '../utils';
 
 interface DataMigrationProps {
     projects: ProjectFile[];
-    materials: MaterialDoc[];
     onUpdateProject: (p: ProjectFile) => void;
-    onUpdateMaterial: (m: MaterialDoc) => void;
 }
 
-export const DataMigration: React.FC<DataMigrationProps> = ({ projects, materials, onUpdateProject, onUpdateMaterial }) => {
+export const DataMigration: React.FC<DataMigrationProps> = ({ projects, onUpdateProject }) => {
     const [migrating, setMigrating] = useState(false);
 
     const handleMigrate = () => {
@@ -40,29 +38,6 @@ export const DataMigration: React.FC<DataMigrationProps> = ({ projects, material
                 });
             });
 
-            // Migrar materiais
-            const materialGroups: Record<string, string> = {};
-            materials.forEach(m => {
-                if (m.groupId !== undefined && m.revision !== undefined) return;
-
-                const baseName = getProjectBaseName(m.filename).toLowerCase();
-                const key = `${m.client}|${m.discipline}|${baseName}`;
-
-                if (!materialGroups[key]) {
-                    materialGroups[key] = crypto.randomUUID();
-                }
-
-                const revNum = getRevisionNumber(m.filename);
-                const pureName = m.filename.replace(/\.[^/.]+$/, "").replace(/\s*\[R\d+\]$/i, "").replace(/_EXEC$/i, "");
-
-                onUpdateMaterial({
-                    ...m,
-                    groupId: materialGroups[key],
-                    revision: revNum,
-                    filename: pureName
-                });
-            });
-
             alert("Migração concluída com sucesso! Os arquivos antigos agora possuem um rastreamento de revisão robusto.");
         } catch (error) {
             console.error(error);
@@ -72,8 +47,7 @@ export const DataMigration: React.FC<DataMigrationProps> = ({ projects, material
         }
     };
 
-    const needsMigration = projects.some(p => p.groupId === undefined || p.revision === undefined) || 
-                           materials.some(m => m.groupId === undefined || m.revision === undefined);
+    const needsMigration = projects.some(p => p.groupId === undefined || p.revision === undefined);
 
     if (!needsMigration) return null;
 

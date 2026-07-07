@@ -43,6 +43,20 @@ service cloud.firestore {
       allow read, write: if isCerneInternalUser();
     }
 
+    // Suprimentos: ciclo unificado de listas de materiais e compras
+    match /supplyOrders/{orderId} {
+      allow read: if isCerneInternalUser();
+
+      allow create: if isCerneInternalUser()
+                    && request.resource.data.keys().hasAll(['title', 'client', 'status', 'items'])
+                    && request.resource.data.title is string
+                    && request.resource.data.client is string
+                    && request.resource.data.items is list;
+
+      allow update: if isCerneInternalUser();
+      allow delete: if isCerneInternalUser();
+    }
+
     // Clientes: Mesma regra de autenticação
     match /clients/{clientId} {
       allow read, write: if isCerneInternalUser();

@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, Suspense, lazy } from 'react';
-import { ProjectFile, Discipline, Status, RevisionReason, DateFilterType, MaterialDoc, PurchaseDoc, ClientDoc, SiteType, ProjectFilterState, ProjectPhase, Period } from './types';
+import { ProjectFile, Discipline, Status, RevisionReason, DateFilterType, ClientDoc, SiteType, ProjectFilterState, ProjectPhase, Period } from './types';
 import { BatchEditModal } from './components/BatchEditModal';
-import { MaterialBatchEditModal } from './components/MaterialBatchEditModal';
 import { HolidayManagerModal } from './components/HolidayManagerModal';
 import { DateRangeFilter } from './components/DateRangeFilter';
 import { LoginModal } from './components/LoginModal';
@@ -9,7 +8,7 @@ import { AdvancedFilter } from './components/AdvancedFilter';
 import { DataMigration } from './components/DataMigration';
 import { ImportReviewModal, StagingRow } from './components/ImportReviewModal';
 import { CerneLogo } from './components/CerneLogo';
-import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Package, FileSpreadsheet, Database, LogIn, LogOut, ShoppingCart, HardHat, Search, ChevronDown, CheckSquare, Square, FileText, MoreHorizontal } from 'lucide-react';
+import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Database, LogIn, LogOut, Truck, HardHat, Search, ChevronDown, CheckSquare, Square, FileText, MoreHorizontal } from 'lucide-react';
 
 // Code-splitting por aba: cada tela pesada vira um chunk próprio (o Dashboard carrega
 // o recharts, por exemplo) e só é baixada quando o usuário abre a aba correspondente.
@@ -17,8 +16,7 @@ const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ defau
 const ProjectList = lazy(() => import('./components/ProjectList').then(m => ({ default: m.ProjectList })));
 const ProjectTimeline = lazy(() => import('./components/ProjectTimeline').then(m => ({ default: m.ProjectTimeline })));
 const ObrasPage = lazy(() => import('./components/ObrasPage').then(m => ({ default: m.ObrasPage })));
-const MaterialList = lazy(() => import('./components/MaterialList').then(m => ({ default: m.MaterialList })));
-const PurchaseList = lazy(() => import('./components/PurchaseList').then(m => ({ default: m.PurchaseList })));
+const SupplyPage = lazy(() => import('./components/supply/SupplyPage').then(m => ({ default: m.SupplyPage })));
 
 const TabLoading = () => (
   <div className="flex items-center justify-center py-24 text-slate-400 text-sm">
@@ -28,13 +26,12 @@ const TabLoading = () => (
 );
 import { format } from 'date-fns';
 import { logoutUser, formatUsername } from './services/auth';
-import { detectDiscipline, extractMetadataFromMaterialFilename, validateFile } from './utils';
+import { detectDiscipline, validateFile } from './utils';
 import { useAppData } from './hooks/useAppData';
 import { useAppFilters } from './hooks/useAppFilters';
-import { addProject, addMaterial } from './services/db';
+import { addProject } from './services/db';
 
-type Tab = 'dashboard' | 'timeline' | 'obras' | 'projects' | 'materials' | 'purchases';
-type ImportType = 'PROJECT' | 'MATERIAL_LIST';
+type Tab = 'dashboard' | 'timeline' | 'obras' | 'projects' | 'suprimentos';
 type EntryMode = 'FILES' | 'PASTE';
 
 export default function App() {
@@ -43,13 +40,12 @@ export default function App() {
   const [projectFilter, setProjectFilter] = useState<ProjectFilterState>({ clients: [], disciplines: [], isActive: false });
 
   const {
-    projects, materials, purchases, clients, holidays, dbConnected, currentUser,
+    projects, supplyOrders, clients, holidays, dbConnected, currentUser,
     updateProject, deleteProject, addProjectRevision, promoteProjectToExecutive,
-    updateMaterial, deleteMaterial, addMaterialRevision,
-    handleAddPurchase, handleUpdatePurchase, handleDeletePurchase,
+    handleAddSupplyOrder, handleUpdateSupplyOrder, handleDeleteSupplyOrder,
+    handleMoveSupplyStatus, handleToggleSupplyItem, handleMigrateLegacyPurchases,
     handleAddClient, handleUpdateClient, handleDeleteClient,
     handleBatchUpdate, handleBatchWorkflow,
-    handleMaterialBatchUpdate, handleMaterialBatchWorkflow,
     handleUpdateHolidays
   } = useAppData(projectFilter);
 
@@ -59,9 +55,9 @@ export default function App() {
     dateFilterType, setDateFilterType,
     referenceDate, setReferenceDate,
     customRange, setCustomRange,
-    filteredProjects, filteredMaterials, filteredPurchases,
+    filteredProjects, filteredSupplyOrders,
     uniqueClients
-  } = useAppFilters(projects, materials, purchases, clients);
+  } = useAppFilters(projects, supplyOrders, clients);
 
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
@@ -70,11 +66,9 @@ export default function App() {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isBatchEditOpen, setIsBatchEditOpen] = useState(false);
-  const [isMaterialBatchEditOpen, setIsMaterialBatchEditOpen] = useState(false);
   const [isHolidayManagerOpen, setIsHolidayManagerOpen] = useState(false);
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
 
-  const [importType, setImportType] = useState<ImportType>('PROJECT');
   const [uploadDiscipline, setUploadDiscipline] = useState<Discipline>(Discipline.ARCHITECTURE);
   const [uploadPhase, setUploadPhase] = useState<ProjectPhase>(ProjectPhase.PRELIMINARY);
   const [uploadClient, setUploadClient] = useState<string>('');
@@ -87,10 +81,11 @@ export default function App() {
   const [stagingSaving, setStagingSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Todos os usuários agora têm acesso total às ferramentas e ações, exceto à aba de compras
+  // Todos os usuários têm acesso total às ferramentas e ações.
+  // A migração de dados antigos (banner na aba Suprimentos) continua restrita ao admin.
   const isAdmin = true;
   const isReadOnly = false;
-  const showPurchasesTab = currentUser?.email?.startsWith('thiago.dothling');
+  const isMigrationAdmin = !!currentUser?.email?.startsWith('thiago.dothling');
 
   useEffect(() => {
     if (isDarkMode) {
@@ -99,14 +94,6 @@ export default function App() {
       document.documentElement.classList.remove('dark');
     }
   }, [isDarkMode]);
-
-  useEffect(() => {
-    if (!currentUser || (currentUser.email && !currentUser.email.startsWith('thiago.dothling') && activeTab === 'purchases')) {
-      if (activeTab === 'purchases') {
-        setActiveTab('dashboard');
-      }
-    }
-  }, [currentUser, activeTab]);
 
   useEffect(() => {
     const input = fileInputRef.current;
@@ -135,7 +122,6 @@ export default function App() {
     setUploadBase('');
     setUploadPhase(ProjectPhase.PRELIMINARY);
     setIsFolderUpload(false);
-    setImportType('PROJECT');
     setEntryMode('FILES');
     setPasteText('');
   };
@@ -174,56 +160,26 @@ export default function App() {
     const currentHour = new Date().getHours();
     const autoPeriod: Period = currentHour < 12 ? 'MANHA' : 'TARDE';
 
-    try {
-      if (importType === 'PROJECT') {
-        // Nada é salvo aqui: monta as linhas e abre a etapa de conferência
-        const today = new Date().toISOString().split('T')[0];
-        const rows: StagingRow[] = validFiles.map((f: any) => {
-          let discipline = detectDiscipline(f.name) || uploadDiscipline;
-          if (isFolderUpload && f.webkitRelativePath) {
-            const detected = detectDiscipline(f.webkitRelativePath);
-            if (detected) discipline = detected;
-          }
-          return {
-            tempId: crypto.randomUUID(),
-            filename: f.name.replace(/\.[^/.]+$/, ""),
-            discipline,
-            phase: uploadPhase,
-            startDate: today,
-            startPeriod: autoPeriod,
-          };
-        });
-        setIsUploadModalOpen(false);
-        setStagingContext({ client: finalClientName, base: finalBaseName });
-        setStagingRows(rows);
-        event.target.value = '';
-        return;
-      } else if (importType === 'MATERIAL_LIST') {
-        const promises = validFiles.map(async (f: any) => {
-          const metadata = extractMetadataFromMaterialFilename(f.name, finalClientName);
-          const cleanFilename = f.name.replace(/\.[^/.]+$/, "");
-
-          return addMaterial({
-            filename: cleanFilename,
-            groupId: crypto.randomUUID(),
-            revision: 0,
-            client: finalClientName,
-            base: finalBaseName,
-            discipline: metadata.discipline,
-            startDate: new Date().toISOString().split('T')[0],
-            startPeriod: autoPeriod,
-            endDate: '', status: 'IN_PROGRESS', revisions: []
-          });
-        });
-        await Promise.all(promises);
-        setActiveTab('materials');
+    // Nada é salvo aqui: monta as linhas e abre a etapa de conferência
+    const today = new Date().toISOString().split('T')[0];
+    const rows: StagingRow[] = validFiles.map((f: any) => {
+      let discipline = detectDiscipline(f.name) || uploadDiscipline;
+      if (isFolderUpload && f.webkitRelativePath) {
+        const detected = detectDiscipline(f.webkitRelativePath);
+        if (detected) discipline = detected;
       }
-    } catch (error) {
-      console.error("Erro no upload:", error);
-      alert("Ocorreu um erro ao processar alguns arquivos. Verifique sua conexão e permissões.");
-    }
-
+      return {
+        tempId: crypto.randomUUID(),
+        filename: f.name.replace(/\.[^/.]+$/, ""),
+        discipline,
+        phase: uploadPhase,
+        startDate: today,
+        startPeriod: autoPeriod,
+      };
+    });
     setIsUploadModalOpen(false);
+    setStagingContext({ client: finalClientName, base: finalBaseName });
+    setStagingRows(rows);
     event.target.value = '';
   };
 
@@ -298,7 +254,7 @@ export default function App() {
 
   const handleExportCSV = () => setIsExportModalOpen(true);
 
-  const handleConfirmExport = (type: 'PROJECTS' | 'MATERIALS' | 'PURCHASES') => {
+  const handleConfirmExport = (type: 'PROJECTS' | 'SUPPLIES') => {
     let headers: string[] = [];
     let rows: any[][] = [];
     let filename = "";
@@ -310,20 +266,22 @@ export default function App() {
         p.startDate, p.endDate, p.sendDate, p.feedbackDate, p.blockedDays
       ]);
       filename = "Projetos";
-    } else if (type === 'MATERIALS') {
-      headers = ["Arquivo", "Cliente", "Base", "Disciplina", "Status", "Data Inicio", "Data Fim"];
-      rows = filteredMaterials.map(m => [
-        m.filename, m.client, m.base || '', m.discipline, m.status,
-        m.startDate, m.endDate
-      ]);
-      filename = "Lista_Materiais";
-    } else if (type === 'PURCHASES') {
-      headers = ["Descricao", "Cliente", "Base", "Aplicacao", "Solicitante", "Status", "Data Pedido", "Data Chegada", "Observacao"];
-      rows = filteredPurchases.map(p => [
-        p.description, p.client, p.base || '', p.application, p.requester, p.status,
-        p.requestDate, p.arrivalDate, p.observation || ''
-      ]);
-      filename = "Compras";
+    } else if (type === 'SUPPLIES') {
+      // Itens achatados: uma linha por item do pedido
+      headers = ["Pedido", "Cliente", "Base", "Aplicacao", "Disciplina", "Solicitante", "Prioridade", "Status", "Data Criacao", "Necessario Ate", "Lista Pronta", "Em Cotacao", "Comprado", "Entregue", "Item", "Qtd", "Unidade", "Item Entregue", "Item Entregue Em"];
+      rows = filteredSupplyOrders.flatMap(o => {
+        const orderCols = [
+          o.title, o.client, o.base || '', o.application || '', o.discipline || '', o.requester || '', o.priority || 'NORMAL', o.status,
+          o.createdAt || '', o.neededBy || '',
+          o.milestones?.readyAt || '', o.milestones?.quotingAt || '', o.milestones?.boughtAt || '', o.milestones?.deliveredAt || ''
+        ];
+        if (!o.items || o.items.length === 0) return [[...orderCols, '', '', '', '', '']];
+        return o.items.map(item => [
+          ...orderCols,
+          item.description, item.quantity, item.unit, item.delivered ? 'Sim' : 'Nao', item.deliveredAt || ''
+        ]);
+      });
+      filename = "Suprimentos";
     }
 
     const csvContent = [
@@ -409,8 +367,7 @@ export default function App() {
             <NavTab active={activeTab === 'timeline'} onClick={() => setActiveTab('timeline')} icon={<Calendar size={16} className="min-w-[16px]" />} label="Cronograma" />
             <NavTab active={activeTab === 'obras'} onClick={() => setActiveTab('obras')} icon={<HardHat size={16} className="min-w-[16px]" />} label="Obras" />
             <NavTab active={activeTab === 'projects'} onClick={() => setActiveTab('projects')} icon={<List size={16} className="min-w-[16px]" />} label="Projetos" />
-            <NavTab active={activeTab === 'materials'} onClick={() => setActiveTab('materials')} icon={<Package size={16} className="min-w-[16px]" />} label="Materiais" />
-            {showPurchasesTab && <NavTab active={activeTab === 'purchases'} onClick={() => setActiveTab('purchases')} icon={<ShoppingCart size={16} className="min-w-[16px]" />} label="Compras" />}
+            <NavTab active={activeTab === 'suprimentos'} onClick={() => setActiveTab('suprimentos')} icon={<Truck size={16} className="min-w-[16px]" />} label="Suprimentos" />
           </nav>
 
           <div className="flex items-center gap-2 flex-shrink-0 pl-2">
@@ -439,7 +396,7 @@ export default function App() {
 
             {/* Actions Group */}
             <div className="flex items-center gap-2 ml-2">
-              {!isReadOnly && activeTab !== 'dashboard' && activeTab !== 'obras' && (
+              {!isReadOnly && activeTab !== 'dashboard' && activeTab !== 'obras' && activeTab !== 'suprimentos' && (
                 <button
                   onClick={handleOpenUploadModal}
                   disabled={!dbConnected}
@@ -470,14 +427,12 @@ export default function App() {
                       
                       {!isReadOnly && (
                         <>
-                          {(activeTab === 'projects' || activeTab === 'materials') && (
+                          {activeTab === 'projects' && (
                             <ActionMenuItem
                               icon={<Layers size={16} />}
-                              label={activeTab === 'projects' ? 'Edição em Lote (Projetos)' : 'Edição em Lote (Materiais)'}
+                              label="Edição em Lote (Projetos)"
                               onClick={() => {
-                                // Abre apenas o modal correspondente à aba ativa (antes abria os dois sobrepostos)
-                                if (activeTab === 'projects') setIsBatchEditOpen(true);
-                                else setIsMaterialBatchEditOpen(true);
+                                setIsBatchEditOpen(true);
                                 setIsActionsMenuOpen(false);
                               }}
                             />
@@ -537,13 +492,12 @@ export default function App() {
 
         <div className="mt-6 print:mt-0">
           <Suspense fallback={<TabLoading />}>
-            {isAdmin && activeTab === 'dashboard' && <DataMigration projects={projects} materials={materials} onUpdateProject={updateProject} onUpdateMaterial={updateMaterial} />}
-            {activeTab === 'dashboard' && <div className="animate-in fade-in zoom-in-95 duration-200"><Dashboard data={filteredProjects} materials={filteredMaterials} clients={clients} isDarkMode={isDarkMode} holidays={holidays} /></div>}
+            {isAdmin && activeTab === 'dashboard' && <DataMigration projects={projects} onUpdateProject={updateProject} />}
+            {activeTab === 'dashboard' && <div className="animate-in fade-in zoom-in-95 duration-200"><Dashboard data={filteredProjects} supplyOrders={filteredSupplyOrders} clients={clients} isDarkMode={isDarkMode} holidays={holidays} /></div>}
             {activeTab === 'timeline' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectTimeline projects={filteredProjects} holidays={holidays} clients={clients} /></div>}
             {activeTab === 'obras' && <div className="animate-in fade-in zoom-in-95 duration-200"><ObrasPage clients={clients} projectCount={(name) => projects.filter(p => p.client === name).length} onAddClient={handleAddClient} onUpdateClient={handleUpdateClient} onDeleteClient={handleDeleteClient} /></div>}
             {activeTab === 'projects' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectList projects={filteredProjects} clients={clients} onUpdate={updateProject} onDelete={deleteProject} onAddRevision={addProjectRevision} onPromote={promoteProjectToExecutive} holidays={holidays} readOnly={isReadOnly} /></div>}
-            {activeTab === 'materials' && <div className="animate-in fade-in zoom-in-95 duration-200"><MaterialList materials={filteredMaterials} clients={clients} onUpdate={updateMaterial} onDelete={deleteMaterial} onAddRevision={addMaterialRevision} readOnly={isReadOnly} /></div>}
-            {activeTab === 'purchases' && showPurchasesTab && <div className="animate-in fade-in zoom-in-95 duration-200"><PurchaseList purchases={filteredPurchases} clients={clients} onAdd={handleAddPurchase} onUpdate={handleUpdatePurchase} onDelete={handleDeletePurchase} currentUser={currentUser ? formatUsername(currentUser.email) : ''} holidays={holidays} readOnly={isReadOnly} /></div>}
+            {activeTab === 'suprimentos' && <div className="animate-in fade-in zoom-in-95 duration-200"><SupplyPage orders={filteredSupplyOrders} clients={clients} holidays={holidays} currentUser={currentUser ? formatUsername(currentUser.email) : ''} isAdmin={isMigrationAdmin} readOnly={isReadOnly} onAdd={handleAddSupplyOrder} onUpdate={handleUpdateSupplyOrder} onDelete={handleDeleteSupplyOrder} onMoveStatus={handleMoveSupplyStatus} onToggleItem={handleToggleSupplyItem} onMigrateLegacy={handleMigrateLegacyPurchases} /></div>}
           </Suspense>
         </div>
       </main>
@@ -555,7 +509,7 @@ export default function App() {
         type="file"
         className="hidden"
         multiple
-        accept={importType === 'MATERIAL_LIST' ? '.xlsx,.xls' : '.dwg,.rvt,.pdf,.DWG,.RVT,.PDF'}
+        accept=".dwg,.rvt,.pdf,.DWG,.RVT,.PDF"
         onChange={handleFilesSelected}
       />
 
@@ -564,25 +518,13 @@ export default function App() {
         <div className="fixed inset-0 bg-black/60 dark:bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-md w-full p-6 transform transition-all border dark:border-slate-700">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold text-slate-800 dark:text-white">Importar Arquivos</h3>
+              <h3 className="text-xl font-bold text-slate-800 dark:text-white">Importar Projetos</h3>
               <button onClick={() => setIsUploadModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors" aria-label="Fechar Modal">
                 <X size={24} />
               </button>
             </div>
 
             <div className="space-y-6 mb-8">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">O que você deseja importar?</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button onClick={() => { setImportType('PROJECT'); setIsFolderUpload(false); }} className={`flex flex-col items-center justify-center p-3 rounded-lg border-2 transition-all ${importType === 'PROJECT' ? 'border-brand-600 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400' : 'border-slate-200 dark:border-slate-600 hover:border-brand-200 text-slate-500'}`}>
-                    <List size={24} className="mb-1" /> <span className="text-sm font-medium">Projetos</span> <span className="text-[10px] opacity-70">DWG, RVT, PDF</span>
-                  </button>
-                  <button onClick={() => { setImportType('MATERIAL_LIST'); setIsFolderUpload(false); }} className={`flex flex-col items-center justify-center p-3 rounded-lg border-2 transition-all ${importType === 'MATERIAL_LIST' ? 'border-brand-600 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400' : 'border-slate-200 dark:border-slate-600 hover:border-brand-200 text-slate-500'}`}>
-                    <FileSpreadsheet size={24} className="mb-1" /> <span className="text-sm font-medium">Listas de Materiais</span> <span className="text-[10px] opacity-70">Excel (XLSX, XLS)</span>
-                  </button>
-                </div>
-              </div>
-
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                   Cliente Padrão (Registro de Obra) *
@@ -600,15 +542,14 @@ export default function App() {
                 {clients.length === 0 && <p className="text-xs text-rose-500 mt-1">Nenhum cliente cadastrado. Use o botão "Registro de Obra".</p>}
               </div>
 
-              {(importType === 'PROJECT' || importType === 'MATERIAL_LIST') && shouldShowBaseInput && (
+              {shouldShowBaseInput && (
                 <div className="animate-in fade-in slide-in-from-top-2 duration-200">
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Nº da Base - Localização</label>
                   <input type="text" value={uploadBase} onChange={(e) => setUploadBase(e.target.value)} placeholder="Ex: Base 01, Centro" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-base rounded-lg focus:ring-brand-500 focus:border-brand-500 block p-3" />
                 </div>
               )}
 
-              {importType === 'PROJECT' && (
-                <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="animate-in fade-in slide-in-from-top-2 duration-200">
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Fase do Projeto</label>
                   <div className="flex gap-4">
                     <label className="flex items-center gap-2 cursor-pointer">
@@ -620,11 +561,9 @@ export default function App() {
                       <span className="text-sm text-slate-700 dark:text-slate-300">Executivo (Padrão)</span>
                     </label>
                   </div>
-                </div>
-              )}
+              </div>
 
-              {importType === 'PROJECT' && (
-                <div>
+              <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Como deseja cadastrar?</label>
                   <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-slate-900/50 rounded-lg">
                     <button onClick={() => setEntryMode('FILES')} className={`flex items-center justify-center gap-2 py-2 rounded-md text-sm font-semibold transition-all ${entryMode === 'FILES' ? 'bg-white dark:bg-slate-700 text-brand-700 dark:text-brand-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>
@@ -634,10 +573,9 @@ export default function App() {
                       <FileText size={16} /> Colar Lista
                     </button>
                   </div>
-                </div>
-              )}
+              </div>
 
-              {importType === 'PROJECT' && entryMode === 'PASTE' && (
+              {entryMode === 'PASTE' && (
                 <div className="animate-in fade-in slide-in-from-top-2 duration-200">
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Nomes dos projetos <span className="text-xs font-normal text-slate-400">(um por linha — pode colar do Excel)</span></label>
                   <textarea
@@ -650,7 +588,7 @@ export default function App() {
                 </div>
               )}
 
-              {importType === 'PROJECT' && entryMode === 'FILES' && (
+              {entryMode === 'FILES' && (
                 <div className="bg-brand-50 dark:bg-slate-700/50 p-3 rounded-lg border border-brand-100 dark:border-slate-600">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2"><FolderInput className="text-brand-600 dark:text-brand-400" size={20} /><div><span className="text-sm font-semibold text-slate-800 dark:text-slate-200 block">Modo Pasta (Auto-Tag)</span><span className="text-xs text-slate-500 dark:text-slate-400 block">Detecta Disciplina pelo nome da pasta</span></div></div>
@@ -659,8 +597,8 @@ export default function App() {
                 </div>
               )}
 
-              <div className={`${(importType === 'PROJECT' && isFolderUpload) ? 'opacity-50 pointer-events-none grayscale' : ''} transition-all`}>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Disciplina Padrão {importType === 'PROJECT' && isFolderUpload && '(Usada se a detecção falhar)'} {importType === 'MATERIAL_LIST' && '(Será tentada a detecção pelo nome do arquivo)'}</label>
+              <div className={`${isFolderUpload ? 'opacity-50 pointer-events-none grayscale' : ''} transition-all`}>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Disciplina Padrão {isFolderUpload && '(Usada se a detecção falhar)'}</label>
                 <div className="relative">
                   <select value={uploadDiscipline} onChange={(e) => setUploadDiscipline(e.target.value as Discipline)} className="w-full appearance-none bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-base rounded-lg focus:ring-brand-500 focus:border-brand-500 block p-3 pr-8">
                     {Object.values(Discipline).map((d) => (<option key={d} value={d}>{d}</option>))}
@@ -672,10 +610,10 @@ export default function App() {
 
             <div className="flex justify-end space-x-3">
               <button onClick={() => setIsUploadModalOpen(false)} className="px-6 py-2.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg font-medium transition-colors">Cancelar</button>
-              {importType === 'PROJECT' && entryMode === 'PASTE' ? (
+              {entryMode === 'PASTE' ? (
                 <button onClick={handlePasteReview} className="px-6 py-2.5 bg-brand-700 hover:bg-brand-800 text-white rounded-lg font-semibold shadow-md transition-all flex items-center">Revisar Lista</button>
               ) : (
-                <button onClick={triggerFileSelect} className="px-6 py-2.5 bg-brand-700 hover:bg-brand-800 text-white rounded-lg font-semibold shadow-md transition-all flex items-center">Selecionar Arquivos {importType === 'MATERIAL_LIST' && 'Excel'}</button>
+                <button onClick={triggerFileSelect} className="px-6 py-2.5 bg-brand-700 hover:bg-brand-800 text-white rounded-lg font-semibold shadow-md transition-all flex items-center">Selecionar Arquivos</button>
               )}
             </div>
           </div>
@@ -725,33 +663,18 @@ export default function App() {
                 <Download size={18} className="text-slate-400 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors" />
               </button>
 
-              <button onClick={() => handleConfirmExport('MATERIALS')} className="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg group transition-colors">
+              <button onClick={() => handleConfirmExport('SUPPLIES')} className="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg group transition-colors">
                 <div className="flex items-center gap-3">
-                  <div className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 p-2 rounded-lg">
-                    <Package size={20} />
+                  <div className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 p-2 rounded-lg">
+                    <Truck size={20} />
                   </div>
                   <div className="text-left">
-                    <span className="block font-semibold text-slate-800 dark:text-slate-200">Lista de Materiais</span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">Controle de Listas</span>
+                    <span className="block font-semibold text-slate-800 dark:text-slate-200">Suprimentos</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">Pedidos e Itens (uma linha por item)</span>
                   </div>
                 </div>
-                <Download size={18} className="text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" />
+                <Download size={18} className="text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors" />
               </button>
-
-              {showPurchasesTab && (
-                <button onClick={() => handleConfirmExport('PURCHASES')} className="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg group transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 p-2 rounded-lg">
-                      <ShoppingCart size={20} />
-                    </div>
-                    <div className="text-left">
-                      <span className="block font-semibold text-slate-800 dark:text-slate-200">Compras</span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">Solicitações e Entregas</span>
-                    </div>
-                  </div>
-                  <Download size={18} className="text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors" />
-                </button>
-              )}
             </div>
 
             <div className="mt-6 flex justify-end">
@@ -774,10 +697,6 @@ export default function App() {
 
       {isBatchEditOpen && (
         <BatchEditModal projects={filteredProjects} onClose={() => setIsBatchEditOpen(false)} onApplyPatches={handleBatchUpdate} onWorkflow={handleBatchWorkflow} holidays={holidays} />
-      )}
-
-      {isMaterialBatchEditOpen && (
-        <MaterialBatchEditModal materials={filteredMaterials} onClose={() => setIsMaterialBatchEditOpen(false)} onApplyPatches={handleMaterialBatchUpdate} onWorkflow={handleMaterialBatchWorkflow} />
       )}
 
       {isHolidayManagerOpen && (

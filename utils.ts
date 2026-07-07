@@ -153,9 +153,11 @@ export const getStatusColor = (status: string) => {
         case 'Em Andamento': return 'text-brand-700 bg-brand-50 border-brand-200 dark:bg-brand-900/40 dark:border-brand-800 dark:text-brand-400';
         case 'Revisado': return 'text-slate-500 bg-slate-200 border-slate-300 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-400 line-through decoration-slate-400 decoration-2';
         case 'Executivo Gerado': return 'text-teal-700 bg-teal-50 border-teal-200 dark:bg-teal-900/30 dark:border-teal-800 dark:text-teal-400';
+        case 'Planejamento': return 'text-slate-600 bg-slate-100 border-slate-300 dark:bg-slate-700/60 dark:border-slate-600 dark:text-slate-300';
+        case 'Lista Pronta': return 'text-amber-700 bg-amber-100 border-amber-200 dark:bg-amber-900/40 dark:border-amber-700 dark:text-amber-400';
+        case 'Em Cotação': return 'text-orange-700 bg-orange-100 border-orange-200 dark:bg-orange-900/40 dark:border-orange-700 dark:text-orange-400';
         case 'Comprado': return 'text-blue-700 bg-blue-100 border-blue-200 dark:bg-blue-900/40 dark:border-blue-700 dark:text-blue-400';
         case 'Entregue': return 'text-emerald-700 bg-emerald-100 border-emerald-200 dark:bg-emerald-900/40 dark:border-emerald-700 dark:text-emerald-400';
-        case 'Pendente': return 'text-amber-700 bg-amber-100 border-amber-200 dark:bg-amber-900/40 dark:border-amber-700 dark:text-amber-400';
         case 'Cancelado': return 'text-slate-500 bg-slate-200 border-slate-300 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-400 line-through';
         default: return 'text-amber-600 bg-amber-50 border-amber-200 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-400';
     }
@@ -172,11 +174,6 @@ export const detectDiscipline = (text: string): Discipline | null => {
     if (normalized.includes('spda')) return Discipline.SPDA;
     if (normalized.includes('clima') || normalized.includes('hvac') || normalized.includes('ar cond')) return Discipline.HVAC;
     return null;
-};
-
-export const extractMetadataFromMaterialFilename = (filename: string, defaultClient: string) => {
-    const discipline = detectDiscipline(filename) || Discipline.OTHER;
-    return { discipline, client: defaultClient };
 };
 
 // Security: Whitelist de extensões permitidas

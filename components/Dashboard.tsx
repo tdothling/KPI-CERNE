@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState, useCallback, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, ReferenceLine, ComposedChart } from 'recharts';
-import { ProjectFile, Discipline, Status, MaterialDoc, ProjectPhase, ClientDoc, ObraStatus, RevisionReason } from '../types';
+import { ProjectFile, Discipline, Status, SupplyOrder, SupplyStatus, ProjectPhase, ClientDoc, ObraStatus, RevisionReason } from '../types';
 import { format, parseISO, isValid, isAfter, isSameDay, addDays, startOfDay, endOfDay, subMonths, startOfMonth, differenceInCalendarDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { LayoutDashboard, FileDown, Activity, Clock3, AlertTriangle, Send, Target, CheckCircle2 } from 'lucide-react';
@@ -13,7 +13,7 @@ import { DrillDownModal, DrillDownPayload } from './DrillDownModal';
 
 interface DashboardProps {
   data: ProjectFile[];
-  materials?: MaterialDoc[];
+  supplyOrders?: SupplyOrder[];
   clients?: ClientDoc[];
   isDarkMode?: boolean;
   holidays: string[];
@@ -94,7 +94,7 @@ const KpiTile: React.FC<{ label: string; value: React.ReactNode; sub?: React.Rea
 const metaAccent = (pct: number, meta: number) =>
   pct >= meta ? 'text-emerald-500' : pct >= meta - 15 ? 'text-amber-500' : 'text-rose-500';
 
-export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clients = [], isDarkMode = false, holidays }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ data, supplyOrders = [], clients = [], isDarkMode = false, holidays }) => {
   const axisColor = isDarkMode ? '#94a3b8' : '#64748b';
   const gridColor = isDarkMode ? '#334155' : '#e2e8f0';
   const tooltipBg = isDarkMode ? '#1e293b' : '#ffffff';
@@ -444,47 +444,36 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
     };
   }, [filteredProjects, holidays, clients]);
 
-  // ICLM respeita os mesmos filtros do dashboard (cliente, disciplina, período de início)
-  const filteredMaterials = useMemo(() => {
-    return materials.filter(m => {
-      if (filters.clients.length > 0 && !filters.clients.includes(m.client)) return false;
-      if (filters.disciplines.length > 0 && !filters.disciplines.includes(m.discipline)) return false;
-      if (filters.dateFrom && m.startDate && isValid(parseISO(m.startDate))) {
-        if (parseISO(m.startDate) < startOfDay(parseISO(filters.dateFrom))) return false;
+  // Entrega de Suprimentos: respeita os mesmos filtros do dashboard (cliente, disciplina, período de criação)
+  const supplyStats = useMemo(() => {
+    const filtered = supplyOrders.filter(o => {
+      if (filters.clients.length > 0 && !filters.clients.includes(o.client)) return false;
+      if (filters.disciplines.length > 0 && (!o.discipline || !filters.disciplines.includes(o.discipline))) return false;
+      if (filters.dateFrom && o.createdAt && isValid(parseISO(o.createdAt))) {
+        if (parseISO(o.createdAt) < startOfDay(parseISO(filters.dateFrom))) return false;
       }
-      if (filters.dateTo && m.startDate && isValid(parseISO(m.startDate))) {
-        if (parseISO(m.startDate) > endOfDay(parseISO(filters.dateTo))) return false;
+      if (filters.dateTo && o.createdAt && isValid(parseISO(o.createdAt))) {
+        if (parseISO(o.createdAt) > endOfDay(parseISO(filters.dateTo))) return false;
       }
       return true;
     });
-  }, [materials, filters]);
 
-  const materialStats = useMemo(() => {
-     const groups: Record<string, MaterialDoc[]> = {};
-     filteredMaterials.forEach(m => {
-         const baseName = getProjectBaseName(m.filename);
-         if (!groups[baseName]) {
-             groups[baseName] = [];
-         }
-         groups[baseName].push(m);
-     });
+    // % de entrega sobre pedidos não-cancelados; atrasados = passaram do neededBy sem entregar
+    const active = filtered.filter(o => o.status !== SupplyStatus.CANCELED);
+    const total = active.length;
+    const done = active.filter(o => o.status === SupplyStatus.DELIVERED).length;
+    const pending = total - done;
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const overdue = active.filter(o => o.status !== SupplyStatus.DELIVERED && o.neededBy && o.neededBy < today).length;
+    const percentage = total > 0 ? Math.round((done / total) * 100) : 0;
 
-     const latestFiles = Object.values(groups).map(group => {
-         return group.sort((a, b) => getRevisionNumber(b.filename) - getRevisionNumber(a.filename))[0];
-     });
+    const chartData = [
+        { name: 'Entregue', value: done, color: '#10b981' },
+        { name: 'Pendente', value: pending, color: isDarkMode ? '#334155' : '#e2e8f0' }
+    ].filter(d => d.value > 0);
 
-     const total = latestFiles.length;
-     const done = latestFiles.filter(m => m.status === 'DONE').length;
-     const pending = total - done;
-     const percentage = total > 0 ? Math.round((done / total) * 100) : 0;
-
-     const chartData = [
-         { name: 'Concluído', value: done, color: '#10b981' },
-         { name: 'Pendente', value: pending, color: isDarkMode ? '#334155' : '#e2e8f0' }
-     ].filter(d => d.value > 0);
-
-     return { total, done, percentage, chartData };
-  }, [filteredMaterials, isDarkMode]);
+    return { total, done, overdue, percentage, chartData };
+  }, [supplyOrders, filters, isDarkMode]);
 
   const deliveryDelta = stats.deliveries30 - stats.deliveriesPrev30;
   const maxWipDays = stats.agingWip.length > 0 ? Math.max(...stats.agingWip.map(w => w.days), 1) : 1;
@@ -1022,34 +1011,39 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, materials = [], clie
         </div>
 
         <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 print:break-inside-avoid print:shadow-none print:border-slate-300">
-           <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">Conclusão de Listas de Materiais (ICLM)</h3>
-           <p className="text-xs text-slate-400 mb-2">Última revisão de cada lista — respeita os filtros acima</p>
+           <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">Entrega de Suprimentos</h3>
+           <p className="text-xs text-slate-400 mb-2">Pedidos entregues sobre não-cancelados — respeita os filtros acima</p>
            <div className="h-60 relative flex flex-col items-center justify-center">
-               {materialStats.total > 0 ? (
+               {supplyStats.total > 0 ? (
                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                        <PieChart>
-                           <Pie data={materialStats.chartData} cx="50%" cy="50%" startAngle={180} endAngle={0} innerRadius={60} outerRadius={80} paddingAngle={0} dataKey="value">
-                               {materialStats.chartData.map((entry, index) => (
+                           <Pie data={supplyStats.chartData} cx="50%" cy="50%" startAngle={180} endAngle={0} innerRadius={60} outerRadius={80} paddingAngle={0} dataKey="value">
+                               {supplyStats.chartData.map((entry, index) => (
                                    <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
                                ))}
                            </Pie>
-                           <Tooltip formatter={(value: number) => [value, 'Listas Únicas']} contentStyle={tooltipStyle} itemStyle={{ color: tooltipText }} />
+                           <Tooltip formatter={(value: number) => [value, 'Pedidos']} contentStyle={tooltipStyle} itemStyle={{ color: tooltipText }} />
                        </PieChart>
                    </ResponsiveContainer>
                ) : (
                    <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 text-xs italic text-center pb-10">
-                       Nenhuma lista<br/>no filtro atual
+                       Nenhum pedido<br/>no filtro atual
                    </div>
                )}
-               <div className="absolute top-1/2 left-0 right-0 text-center -translate-y-1 transform">
-                   <span className="text-3xl font-bold text-slate-800 dark:text-white block">{materialStats.percentage}%</span>
-                   <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Concluído</span>
-               </div>
-               <div className="mt-[-20px] text-center">
-                   <p className="text-xs text-slate-400 dark:text-slate-500">
-                       {materialStats.done} concluídas de {materialStats.total} ativas
-                   </p>
-               </div>
+               {supplyStats.total > 0 && (
+                   <>
+                       <div className="absolute top-1/2 left-0 right-0 text-center -translate-y-1 transform">
+                           <span className="text-3xl font-bold text-slate-800 dark:text-white block">{supplyStats.percentage}%</span>
+                           <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Entregue</span>
+                       </div>
+                       <div className="mt-[-20px] text-center">
+                           <p className="text-xs text-slate-400 dark:text-slate-500">
+                               {supplyStats.done} entregues de {supplyStats.total} pedidos
+                               {supplyStats.overdue > 0 && <span className="text-rose-500 font-bold"> · {supplyStats.overdue} atrasados</span>}
+                           </p>
+                       </div>
+                   </>
+               )}
            </div>
         </div>
       </div>

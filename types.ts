@@ -91,28 +91,9 @@ export interface ProjectFilterState {
     isActive: boolean;
 }
 
-export type MaterialStatus = 'IN_PROGRESS' | 'DONE' | 'REVISED';
-
-export interface MaterialDoc {
-  id: string;
-  groupId?: string; // NOVO: Relaciona a familia de revisões
-  revision?: number; // NOVO: Número exato da revisão
-  client: string;
-  filename: string;
-  base: string; // Nova coluna adicionada
-  discipline: Discipline;
-  
-  startDate: string;
-  startPeriod?: Period; // Novo
-
-  endDate: string;
-  endPeriod?: Period; // Novo
-  
-  status: MaterialStatus;
-  revisions: { id: string; date: string; reason: string; comment: string }[];
-}
-
-// --- COMPRAS ---
+// --- COMPRAS (LEGADO) ---
+// Módulo substituído por Suprimentos. Os tipos abaixo permanecem apenas para a
+// migração one-shot da coleção `purchases` (services/db.ts: migrateLegacyPurchasesToSupply).
 
 export enum PurchaseStatus {
   PENDING = 'Pendente', // Solicitação feita
@@ -138,6 +119,77 @@ export interface PurchaseDoc {
   status: PurchaseStatus;
   link?: string; // Link de referência ou rastreio
   observation?: string;
+}
+
+// --- SUPRIMENTOS ---
+// Módulo unificado que substitui "Listas de Materiais" + "Compras":
+// um pedido (SupplyOrder) percorre o ciclo completo, do planejamento à entrega.
+
+export enum SupplyStatus {
+  PLANNING = 'Planejamento',    // Lista de materiais em elaboração
+  READY = 'Lista Pronta',       // Lista fechada, aguardando cotação
+  QUOTING = 'Em Cotação',       // Cotação com fornecedores em andamento
+  BOUGHT = 'Comprado',          // Pedido realizado no fornecedor
+  DELIVERED = 'Entregue',       // Material chegou na obra/base
+  CANCELED = 'Cancelado'
+}
+
+export type SupplyPriority = 'BAIXA' | 'NORMAL' | 'ALTA' | 'URGENTE';
+
+// Item do pedido — permite marcação de entrega parcial
+export interface SupplyItem {
+  id: string;
+  description: string;
+  quantity: number;
+  unit: string;               // un, m, kg, cx...
+  delivered: boolean;
+  deliveredAt?: string;       // ISO Date de quando o item chegou
+  observation?: string;
+}
+
+// Evento da timeline de status (histórico completo, inclui regressões)
+export interface SupplyStatusEvent {
+  id: string;
+  status: SupplyStatus;       // status de DESTINO do movimento
+  date: string;               // ISO Date
+  period?: Period;
+  user?: string;
+  comment?: string;
+}
+
+// Datas de marco por etapa (cache achatado p/ KPIs sem varrer o histórico)
+export interface SupplyMilestones {
+  readyAt?: string;     readyPeriod?: Period;
+  quotingAt?: string;   quotingPeriod?: Period;
+  boughtAt?: string;    boughtPeriod?: Period;
+  deliveredAt?: string; deliveredPeriod?: Period;
+  canceledAt?: string;
+}
+
+export interface SupplyOrder {
+  id: string;
+  title: string;              // Nome do pedido/lista (ex: "Infra elétrica Bloco B")
+  client: string;             // Obra — nome denormalizado, igual às demais coleções
+  base: string;
+  application?: string;       // Aplicação (ex: Infraestrutura de rede)
+  discipline?: Discipline;    // Opcional — habilita o filtro global de disciplinas
+  requester: string;
+  priority: SupplyPriority;
+  status: SupplyStatus;
+  items: SupplyItem[];
+
+  createdAt: string;          // ISO Date (início do Planejamento)
+  createdPeriod?: Period;
+  neededBy?: string;          // Data-limite desejada — base do alerta de atraso
+
+  milestones: SupplyMilestones;
+  statusHistory: SupplyStatusEvent[];
+
+  link?: string;
+  observation?: string;
+
+  // Rastreio da migração one-shot do módulo antigo de Compras (idempotência)
+  legacy?: { source: 'purchases'; originalId: string };
 }
 
 // --- CLIENTES / OBRAS ---

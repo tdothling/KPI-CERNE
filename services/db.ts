@@ -1,7 +1,7 @@
 
 import { db, auth } from "../firebase";
-import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc, query, orderBy, limit, QuerySnapshot, DocumentData, getDoc, getDocs, where, writeBatch } from "firebase/firestore";
-import { ProjectFile, MaterialDoc, PurchaseDoc, ClientDoc, ProjectFilterState } from "../types";
+import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc, query, orderBy, limit, QuerySnapshot, DocumentData, getDoc, getDocs, where, writeBatch, arrayUnion, deleteField } from "firebase/firestore";
+import { ProjectFile, PurchaseDoc, ClientDoc, ProjectFilterState, SupplyOrder, SupplyStatus, SupplyStatusEvent, PurchaseStatus } from "../types";
 
 const COLL_PROJECTS = "projects";
 const COLL_MATERIALS = "materials";
@@ -9,6 +9,7 @@ const COLL_HOLIDAYS = "settings";
 const COLL_PURCHASES = "purchases";
 const COLL_CLIENTS = "clients";
 const COLL_CONFIG = "configuration";
+const COLL_SUPPLY = "supplyOrders";
 
 const isDbActive = () => {
   if (!db) return false;
@@ -137,112 +138,159 @@ const batchUpdateCollection = async (collName: string, patches: BatchDocPatch[])
 };
 
 export const batchUpdateProjectsInDb = (patches: BatchDocPatch[]) => batchUpdateCollection(COLL_PROJECTS, patches);
-export const batchUpdateMaterialsInDb = (patches: BatchDocPatch[]) => batchUpdateCollection(COLL_MATERIALS, patches);
 
 export const deleteProjectFromDb = async (id: string) => {
   if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
   try { await deleteDoc(doc(db, COLL_PROJECTS, id)); } catch (e) { console.error("Erro ao excluir projeto:", e); throw e; }
 };
 
-export const subscribeToMaterials = (callback: (data: MaterialDoc[]) => void, filter?: ProjectFilterState) => {
+// --- SUPRIMENTOS ---
+// (Os módulos antigos de Materiais e Compras foram substituídos por Suprimentos.
+//  As coleções `materials` e `purchases` são preservadas no Firestore como arquivo:
+//  seguem incluídas na cascata de rename e na contagem de vínculos, e `purchases`
+//  é a fonte da migração one-shot abaixo.)
+
+export const subscribeToSupplyOrders = (callback: (data: SupplyOrder[]) => void) => {
   if (!isDbActive()) return () => { };
+  const q = query(collection(db, COLL_SUPPLY), orderBy("createdAt", "desc"), limit(500));
+  const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
+    const orders: SupplyOrder[] = [];
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      if ('id' in data) delete data.id;
+      orders.push({ id: doc.id, ...data } as SupplyOrder);
+    });
+    callback(orders);
+  });
+  return unsubscribe;
+};
 
-  let q;
+export const addSupplyOrder = async (order: Omit<SupplyOrder, 'id'>) => {
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+  try {
+    const { id, ...cleanOrder } = order as any;
+    await addDoc(collection(db, COLL_SUPPLY), sanitizeData(cleanOrder));
+  } catch (e) { console.error("Erro ao adicionar pedido de suprimentos:", e); throw e; }
+};
 
-  // Lógica de Filtro Avançado para Materiais (Idêntica a Projetos)
-  if (filter && filter.isActive) {
-    const constraints: any[] = [];
+export const updateSupplyOrderInDb = async (order: SupplyOrder) => {
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+  try {
+    const { id, ...data } = order;
+    // O formulário de edição representa o documento completo: campo opcional
+    // esvaziado (undefined) deve ser REMOVIDO do doc, não preservado — por isso
+    // undefined vira deleteField() em vez de ser descartado pelo sanitizeData.
+    const payload: any = {};
+    Object.keys(data).forEach(key => {
+      payload[key] = (data as any)[key] === undefined ? deleteField() : (data as any)[key];
+    });
+    await updateDoc(doc(db, COLL_SUPPLY, id), payload);
+  } catch (e) { console.error("Erro ao atualizar pedido de suprimentos:", e); throw e; }
+};
 
-    if (filter.clients.length > 0) {
-      const safeClients = filter.clients.slice(0, 10);
-      constraints.push(where("client", "in", safeClients));
-    }
+// Patch parcial (aceita dot-paths como 'milestones.boughtAt') para a movimentação de
+// status: grava só o que mudou em vez do documento inteiro, evitando que estado local
+// desatualizado desfaça gravações concorrentes (mesma lição do batchUpdate de projetos).
+export const patchSupplyOrderInDb = async (id: string, changes: Record<string, any>) => {
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+  try {
+    await updateDoc(doc(db, COLL_SUPPLY, id), sanitizeData(changes));
+  } catch (e) { console.error("Erro ao mover pedido de suprimentos:", e); throw e; }
+};
 
-    constraints.push(limit(1000));
-    q = query(collection(db, COLL_MATERIALS), ...constraints);
+export const deleteSupplyOrderFromDb = async (id: string) => {
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+  try { await deleteDoc(doc(db, COLL_SUPPLY, id)); } catch (e) { console.error("Erro ao excluir pedido de suprimentos:", e); throw e; }
+};
 
-  } else {
-    q = query(collection(db, COLL_MATERIALS), orderBy("startDate", "desc"), limit(1000));
+// Grava uma movimentação de status: aplica o patch parcial e anexa o evento ao
+// histórico com arrayUnion — dois usuários movendo o mesmo cartão quase ao mesmo
+// tempo não perdem eventos (o array não é reescrito a partir do estado local).
+export const applySupplyStatusChange = async (id: string, changes: Record<string, any>, event: SupplyStatusEvent) => {
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+  try {
+    await updateDoc(doc(db, COLL_SUPPLY, id), { ...sanitizeData(changes), statusHistory: arrayUnion(event) });
+  } catch (e) { console.error("Erro ao registrar movimentação de suprimentos:", e); throw e; }
+};
+
+// Migração one-shot do módulo antigo de Compras: converte cada doc de `purchases`
+// em um pedido de suprimentos com 1 item. Idempotente via legacy.originalId —
+// rodar de novo não duplica. Nenhum doc de `purchases` é alterado ou apagado.
+export const migrateLegacyPurchasesToSupply = async (userName: string): Promise<{ migrated: number; skipped: number }> => {
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+
+  const [purchasesSnap, supplySnap] = await Promise.all([
+    getDocs(collection(db, COLL_PURCHASES)),
+    getDocs(collection(db, COLL_SUPPLY))
+  ]);
+
+  const alreadyMigrated = new Set<string>();
+  supplySnap.docs.forEach(d => {
+    const legacy = (d.data() as any).legacy;
+    if (legacy?.source === 'purchases' && legacy.originalId) alreadyMigrated.add(legacy.originalId);
+  });
+
+  const statusMap: Record<string, SupplyStatus> = {
+    [PurchaseStatus.PENDING]: SupplyStatus.READY,     // solicitação feita = lista fechada
+    [PurchaseStatus.BOUGHT]: SupplyStatus.BOUGHT,
+    [PurchaseStatus.DELIVERED]: SupplyStatus.DELIVERED,
+    [PurchaseStatus.CANCELED]: SupplyStatus.CANCELED,
+  };
+
+  const pending = purchasesSnap.docs.filter(d => !alreadyMigrated.has(d.id));
+  const CHUNK = 400;
+
+  for (let i = 0; i < pending.length; i += CHUNK) {
+    const batch = writeBatch(db);
+    pending.slice(i, i + CHUNK).forEach(d => {
+      const p = d.data() as PurchaseDoc;
+      const status = statusMap[p.status] || SupplyStatus.READY;
+      const delivered = status === SupplyStatus.DELIVERED;
+
+      // Objetos aninhados montados com spreads condicionais: sanitizeData só limpa
+      // o nível raiz e o Firestore rejeita `undefined` dentro de mapas/arrays.
+      const createdAt = p.requestDate || new Date().toISOString().split('T')[0];
+      const order: Omit<SupplyOrder, 'id'> = {
+        title: p.description || 'Compra importada',
+        client: p.client || '',
+        base: p.base || 'Geral',
+        ...(p.application ? { application: p.application } : {}),
+        requester: p.requester || '',
+        priority: 'NORMAL',
+        status,
+        items: [{
+          id: crypto.randomUUID(),
+          description: p.description || 'Item importado',
+          quantity: 1,
+          unit: 'un',
+          delivered,
+          ...(delivered && p.arrivalDate ? { deliveredAt: p.arrivalDate } : {}),
+        }],
+        createdAt,
+        ...(p.requestPeriod ? { createdPeriod: p.requestPeriod } : {}),
+        milestones: {
+          readyAt: createdAt,
+          ...(p.requestPeriod ? { readyPeriod: p.requestPeriod } : {}),
+          ...(delivered && p.arrivalDate ? { deliveredAt: p.arrivalDate, ...(p.arrivalPeriod ? { deliveredPeriod: p.arrivalPeriod } : {}) } : {}),
+        },
+        statusHistory: [{
+          id: crypto.randomUUID(),
+          status,
+          date: createdAt,
+          ...(userName ? { user: userName } : {}),
+          comment: 'Importado do módulo de Compras',
+        }],
+        ...(p.link ? { link: p.link } : {}),
+        ...(p.observation ? { observation: p.observation } : {}),
+        legacy: { source: 'purchases', originalId: d.id },
+      };
+
+      batch.set(doc(collection(db, COLL_SUPPLY)), sanitizeData(order));
+    });
+    await batch.commit();
   }
 
-  const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
-    let materials: MaterialDoc[] = [];
-    snapshot.forEach((doc) => {
-      const data = doc.data();
-      if ('id' in data) delete data.id;
-      materials.push({ id: doc.id, ...data } as MaterialDoc);
-    });
-
-    if (filter && filter.isActive) {
-      if (filter.disciplines.length > 0) {
-        materials = materials.filter(m => filter.disciplines.includes(m.discipline));
-      }
-      // Ordenação por nome do arquivo (padrão comum para listas)
-      materials.sort((a, b) => a.filename.localeCompare(b.filename));
-    }
-
-    callback(materials);
-  });
-  return unsubscribe;
-};
-
-export const addMaterial = async (material: Omit<MaterialDoc, 'id'>) => {
-  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
-  try {
-    const { id, ...cleanMaterial } = material as any;
-    await addDoc(collection(db, COLL_MATERIALS), sanitizeData(cleanMaterial));
-  } catch (e) { console.error("Erro ao adicionar material:", e); throw e; }
-};
-
-export const updateMaterialInDb = async (material: MaterialDoc) => {
-  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
-  try {
-    const { id, ...data } = material;
-    const docRef = doc(db, COLL_MATERIALS, id);
-    await updateDoc(docRef, sanitizeData(data));
-  } catch (e) { console.error("Erro ao atualizar material:", e); throw e; }
-};
-
-export const deleteMaterialFromDb = async (id: string) => {
-  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
-  try { await deleteDoc(doc(db, COLL_MATERIALS, id)); } catch (e) { console.error("Erro ao excluir material:", e); throw e; }
-};
-
-export const subscribeToPurchases = (callback: (data: PurchaseDoc[]) => void) => {
-  if (!isDbActive()) return () => { };
-  const q = query(collection(db, COLL_PURCHASES), orderBy("requestDate", "desc"), limit(50));
-  const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
-    const purchases: PurchaseDoc[] = [];
-    snapshot.forEach((doc) => {
-      const data = doc.data();
-      if ('id' in data) delete data.id;
-      purchases.push({ id: doc.id, ...data } as PurchaseDoc);
-    });
-    callback(purchases);
-  });
-  return unsubscribe;
-};
-
-export const addPurchase = async (purchase: Omit<PurchaseDoc, 'id'>) => {
-  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
-  try {
-    const { id, ...cleanPurchase } = purchase as any;
-    await addDoc(collection(db, COLL_PURCHASES), sanitizeData(cleanPurchase));
-  } catch (e) { console.error("Erro ao adicionar compra:", e); throw e; }
-};
-
-export const updatePurchaseInDb = async (purchase: PurchaseDoc) => {
-  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
-  try {
-    const { id, ...data } = purchase;
-    const docRef = doc(db, COLL_PURCHASES, id);
-    await updateDoc(docRef, sanitizeData(data));
-  } catch (e) { console.error("Erro ao atualizar compra:", e); throw e; }
-};
-
-export const deletePurchaseFromDb = async (id: string) => {
-  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
-  try { await deleteDoc(doc(db, COLL_PURCHASES, id)); } catch (e) { console.error("Erro ao excluir compra:", e); throw e; }
+  return { migrated: pending.length, skipped: alreadyMigrated.size };
 };
 
 export const subscribeToClients = (callback: (data: ClientDoc[]) => void) => {
@@ -294,10 +342,13 @@ export const updateClientInDb = async (client: ClientDoc) => {
       // Varre as coleções inteiras e casa por nome NORMALIZADO (ignora maiúsc./espaços).
       // O `where("client","==",oldName)` exato deixava para trás registros importados com
       // capitalização/espaçamento diferente — que continuavam aparecendo com o nome antigo.
-      const [pSnap, mSnap, cSnap] = await Promise.all([
+      // Inclui as coleções legadas (materials/purchases): os dados preservados
+      // continuam consistentes se a obra for renomeada.
+      const [pSnap, mSnap, cSnap, sSnap] = await Promise.all([
         getDocs(collection(db, COLL_PROJECTS)),
         getDocs(collection(db, COLL_MATERIALS)),
-        getDocs(collection(db, COLL_PURCHASES))
+        getDocs(collection(db, COLL_PURCHASES)),
+        getDocs(collection(db, COLL_SUPPLY))
       ]);
 
       const updatePromises: Promise<void>[] = [];
@@ -311,6 +362,7 @@ export const updateClientInDb = async (client: ClientDoc) => {
       collectMatches(pSnap);
       collectMatches(mSnap);
       collectMatches(cSnap);
+      collectMatches(sSnap);
 
       if (updatePromises.length > 0) {
         await Promise.all(updatePromises);
@@ -324,17 +376,18 @@ export const updateClientInDb = async (client: ClientDoc) => {
 // Conta registros vinculados a uma obra lendo DIRETO do banco (não do cache local, que é
 // limitado a 1000 docs e pode estar filtrado pelo servidor). Casa por nome normalizado.
 // Usado para bloquear a exclusão de obras que ainda possuem projetos/materiais/compras.
-export const countLinkedRecords = async (clientName: string): Promise<{ projects: number; materials: number; purchases: number }> => {
-  if (!isDbActive()) return { projects: 0, materials: 0, purchases: 0 };
+export const countLinkedRecords = async (clientName: string): Promise<{ projects: number; materials: number; purchases: number; supplyOrders: number }> => {
+  if (!isDbActive()) return { projects: 0, materials: 0, purchases: 0, supplyOrders: 0 };
   const target = normalizeName(clientName);
-  const [pSnap, mSnap, cSnap] = await Promise.all([
+  const [pSnap, mSnap, cSnap, sSnap] = await Promise.all([
     getDocs(collection(db, COLL_PROJECTS)),
     getDocs(collection(db, COLL_MATERIALS)),
-    getDocs(collection(db, COLL_PURCHASES))
+    getDocs(collection(db, COLL_PURCHASES)),
+    getDocs(collection(db, COLL_SUPPLY))
   ]);
   const count = (snap: QuerySnapshot<DocumentData>) =>
     snap.docs.filter(d => normalizeName((d.data() as any).client) === target).length;
-  return { projects: count(pSnap), materials: count(mSnap), purchases: count(cSnap) };
+  return { projects: count(pSnap), materials: count(mSnap), purchases: count(cSnap), supplyOrders: count(sSnap) };
 };
 
 export const deleteClientFromDb = async (id: string) => {

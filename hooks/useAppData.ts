@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { ProjectFile, MaterialDoc, PurchaseDoc, ClientDoc, Status, RevisionReason, ProjectPhase, Period, ProjectFilterState } from '../types';
-import { subscribeToProjects, addProject, updateProjectInDb, deleteProjectFromDb, subscribeToMaterials, addMaterial, updateMaterialInDb, deleteMaterialFromDb, subscribeToPurchases, addPurchase, updatePurchaseInDb, deletePurchaseFromDb, subscribeToClients, addClient, updateClientInDb, deleteClientFromDb, countLinkedRecords, subscribeToHolidays, saveHolidaysToDb, batchUpdateProjectsInDb, batchUpdateMaterialsInDb } from '../services/db';
+import { ProjectFile, ClientDoc, Status, RevisionReason, ProjectPhase, Period, ProjectFilterState, SupplyOrder, SupplyStatus } from '../types';
+import { subscribeToProjects, addProject, updateProjectInDb, deleteProjectFromDb, subscribeToClients, addClient, updateClientInDb, deleteClientFromDb, countLinkedRecords, subscribeToHolidays, saveHolidaysToDb, batchUpdateProjectsInDb, subscribeToSupplyOrders, addSupplyOrder, updateSupplyOrderInDb, deleteSupplyOrderFromDb, applySupplyStatusChange, patchSupplyOrderInDb, migrateLegacyPurchasesToSupply } from '../services/db';
+import { buildStatusChangePatch } from '../components/supply/supplyUtils';
+import { formatUsername } from '../services/auth';
 import { subscribeToAuth } from '../services/auth';
 import { db } from '../firebase';
 import { User } from 'firebase/auth';
@@ -8,12 +10,10 @@ import { canTransitionTo, getExecutiveMatchKey, calculateBusinessDaysWithHoliday
 import { parseISO, isValid } from 'date-fns';
 
 export interface ProjectBatchPatch { id: string; changes: Partial<ProjectFile>; }
-export interface MaterialBatchPatch { id: string; changes: Partial<MaterialDoc>; }
 
 export function useAppData(projectFilter: ProjectFilterState) {
     const [projects, setProjects] = useState<ProjectFile[]>([]);
-    const [materials, setMaterials] = useState<MaterialDoc[]>([]);
-    const [purchases, setPurchases] = useState<PurchaseDoc[]>([]);
+    const [supplyOrders, setSupplyOrders] = useState<SupplyOrder[]>([]);
     const [clients, setClients] = useState<ClientDoc[]>([]);
     const [holidays, setHolidays] = useState<string[]>([]);
     const [dbConnected, setDbConnected] = useState(false);
@@ -27,9 +27,7 @@ export function useAppData(projectFilter: ProjectFilterState) {
         setDbConnected(true);
 
         const unsubProjects = subscribeToProjects(setProjects, projectFilter);
-        const unsubMaterials = subscribeToMaterials(setMaterials, projectFilter);
-
-        const unsubPurchases = subscribeToPurchases(setPurchases);
+        const unsubSupply = subscribeToSupplyOrders(setSupplyOrders);
         const unsubClients = subscribeToClients(setClients);
         const unsubHolidays = subscribeToHolidays(setHolidays);
         const unsubAuth = subscribeToAuth((user) => {
@@ -38,8 +36,7 @@ export function useAppData(projectFilter: ProjectFilterState) {
 
         return () => {
             unsubProjects();
-            unsubMaterials();
-            unsubPurchases();
+            unsubSupply();
             unsubClients();
             unsubHolidays();
             unsubAuth();
@@ -125,37 +122,57 @@ export function useAppData(projectFilter: ProjectFilterState) {
         }
     };
 
-    const updateMaterial = (updated: MaterialDoc) => updateMaterialInDb(updated);
-    const deleteMaterial = (id: string) => {
-        deleteMaterialFromDb(id).catch(e => alert("Erro ao excluir o registro: " + (e?.message || e)));
-    };
-    const addMaterialRevision = (id: string, reason: RevisionReason, comment: string) => {
-        const original = materials.find(m => m.id === id);
-        if (!original) return;
-        updateMaterialInDb({ ...original, status: 'REVISED' });
-        const { id: _, ...materialData } = original;
+    // --- SUPRIMENTOS ---
 
-        const currentPeriod: Period = new Date().getHours() < 12 ? 'MANHA' : 'TARDE';
-
-        addMaterial({
-            ...materialData,
-            filename: original.filename,
-            groupId: original.groupId || crypto.randomUUID(),
-            revision: (original.revision || 0) + 1,
-            status: 'IN_PROGRESS',
-            startDate: new Date().toISOString().split('T')[0], endDate: '',
-            startPeriod: currentPeriod,
-            revisions: [{ id: crypto.randomUUID(), date: new Date().toISOString().split('T')[0], reason: reason.toString(), comment }]
-        });
+    const handleAddSupplyOrder = (order: Omit<SupplyOrder, 'id'>) => {
+        addSupplyOrder(order).catch(e => alert("Erro ao criar o pedido: " + (e?.message || e)));
     };
 
-    const handleAddPurchase = (purchase: Omit<PurchaseDoc, 'id'>) => addPurchase(purchase);
-    const handleUpdatePurchase = (updated: PurchaseDoc) => updatePurchaseInDb(updated);
-    const handleDeletePurchase = (id: string) => {
-        if (confirm("Confirmar exclusão?")) {
-            deletePurchaseFromDb(id).catch(e => alert("Erro ao excluir a compra: " + (e?.message || e)));
+    const handleUpdateSupplyOrder = (order: SupplyOrder) => {
+        updateSupplyOrderInDb(order).catch(e => alert("Erro ao salvar o pedido: " + (e?.message || e)));
+    };
+
+    const handleDeleteSupplyOrder = (id: string) => {
+        if (confirm("Confirmar exclusão do pedido? Esta ação não pode ser desfeita.")) {
+            deleteSupplyOrderFromDb(id).catch(e => alert("Erro ao excluir o pedido: " + (e?.message || e)));
         }
     };
+
+    // Movimentação de status (Kanban ou painel): monta o patch parcial
+    // (status + milestones + itens quando entrega total) e anexa o evento ao histórico.
+    const handleMoveSupplyStatus = (
+        order: SupplyOrder,
+        to: SupplyStatus,
+        date: string,
+        period: Period,
+        options: { comment?: string; deliverAllItems?: boolean } = {}
+    ) => {
+        const { changes, event } = buildStatusChangePatch({
+            order, to, date, period,
+            user: currentUser?.email ? formatUsername(currentUser.email) : undefined,
+            comment: options.comment,
+            deliverAllItems: options.deliverAllItems,
+        });
+        applySupplyStatusChange(order.id, changes, event)
+            .catch(e => alert("Erro ao mover o pedido: " + (e?.message || e)));
+    };
+
+    // Entrega parcial: alterna a entrega de um item individual
+    const handleToggleSupplyItem = (orderId: string, itemId: string, delivered: boolean) => {
+        const order = supplyOrders.find(o => o.id === orderId);
+        if (!order) return;
+        const today = new Date().toISOString().split('T')[0];
+        const items = order.items.map(item => {
+            if (item.id !== itemId) return item;
+            const { deliveredAt, ...rest } = item;
+            return delivered ? { ...rest, delivered: true, deliveredAt: today } : { ...rest, delivered: false };
+        });
+        patchSupplyOrderInDb(orderId, { items })
+            .catch(e => alert("Erro ao atualizar o item: " + (e?.message || e)));
+    };
+
+    const handleMigrateLegacyPurchases = () =>
+        migrateLegacyPurchasesToSupply(currentUser?.email ? formatUsername(currentUser.email) : '');
 
     const handleAddClient = (client: Omit<ClientDoc, 'id'>) => addClient(client);
     const handleUpdateClient = (client: ClientDoc) => updateClientInDb(client);
@@ -176,9 +193,9 @@ export function useAppData(projectFilter: ProjectFilterState) {
             return;
         }
 
-        const total = counts.projects + counts.materials + counts.purchases;
+        const total = counts.projects + counts.materials + counts.purchases + counts.supplyOrders;
         if (total > 0) {
-            alert(`Não é possível excluir a obra "${clientToDelete.name}".\n\nExistem registros vinculados:\n- ${counts.projects} Projetos\n- ${counts.materials} Listas de Materiais\n- ${counts.purchases} Compras\n\nPor favor, exclua ou reatribua esses registros antes de remover a obra.`);
+            alert(`Não é possível excluir a obra "${clientToDelete.name}".\n\nExistem registros vinculados:\n- ${counts.projects} Projetos\n- ${counts.supplyOrders} Pedidos de Suprimentos\n- ${counts.materials} Listas de Materiais (arquivo)\n- ${counts.purchases} Compras (arquivo)\n\nPor favor, exclua ou reatribua esses registros antes de remover a obra.`);
             return;
         }
 
@@ -240,43 +257,15 @@ export function useAppData(projectFilter: ProjectFilterState) {
         }
     };
 
-    const handleMaterialBatchUpdate = async (patches: MaterialBatchPatch[]) => {
-        if (patches.length === 0) return;
-        try {
-            await batchUpdateMaterialsInDb(patches);
-        } catch (e) {
-            console.error("Erro na edição em lote de materiais:", e);
-            alert("Erro ao aplicar a edição em lote. Nenhuma alteração parcial foi mantida — verifique sua conexão e tente novamente.");
-        }
-    };
-
-    const handleMaterialBatchWorkflow = async (ids: string[], action: 'COMPLETE', date: string, period: Period = 'TARDE') => {
-        const patches: MaterialBatchPatch[] = [];
-        ids.forEach(id => {
-            const material = materials.find(m => m.id === id);
-            if (!material) return;
-            if (action === 'COMPLETE') {
-                patches.push({ id, changes: { status: 'DONE', endDate: date, endPeriod: period } });
-            }
-        });
-        try {
-            await batchUpdateMaterialsInDb(patches);
-        } catch (e) {
-            console.error("Erro na conclusão em lote de materiais:", e);
-            alert("Erro ao executar a ação em lote. Verifique sua conexão e tente novamente.");
-        }
-    };
-
     const handleUpdateHolidays = (newHolidays: string[]) => saveHolidaysToDb(newHolidays);
 
     return {
-        projects, materials, purchases, clients, holidays, dbConnected, currentUser,
+        projects, supplyOrders, clients, holidays, dbConnected, currentUser,
         updateProject, deleteProject, addProjectRevision, promoteProjectToExecutive,
-        updateMaterial, deleteMaterial, addMaterialRevision,
-        handleAddPurchase, handleUpdatePurchase, handleDeletePurchase,
+        handleAddSupplyOrder, handleUpdateSupplyOrder, handleDeleteSupplyOrder,
+        handleMoveSupplyStatus, handleToggleSupplyItem, handleMigrateLegacyPurchases,
         handleAddClient, handleUpdateClient, handleDeleteClient,
         handleBatchUpdate, handleBatchWorkflow,
-        handleMaterialBatchUpdate, handleMaterialBatchWorkflow,
         handleUpdateHolidays
     };
 }

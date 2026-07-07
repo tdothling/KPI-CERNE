@@ -1,11 +1,10 @@
 import { useState, useMemo } from 'react';
-import { ProjectFile, MaterialDoc, PurchaseDoc, ClientDoc, Discipline, DateFilterType } from '../types';
+import { ProjectFile, ClientDoc, Discipline, DateFilterType, SupplyOrder } from '../types';
 import { parseISO, isValid, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear, getMonth, setMonth, setDate, endOfDay } from 'date-fns';
 
 export function useAppFilters(
     projects: ProjectFile[],
-    materials: MaterialDoc[],
-    purchases: PurchaseDoc[],
+    supplyOrders: SupplyOrder[],
     clients: ClientDoc[]
 ) {
     const [selectedClients, setSelectedClients] = useState<string[]>([]);
@@ -65,54 +64,44 @@ export function useAppFilters(
         return result;
     }, [projects, selectedClients, selectedDisciplines, dateFilterType, referenceDate, customRange]);
 
-    const filteredMaterials = useMemo(() => {
-        let result = materials;
+    const filteredSupplyOrders = useMemo(() => {
+        let result = supplyOrders;
         if (selectedClients.length > 0) {
-            result = result.filter(m => selectedClients.includes(m.client));
+            result = result.filter(o => selectedClients.includes(o.client));
         }
+        // Disciplina é opcional em suprimentos: com o filtro ativo, pedidos sem
+        // disciplina ficam de fora (consistente com as demais listas)
         if (selectedDisciplines.length > 0) {
-            result = result.filter(m => selectedDisciplines.includes(m.discipline));
+            result = result.filter(o => o.discipline && selectedDisciplines.includes(o.discipline));
         }
         const dateRange = getFilterDateRange();
         if (dateRange) {
             const { start: filterStart, end: filterEnd } = dateRange;
-            result = result.filter(m => {
-                if (!m.startDate) return false;
-                const matStart = parseISO(m.startDate);
-                let matEnd: Date;
-                if (m.endDate && isValid(parseISO(m.endDate))) {
-                    matEnd = parseISO(m.endDate);
-                } else {
-                    matEnd = new Date();
-                }
-                return matStart <= filterEnd && matEnd >= filterStart;
+            result = result.filter(o => {
+                if (!o.createdAt) return false;
+                const orderStart = parseISO(o.createdAt);
+                const deliveredAt = o.milestones?.deliveredAt;
+                const orderEnd = (deliveredAt && isValid(parseISO(deliveredAt)))
+                    ? parseISO(deliveredAt)
+                    : new Date();
+                return orderStart <= filterEnd && orderEnd >= filterStart;
             });
         }
         return result;
-    }, [materials, selectedClients, selectedDisciplines, dateFilterType, referenceDate, customRange]);
-
-    const filteredPurchases = useMemo(() => {
-        let result = purchases;
-        if (selectedClients.length > 0) {
-            result = result.filter(p => selectedClients.includes(p.client));
-        }
-        return result;
-    }, [purchases, selectedClients]);
+    }, [supplyOrders, selectedClients, selectedDisciplines, dateFilterType, referenceDate, customRange]);
 
     const uniqueClients = useMemo(() => {
         const registeredNames = clients.map(c => c.name);
         const projectClients = projects.map(p => p.client);
-        const materialClients = materials.map(m => m.client);
-        const purchaseClients = purchases.map(p => p.client);
+        const supplyClients = supplyOrders.map(o => o.client);
 
         const merged = new Set([
             ...registeredNames,
             ...projectClients,
-            ...materialClients,
-            ...purchaseClients
+            ...supplyClients
         ]);
         return Array.from(merged).sort();
-    }, [clients, projects, materials, purchases]);
+    }, [clients, projects, supplyOrders]);
 
     const toggleClientSelection = (clientName: string) => {
         setSelectedClients(prev => {
@@ -140,7 +129,7 @@ export function useAppFilters(
         dateFilterType, setDateFilterType,
         referenceDate, setReferenceDate,
         customRange, setCustomRange,
-        filteredProjects, filteredMaterials, filteredPurchases,
+        filteredProjects, filteredSupplyOrders,
         uniqueClients
     };
 }
