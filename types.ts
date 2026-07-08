@@ -2,11 +2,13 @@
 export enum Discipline {
   ARCHITECTURE = 'Arquitetura',
   STRUCTURE = 'Estrutura',
+  COVERAGE = 'Cobertura',
   FOUNDATION = 'Fundação',
   HYDRAULIC = 'Hidráulica',
   ELECTRICAL = 'Elétrica',
   DATA = 'Dados',
   SPDA = 'SPDA',
+  FIRE = 'Incêndio',
   HVAC = 'Climatização',
   OTHER = 'Outros'
 }

@@ -140,6 +140,32 @@ export function useAppData(projectFilter: ProjectFilterState) {
         addReferenciaToDb(ref).catch(e => alert("Erro ao criar a referência: " + (e?.message || e)));
     };
 
+    // Criação em lote (geração de disciplinas a partir da Arquitetura).
+    // Sequencial e tolerante a falha isolada: reporta o resumo em vez de abortar.
+    const handleAddReferencias = async (refs: Omit<Referencia, 'id'>[]): Promise<{ criadas: number; erros: string[] }> => {
+        let criadas = 0;
+        const erros: string[] = [];
+        for (const ref of refs) {
+            try { await addReferenciaToDb(ref); criadas++; }
+            catch (e: any) { erros.push(`${ref.codigoCliente}: ${e?.message || e}`); }
+        }
+        return { criadas, erros };
+    };
+
+    // Exclusão em lote (excluir disciplina inteira). A CONFIRMAÇÃO fica na página
+    // (digitada); aqui só executa. Referências com conjuntos instanciados são
+    // recusadas pelo próprio deleteReferenciaFromDb (dupla checagem no banco).
+    const handleDeleteReferencias = async (ids: string[]): Promise<{ excluidas: number; erros: string[] }> => {
+        let excluidas = 0;
+        const erros: string[] = [];
+        for (const id of ids) {
+            const ref = referencias.find(r => r.id === id);
+            try { await deleteReferenciaFromDb(id); excluidas++; }
+            catch (e: any) { erros.push(`${ref?.codigoCliente || id}: ${e?.message || e}`); }
+        }
+        return { excluidas, erros };
+    };
+
     // Recalcula os dias úteis parados com o cliente (envio→feedback) a partir do
     // estado resultante da edição. Retorna 0 quando falta alguma das duas datas.
     const recomputeBlockedDays = (sendDate?: string, sendPeriod?: Period, feedbackDate?: string, feedbackPeriod?: Period) => {
@@ -486,7 +512,7 @@ export function useAppData(projectFilter: ProjectFilterState) {
         projects, supplyOrders, clients, holidays, dbConnected, currentUser,
         updateProject, deleteProject, addProjectRevision, promoteProjectToExecutive,
         referencias, conjuntos, pranchas,
-        handleAddReferencia, handleUpdateReferencia, handleDeleteReferencia, handleMoveReferencia,
+        handleAddReferencia, handleAddReferencias, handleDeleteReferencias, handleUpdateReferencia, handleDeleteReferencia, handleMoveReferencia,
         handleInstanciar, handleInstanciarLote, handleDeleteConjunto,
         handleMovePrancha, handleUpdatePrancha, handleAddPrancha, handleDeletePrancha,
         handleMigratePortfolio,

@@ -5,6 +5,7 @@ import {
     canRefTransition, canPranchaTransition,
     inferRefStatusFromDates, inferPranchaStatusFromDates,
     planInstanciacaoLote,
+    swapDisciplinaSigla, gerarReferenciasDisciplinas, DISCIPLINA_SIGLA,
     catalogoKpis, carteiraKpis, conjuntosKpis,
     planPortfolioMigration, inferPapel, execMoldeKey, buildCodigoCompleto,
 } from './portfolio';
@@ -150,6 +151,84 @@ describe('unicidade referência+base', () => {
         expect(() => instanciarConjunto({
             referencia: refBSO, base: '090+500', existingConjuntos: [first.conjunto], today: '2026-07-08',
         })).not.toThrow();
+    });
+});
+
+// --- Geração de disciplinas a partir da Arquitetura ---
+
+describe('gerarReferenciasDisciplinas', () => {
+    const arq: Referencia = {
+        ...refBSO,
+        id: 'ref-arq',
+        codigoCliente: 'BSO100-VIARAPOSOS-ARQ',
+        discipline: Discipline.ARCHITECTURE,
+        gabarito: [{ id: 'g1', papel: 'Folha 101' }, { id: 'g2', papel: 'Folha 102' }],
+    };
+
+    it('troca a sigla respeitando delimitadores (meio e fim do código)', () => {
+        expect(swapDisciplinaSigla('BSO100-VIARAPOSOS-ARQ', 'ARQ', 'COB')).toBe('BSO100-VIARAPOSOS-COB');
+        expect(swapDisciplinaSigla('BSO100-VIARAPOSOS-ARQ-R00', 'ARQ', 'HID')).toBe('BSO100-VIARAPOSOS-HID-R00');
+        // "ARQ" dentro de palavra NÃO é trocado (precisa de delimitador)
+        expect(swapDisciplinaSigla('PARQUE-CLIENTE-ARQ', 'ARQ', 'ELE')).toBe('PARQUE-CLIENTE-ELE');
+        // sem a sigla de origem → anexa ao final
+        expect(swapDisciplinaSigla('BSO100-VIARAPOSOS', 'ARQ', 'SPDA')).toBe('BSO100-VIARAPOSOS-SPDA');
+    });
+
+    it('gera uma referência por disciplina com código derivado, gabarito copiado e status Rascunho', () => {
+        const r = gerarReferenciasDisciplinas({
+            origem: arq,
+            destinos: [
+                { discipline: Discipline.COVERAGE, sigla: 'COB' },
+                { discipline: Discipline.ELECTRICAL, sigla: 'ELE' },
+                { discipline: Discipline.OTHER, sigla: 'PAISAG' },
+            ],
+            existingReferencias: [arq],
+        });
+        expect(r.novas).toHaveLength(3);
+        expect(r.novas.map(n => n.codigoCliente)).toEqual([
+            'BSO100-VIARAPOSOS-COB', 'BSO100-VIARAPOSOS-ELE', 'BSO100-VIARAPOSOS-PAISAG',
+        ]);
+        r.novas.forEach(n => {
+            expect(n.statusAprovacao).toBe(RefStatus.RASCUNHO);
+            expect(n.client).toBe(arq.client);
+            expect(n.gabarito.map(g => g.papel)).toEqual(['Folha 101', 'Folha 102']);
+        });
+        // ids do gabarito são próprios (não compartilhados com a origem)
+        expect(r.novas[0].gabarito[0].id).not.toBe(arq.gabarito[0].id);
+    });
+
+    it('pula códigos que já existem na MESMA obra (idempotente) e ignora sigla vazia', () => {
+        const cobExistente: Referencia = { ...arq, id: 'ref-cob', codigoCliente: 'BSO100-VIARAPOSOS-COB', discipline: Discipline.COVERAGE };
+        const r = gerarReferenciasDisciplinas({
+            origem: arq,
+            destinos: [
+                { discipline: Discipline.COVERAGE, sigla: 'COB' },
+                { discipline: Discipline.FOUNDATION, sigla: 'FUN' },
+                { discipline: Discipline.OTHER, sigla: '   ' },      // sigla vazia → ignorada
+                { discipline: Discipline.ARCHITECTURE, sigla: 'ARQ' }, // origem → ignorada
+            ],
+            existingReferencias: [arq, cobExistente],
+        });
+        expect(r.novas.map(n => n.codigoCliente)).toEqual(['BSO100-VIARAPOSOS-FUN']);
+        expect(r.puladas).toEqual(['BSO100-VIARAPOSOS-COB']);
+    });
+
+    it('mesmo código em OUTRA obra não bloqueia a geração', () => {
+        const outraObra: Referencia = { ...arq, id: 'x', client: 'Outra Rodovia', codigoCliente: 'BSO100-VIARAPOSOS-COB' };
+        const r = gerarReferenciasDisciplinas({
+            origem: arq,
+            destinos: [{ discipline: Discipline.COVERAGE, sigla: 'COB' }],
+            existingReferencias: [arq, outraObra],
+        });
+        expect(r.novas).toHaveLength(1);
+    });
+
+    it('catálogo de siglas cobre as disciplinas do contrato', () => {
+        expect(DISCIPLINA_SIGLA[Discipline.ARCHITECTURE]).toBe('ARQ');
+        expect(DISCIPLINA_SIGLA[Discipline.COVERAGE]).toBe('COB');
+        expect(DISCIPLINA_SIGLA[Discipline.FIRE]).toBe('INC');
+        expect(DISCIPLINA_SIGLA[Discipline.HVAC]).toBe('AC');
+        expect(DISCIPLINA_SIGLA[Discipline.OTHER]).toBeUndefined(); // a preencher
     });
 });
 

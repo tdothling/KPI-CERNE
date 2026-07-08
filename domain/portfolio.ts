@@ -260,6 +260,81 @@ export const instanciarConjunto = (input: InstanciarInput): InstanciarResult => 
     return { conjunto, pranchas };
 };
 
+// --- GERAÇÃO DE DISCIPLINAS A PARTIR DA ARQUITETURA ---
+//
+// A nomenclatura dos projetos segue "Edificação-Cliente-Disciplina" (ex.:
+// BSO100-VIARAPOSOS-ARQ). Cadastrada a referência de ARQUITETURA, as demais
+// disciplinas são geradas trocando a sigla no código — mesmo gabarito como
+// ponto de partida (editável depois). Disciplinas inexistentes no contrato:
+// o usuário simplesmente não gera (ou exclui depois).
+
+export const DISCIPLINA_SIGLA: Partial<Record<Discipline, string>> = {
+    [Discipline.ARCHITECTURE]: 'ARQ',
+    [Discipline.COVERAGE]: 'COB',
+    [Discipline.FOUNDATION]: 'FUN',
+    [Discipline.ELECTRICAL]: 'ELE',
+    [Discipline.DATA]: 'DAD',
+    [Discipline.HYDRAULIC]: 'HID',
+    [Discipline.SPDA]: 'SPDA',
+    [Discipline.FIRE]: 'INC',
+    [Discipline.HVAC]: 'AC',
+    // OTHER: sigla definida pelo usuário na hora de gerar
+};
+
+// Troca a sigla da disciplina no código, respeitando delimitadores ("-", "_", espaço).
+// "BSO100-VIARAPOSOS-ARQ" → "BSO100-VIARAPOSOS-COB"
+// "BSO100-VIARAPOSOS-ARQ-R00" → "BSO100-VIARAPOSOS-COB-R00" (sigla no meio)
+// Se a sigla de origem não aparecer no código, a de destino é ANEXADA ao final.
+export const swapDisciplinaSigla = (codigo: string, siglaOrigem: string, siglaDestino: string): string => {
+    const escaped = siglaOrigem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`(^|[-_ ])${escaped}(?=[-_ ]|$)`, 'i');
+    if (re.test(codigo)) return codigo.replace(re, `$1${siglaDestino}`);
+    return `${codigo}-${siglaDestino}`;
+};
+
+export interface GerarDisciplinasInput {
+    origem: Pick<Referencia, 'codigoCliente' | 'client' | 'discipline' | 'gabarito' | 'observacao'>;
+    destinos: { discipline: Discipline; sigla: string }[];
+    existingReferencias: Pick<Referencia, 'client' | 'codigoCliente'>[];
+}
+
+export interface GerarDisciplinasResult {
+    novas: Omit<Referencia, 'id'>[];
+    puladas: string[]; // códigos que já existiam na obra (não recriados)
+}
+
+export const gerarReferenciasDisciplinas = (input: GerarDisciplinasInput): GerarDisciplinasResult => {
+    const { origem, destinos, existingReferencias } = input;
+    const siglaOrigem = DISCIPLINA_SIGLA[origem.discipline] || 'ARQ';
+    const clientKey = (origem.client || '').trim().toLowerCase();
+    const existentes = new Set(
+        existingReferencias
+            .filter(r => (r.client || '').trim().toLowerCase() === clientKey)
+            .map(r => slugify(r.codigoCliente))
+    );
+
+    const result: GerarDisciplinasResult = { novas: [], puladas: [] };
+    destinos.forEach(({ discipline, sigla }) => {
+        const siglaLimpa = (sigla || '').trim();
+        if (!siglaLimpa || discipline === origem.discipline) return;
+        const codigo = swapDisciplinaSigla(origem.codigoCliente, siglaOrigem, siglaLimpa);
+        const key = slugify(codigo);
+        if (existentes.has(key)) { result.puladas.push(codigo); return; }
+        existentes.add(key); // evita duplicidade dentro da própria geração
+        result.novas.push({
+            codigoCliente: codigo,
+            client: origem.client,
+            discipline,
+            revisao: 0,
+            statusAprovacao: RefStatus.RASCUNHO,
+            // Gabarito da origem como ponto de partida (cada item com id próprio)
+            gabarito: origem.gabarito.map(g => ({ ...g, id: `gab-${slugify(codigo)}-${slugify(g.papel)}` })),
+            ...(origem.observacao ? { observacao: origem.observacao } : {}),
+        });
+    });
+    return result;
+};
+
 // --- INSTANCIAR EM LOTE (matriz referências × bases) ---
 //
 // Planejador puro para replicação em massa: cada combinação referência×base vira
