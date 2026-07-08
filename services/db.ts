@@ -1,7 +1,8 @@
 
 import { db, auth } from "../firebase";
-import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc, query, orderBy, limit, QuerySnapshot, DocumentData, getDoc, getDocs, where, writeBatch, arrayUnion, deleteField } from "firebase/firestore";
+import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc, query, orderBy, limit, QuerySnapshot, DocumentData, getDoc, getDocs, where, writeBatch, arrayUnion, deleteField, runTransaction } from "firebase/firestore";
 import { ProjectFile, PurchaseDoc, ClientDoc, ProjectFilterState, SupplyOrder, SupplyStatus, SupplyStatusEvent, PurchaseStatus } from "../types";
+import { Referencia, Conjunto, Prancha, planPortfolioMigration } from "../domain/portfolio";
 
 const COLL_PROJECTS = "projects";
 const COLL_MATERIALS = "materials";
@@ -10,6 +11,9 @@ const COLL_PURCHASES = "purchases";
 const COLL_CLIENTS = "clients";
 const COLL_CONFIG = "configuration";
 const COLL_SUPPLY = "supplyOrders";
+const COLL_REFERENCIAS = "references";
+const COLL_CONJUNTOS = "conjuntos";
+const COLL_PRANCHAS = "pranchas";
 
 const isDbActive = () => {
   if (!db) return false;
@@ -293,6 +297,138 @@ export const migrateLegacyPurchasesToSupply = async (userName: string): Promise<
   return { migrated: pending.length, skipped: alreadyMigrated.size };
 };
 
+// --- CARTEIRA DE RODOVIA (Referência → Conjunto → Prancha) ---
+// A lógica de negócio vive em domain/portfolio.ts (puro); aqui só há persistência.
+
+const subscribeToCollection = <T>(collName: string, orderField: string, max: number) =>
+  (callback: (data: T[]) => void) => {
+    if (!isDbActive()) return () => { };
+    const q = query(collection(db, collName), orderBy(orderField), limit(max));
+    return onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
+      const items: T[] = [];
+      snapshot.forEach((d) => {
+        const data = d.data();
+        if ('id' in data) delete data.id;
+        items.push({ id: d.id, ...data } as T);
+      });
+      callback(items);
+    });
+  };
+
+export const subscribeToReferencias = subscribeToCollection<Referencia>(COLL_REFERENCIAS, "codigoCliente", 1000);
+export const subscribeToConjuntos = subscribeToCollection<Conjunto>(COLL_CONJUNTOS, "base", 2000);
+export const subscribeToPranchas = subscribeToCollection<Prancha>(COLL_PRANCHAS, "conjuntoId", 5000);
+
+export const addReferenciaToDb = async (ref: Omit<Referencia, 'id'>) => {
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+  await addDoc(collection(db, COLL_REFERENCIAS), sanitizeData(ref));
+};
+
+export const patchReferenciaInDb = async (id: string, changes: Record<string, any>) => {
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+  await updateDoc(doc(db, COLL_REFERENCIAS, id), sanitizeData(changes));
+};
+
+// Excluir referência só é permitido sem conjuntos filhos (verificado no chamador
+// pelo cache e AQUI direto no banco, contra cache desatualizado/limitado).
+export const deleteReferenciaFromDb = async (id: string) => {
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+  const linked = await getDocs(query(collection(db, COLL_CONJUNTOS), where("referenciaId", "==", id), limit(1)));
+  if (!linked.empty) throw new Error("Esta referência possui conjuntos instanciados. Exclua os conjuntos antes.");
+  await deleteDoc(doc(db, COLL_REFERENCIAS, id));
+};
+
+export const patchPranchaInDb = async (id: string, changes: Record<string, any>) => {
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+  await updateDoc(doc(db, COLL_PRANCHAS, id), sanitizeData(changes));
+};
+
+export const addPranchaToDb = async (prancha: Omit<Prancha, 'id'>) => {
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+  await addDoc(collection(db, COLL_PRANCHAS), sanitizeData(prancha));
+};
+
+export const deletePranchaFromDb = async (id: string) => {
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+  await deleteDoc(doc(db, COLL_PRANCHAS, id));
+};
+
+// Instanciar: grava o Conjunto (ID determinístico referência+base) e as pranchas
+// pré-geradas em UMA transação. Se o conjunto já existir — inclusive criado por
+// outro usuário um segundo antes — a transação falha e nada é gravado parcial.
+export const instanciarConjuntoInDb = async (conjunto: Conjunto, pranchas: Omit<Prancha, 'id'>[]) => {
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+  await runTransaction(db, async (tx) => {
+    const conjuntoRef = doc(db, COLL_CONJUNTOS, conjunto.id);
+    const existing = await tx.get(conjuntoRef);
+    if (existing.exists()) {
+      throw new Error(`Esta referência já foi instanciada na base "${conjunto.base}".`);
+    }
+    const { id, ...conjuntoData } = conjunto;
+    tx.set(conjuntoRef, sanitizeData(conjuntoData));
+    pranchas.forEach(p => {
+      tx.set(doc(collection(db, COLL_PRANCHAS)), sanitizeData(p));
+    });
+  });
+};
+
+// Exclui o conjunto e TODAS as suas pranchas em lote (nada fica órfão).
+export const deleteConjuntoFromDb = async (conjuntoId: string) => {
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+  const pranchasSnap = await getDocs(query(collection(db, COLL_PRANCHAS), where("conjuntoId", "==", conjuntoId)));
+  const batch = writeBatch(db);
+  pranchasSnap.docs.forEach(d => batch.delete(d.ref));
+  batch.delete(doc(db, COLL_CONJUNTOS, conjuntoId));
+  await batch.commit();
+};
+
+// Migração one-shot dos projetos de obras de RODOVIA para o modelo
+// Referência→Conjunto→Prancha. A coleção `projects` NÃO é alterada (vira
+// arquivo, como `purchases`). Idempotente: os IDs são determinísticos e o
+// planejador pula tudo que já existe — rodar de novo não duplica.
+export const migrateProjectsToPortfolio = async (
+  rodoviaClients: string[]
+): Promise<{ referencias: number; conjuntos: number; pranchas: number; skipped: number }> => {
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+
+  const [projectsSnap, refsSnap, conjSnap, prSnap] = await Promise.all([
+    getDocs(collection(db, COLL_PROJECTS)),
+    getDocs(collection(db, COLL_REFERENCIAS)),
+    getDocs(collection(db, COLL_CONJUNTOS)),
+    getDocs(collection(db, COLL_PRANCHAS)),
+  ]);
+
+  const projects = projectsSnap.docs.map(d => ({ ...(d.data() as any), id: d.id } as ProjectFile));
+
+  const plan = planPortfolioMigration({
+    projects,
+    rodoviaClients,
+    existingReferenciaIds: new Set(refsSnap.docs.map(d => d.id)),
+    existingConjuntoIds: new Set(conjSnap.docs.map(d => d.id)),
+    existingPranchaIds: new Set(prSnap.docs.map(d => d.id)),
+  });
+
+  const writes: { coll: string; id: string; data: Record<string, any> }[] = [
+    ...plan.referencias.map(({ id, ...data }) => ({ coll: COLL_REFERENCIAS, id, data })),
+    ...plan.conjuntos.map(({ id, ...data }) => ({ coll: COLL_CONJUNTOS, id, data })),
+    ...plan.pranchas.map(({ id, ...data }) => ({ coll: COLL_PRANCHAS, id, data })),
+  ];
+
+  const CHUNK = 400;
+  for (let i = 0; i < writes.length; i += CHUNK) {
+    const batch = writeBatch(db);
+    writes.slice(i, i + CHUNK).forEach(w => batch.set(doc(db, w.coll, w.id), sanitizeData(w.data)));
+    await batch.commit();
+  }
+
+  return {
+    referencias: plan.referencias.length,
+    conjuntos: plan.conjuntos.length,
+    pranchas: plan.pranchas.length,
+    skipped: plan.skippedExisting,
+  };
+};
+
 export const subscribeToClients = (callback: (data: ClientDoc[]) => void) => {
   if (!isDbActive()) return () => { };
   const q = query(collection(db, COLL_CLIENTS), orderBy("name"), limit(100));
@@ -344,11 +480,13 @@ export const updateClientInDb = async (client: ClientDoc) => {
       // capitalização/espaçamento diferente — que continuavam aparecendo com o nome antigo.
       // Inclui as coleções legadas (materials/purchases): os dados preservados
       // continuam consistentes se a obra for renomeada.
-      const [pSnap, mSnap, cSnap, sSnap] = await Promise.all([
+      const [pSnap, mSnap, cSnap, sSnap, rSnap, cjSnap] = await Promise.all([
         getDocs(collection(db, COLL_PROJECTS)),
         getDocs(collection(db, COLL_MATERIALS)),
         getDocs(collection(db, COLL_PURCHASES)),
-        getDocs(collection(db, COLL_SUPPLY))
+        getDocs(collection(db, COLL_SUPPLY)),
+        getDocs(collection(db, COLL_REFERENCIAS)),
+        getDocs(collection(db, COLL_CONJUNTOS))
       ]);
 
       const updatePromises: Promise<void>[] = [];
@@ -363,6 +501,8 @@ export const updateClientInDb = async (client: ClientDoc) => {
       collectMatches(mSnap);
       collectMatches(cSnap);
       collectMatches(sSnap);
+      collectMatches(rSnap);
+      collectMatches(cjSnap);
 
       if (updatePromises.length > 0) {
         await Promise.all(updatePromises);
@@ -376,18 +516,20 @@ export const updateClientInDb = async (client: ClientDoc) => {
 // Conta registros vinculados a uma obra lendo DIRETO do banco (não do cache local, que é
 // limitado a 1000 docs e pode estar filtrado pelo servidor). Casa por nome normalizado.
 // Usado para bloquear a exclusão de obras que ainda possuem projetos/materiais/compras.
-export const countLinkedRecords = async (clientName: string): Promise<{ projects: number; materials: number; purchases: number; supplyOrders: number }> => {
-  if (!isDbActive()) return { projects: 0, materials: 0, purchases: 0, supplyOrders: 0 };
+export const countLinkedRecords = async (clientName: string): Promise<{ projects: number; materials: number; purchases: number; supplyOrders: number; referencias: number; conjuntos: number }> => {
+  if (!isDbActive()) return { projects: 0, materials: 0, purchases: 0, supplyOrders: 0, referencias: 0, conjuntos: 0 };
   const target = normalizeName(clientName);
-  const [pSnap, mSnap, cSnap, sSnap] = await Promise.all([
+  const [pSnap, mSnap, cSnap, sSnap, rSnap, cjSnap] = await Promise.all([
     getDocs(collection(db, COLL_PROJECTS)),
     getDocs(collection(db, COLL_MATERIALS)),
     getDocs(collection(db, COLL_PURCHASES)),
-    getDocs(collection(db, COLL_SUPPLY))
+    getDocs(collection(db, COLL_SUPPLY)),
+    getDocs(collection(db, COLL_REFERENCIAS)),
+    getDocs(collection(db, COLL_CONJUNTOS))
   ]);
   const count = (snap: QuerySnapshot<DocumentData>) =>
     snap.docs.filter(d => normalizeName((d.data() as any).client) === target).length;
-  return { projects: count(pSnap), materials: count(mSnap), purchases: count(cSnap), supplyOrders: count(sSnap) };
+  return { projects: count(pSnap), materials: count(mSnap), purchases: count(cSnap), supplyOrders: count(sSnap), referencias: count(rSnap), conjuntos: count(cjSnap) };
 };
 
 export const deleteClientFromDb = async (id: string) => {

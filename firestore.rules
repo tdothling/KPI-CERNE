@@ -62,6 +62,43 @@ service cloud.firestore {
       allow read, write: if isCerneInternalUser();
     }
 
+    // --- CARTEIRA DE RODOVIA (Referência → Conjunto → Prancha) ---
+
+    // Referências (Catálogo): molde por tipo de obra, com gabarito de entregáveis
+    match /references/{refId} {
+      allow read: if isCerneInternalUser();
+      allow create: if isCerneInternalUser()
+                    && request.resource.data.keys().hasAll(['codigoCliente', 'client', 'discipline', 'statusAprovacao', 'gabarito'])
+                    && request.resource.data.codigoCliente is string
+                    && request.resource.data.client is string
+                    && request.resource.data.gabarito is list;
+      allow update: if isCerneInternalUser();
+      allow delete: if isCerneInternalUser();
+    }
+
+    // Conjuntos (Carteira): instância da referência em uma base (KM).
+    // O ID do documento é determinístico (referenciaId + base) — é ele que
+    // garante a unicidade de instanciação por base.
+    match /conjuntos/{conjuntoId} {
+      allow read: if isCerneInternalUser();
+      allow create: if isCerneInternalUser()
+                    && request.resource.data.keys().hasAll(['referenciaId', 'client', 'base'])
+                    && request.resource.data.referenciaId is string
+                    && request.resource.data.base is string;
+      allow update: if isCerneInternalUser();
+      allow delete: if isCerneInternalUser();
+    }
+
+    // Pranchas: documentos individuais dentro de um conjunto
+    match /pranchas/{pranchaId} {
+      allow read: if isCerneInternalUser();
+      allow create: if isCerneInternalUser()
+                    && request.resource.data.keys().hasAll(['conjuntoId', 'papel', 'status'])
+                    && request.resource.data.conjuntoId is string;
+      allow update: if isCerneInternalUser();
+      allow delete: if isCerneInternalUser();
+    }
+
     // Configurações e Feriados: Mesma regra de autenticação
     match /settings/{document=**} {
       allow read, write: if isCerneInternalUser();

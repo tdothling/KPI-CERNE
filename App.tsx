@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, Suspense, lazy } from 'react';
+import React, { useState, useRef, useEffect, useMemo, Suspense, lazy } from 'react';
 import { ProjectFile, Discipline, Status, RevisionReason, DateFilterType, ClientDoc, SiteType, ProjectFilterState, ProjectPhase, Period } from './types';
 import { BatchEditModal } from './components/BatchEditModal';
 import { HolidayManagerModal } from './components/HolidayManagerModal';
@@ -8,7 +8,7 @@ import { AdvancedFilter } from './components/AdvancedFilter';
 import { DataMigration } from './components/DataMigration';
 import { ImportReviewModal, StagingRow } from './components/ImportReviewModal';
 import { CerneLogo } from './components/CerneLogo';
-import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Database, LogIn, LogOut, Truck, HardHat, Search, ChevronDown, CheckSquare, Square, FileText, MoreHorizontal } from 'lucide-react';
+import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Database, LogIn, LogOut, Truck, HardHat, Search, ChevronDown, CheckSquare, Square, FileText, MoreHorizontal, BookOpen, FolderKanban } from 'lucide-react';
 
 // Code-splitting por aba: cada tela pesada vira um chunk próprio (o Dashboard carrega
 // o recharts, por exemplo) e só é baixada quando o usuário abre a aba correspondente.
@@ -17,6 +17,8 @@ const ProjectList = lazy(() => import('./components/ProjectList').then(m => ({ d
 const ProjectTimeline = lazy(() => import('./components/ProjectTimeline').then(m => ({ default: m.ProjectTimeline })));
 const ObrasPage = lazy(() => import('./components/ObrasPage').then(m => ({ default: m.ObrasPage })));
 const SupplyPage = lazy(() => import('./components/supply/SupplyPage').then(m => ({ default: m.SupplyPage })));
+const CatalogoPage = lazy(() => import('./components/portfolio/CatalogoPage').then(m => ({ default: m.CatalogoPage })));
+const CarteiraPage = lazy(() => import('./components/portfolio/CarteiraPage').then(m => ({ default: m.CarteiraPage })));
 
 const TabLoading = () => (
   <div className="flex items-center justify-center py-24 text-slate-400 text-sm">
@@ -31,7 +33,7 @@ import { useAppData } from './hooks/useAppData';
 import { useAppFilters } from './hooks/useAppFilters';
 import { addProject } from './services/db';
 
-type Tab = 'dashboard' | 'timeline' | 'obras' | 'projects' | 'suprimentos';
+type Tab = 'dashboard' | 'timeline' | 'obras' | 'projects' | 'catalogo' | 'carteira' | 'suprimentos';
 type EntryMode = 'FILES' | 'PASTE';
 
 export default function App() {
@@ -42,12 +44,49 @@ export default function App() {
   const {
     projects, supplyOrders, clients, holidays, dbConnected, currentUser,
     updateProject, deleteProject, addProjectRevision, promoteProjectToExecutive,
+    referencias, conjuntos, pranchas,
+    handleAddReferencia, handleUpdateReferencia, handleDeleteReferencia, handleMoveReferencia,
+    handleInstanciar, handleDeleteConjunto,
+    handleMovePrancha, handleUpdatePrancha, handleDeletePrancha,
+    handleMigratePortfolio,
     handleAddSupplyOrder, handleUpdateSupplyOrder, handleDeleteSupplyOrder,
     handleMoveSupplyStatus, handleToggleSupplyItem, handleMigrateLegacyPurchases,
     handleAddClient, handleUpdateClient, handleDeleteClient,
     handleBatchUpdate, handleBatchWorkflow,
     handleUpdateHolidays
   } = useAppData(projectFilter);
+
+  // Obras de RODOVIA usam o fluxo Catálogo/Carteira (Referência → Conjunto → Prancha).
+  // Canteiros e bases operacionais seguem o fluxo atual de arquivos (aba Projetos).
+  const rodoviaClients = useMemo(() => clients.filter(c => c.type === SiteType.HIGHWAY), [clients]);
+  const rodoviaNames = useMemo(() => new Set(rodoviaClients.map(c => c.name.trim().toLowerCase())), [rodoviaClients]);
+  const isRodoviaProject = (client: string) => rodoviaNames.has((client || '').trim().toLowerCase());
+
+  // As abas legadas (Indicadores/Cronograma/Projetos/CSV) não mostram projetos de
+  // obras de rodovia: após a migração eles vivem na Carteira e apareceriam em dobro.
+  const legacyProjects = useMemo(() => projects.filter(p => !isRodoviaProject(p.client)), [projects, rodoviaNames]);
+
+  // Projetos de rodovia ainda não migrados (banner na Carteira). Uma família
+  // (groupId) é considerada migrada se QUALQUER doc dela virou referência/prancha.
+  const legacyPendingCount = useMemo(() => {
+    const rodoviaProjects = projects.filter(p => isRodoviaProject(p.client));
+    if (rodoviaProjects.length === 0) return 0;
+    const migratedIds = new Set<string>();
+    referencias.forEach(r => r.legacy?.originalId && migratedIds.add(r.legacy.originalId));
+    pranchas.forEach(p => p.legacy?.originalId && migratedIds.add(p.legacy.originalId));
+    conjuntos.forEach(c => c.legacy?.originalId && migratedIds.add(c.legacy.originalId));
+    const families = new Map<string, { ids: string[] }>();
+    rodoviaProjects.forEach(p => {
+      const key = p.groupId || p.id;
+      if (!families.has(key)) families.set(key, { ids: [] });
+      families.get(key)!.ids.push(p.id);
+    });
+    let pending = 0;
+    families.forEach(fam => {
+      if (!fam.ids.some(id => migratedIds.has(id))) pending += fam.ids.length;
+    });
+    return pending;
+  }, [projects, rodoviaNames, referencias, conjuntos, pranchas]);
 
   const {
     selectedClients, setSelectedClients, toggleClientSelection,
@@ -57,7 +96,23 @@ export default function App() {
     customRange, setCustomRange,
     filteredProjects, filteredSupplyOrders,
     uniqueClients
-  } = useAppFilters(projects, supplyOrders, clients);
+  } = useAppFilters(legacyProjects, supplyOrders, clients);
+
+  // Filtros globais de cliente/disciplina aplicados também à carteira de rodovia
+  const filteredReferencias = useMemo(() => referencias.filter(r =>
+    (selectedClients.length === 0 || selectedClients.includes(r.client)) &&
+    (selectedDisciplines.length === 0 || selectedDisciplines.includes(r.discipline))
+  ), [referencias, selectedClients, selectedDisciplines]);
+
+  const filteredConjuntos = useMemo(() => {
+    const refIds = new Set(filteredReferencias.map(r => r.id));
+    return conjuntos.filter(c => refIds.has(c.referenciaId));
+  }, [conjuntos, filteredReferencias]);
+
+  const filteredPranchas = useMemo(() => {
+    const conjIds = new Set(filteredConjuntos.map(c => c.id));
+    return pranchas.filter(p => conjIds.has(p.conjuntoId));
+  }, [pranchas, filteredConjuntos]);
 
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
@@ -367,6 +422,8 @@ export default function App() {
             <NavTab active={activeTab === 'timeline'} onClick={() => setActiveTab('timeline')} icon={<Calendar size={16} className="min-w-[16px]" />} label="Cronograma" />
             <NavTab active={activeTab === 'obras'} onClick={() => setActiveTab('obras')} icon={<HardHat size={16} className="min-w-[16px]" />} label="Obras" />
             <NavTab active={activeTab === 'projects'} onClick={() => setActiveTab('projects')} icon={<List size={16} className="min-w-[16px]" />} label="Projetos" />
+            <NavTab active={activeTab === 'catalogo'} onClick={() => setActiveTab('catalogo')} icon={<BookOpen size={16} className="min-w-[16px]" />} label="Catálogo" />
+            <NavTab active={activeTab === 'carteira'} onClick={() => setActiveTab('carteira')} icon={<FolderKanban size={16} className="min-w-[16px]" />} label="Carteira" />
             <NavTab active={activeTab === 'suprimentos'} onClick={() => setActiveTab('suprimentos')} icon={<Truck size={16} className="min-w-[16px]" />} label="Suprimentos" />
           </nav>
 
@@ -396,7 +453,7 @@ export default function App() {
 
             {/* Actions Group */}
             <div className="flex items-center gap-2 ml-2">
-              {!isReadOnly && activeTab !== 'dashboard' && activeTab !== 'obras' && activeTab !== 'suprimentos' && (
+              {!isReadOnly && (activeTab === 'projects' || activeTab === 'timeline') && (
                 <button
                   onClick={handleOpenUploadModal}
                   disabled={!dbConnected}
@@ -497,6 +554,8 @@ export default function App() {
             {activeTab === 'timeline' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectTimeline projects={filteredProjects} holidays={holidays} clients={clients} /></div>}
             {activeTab === 'obras' && <div className="animate-in fade-in zoom-in-95 duration-200"><ObrasPage clients={clients} projectCount={(name) => projects.filter(p => p.client === name).length} onAddClient={handleAddClient} onUpdateClient={handleUpdateClient} onDeleteClient={handleDeleteClient} /></div>}
             {activeTab === 'projects' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectList projects={filteredProjects} clients={clients} onUpdate={updateProject} onDelete={deleteProject} onAddRevision={addProjectRevision} onPromote={promoteProjectToExecutive} holidays={holidays} readOnly={isReadOnly} /></div>}
+            {activeTab === 'catalogo' && <div className="animate-in fade-in zoom-in-95 duration-200"><CatalogoPage referencias={filteredReferencias} conjuntos={conjuntos} clients={rodoviaClients} readOnly={isReadOnly} onAdd={handleAddReferencia} onUpdate={handleUpdateReferencia} onDelete={handleDeleteReferencia} onMove={handleMoveReferencia} onInstanciar={handleInstanciar} /></div>}
+            {activeTab === 'carteira' && <div className="animate-in fade-in zoom-in-95 duration-200"><CarteiraPage referencias={referencias} conjuntos={filteredConjuntos} pranchas={filteredPranchas} clients={rodoviaClients} readOnly={isReadOnly} legacyPendingCount={legacyPendingCount} isMigrationAdmin={isMigrationAdmin} onMigrate={handleMigratePortfolio} onMovePrancha={handleMovePrancha} onUpdatePrancha={handleUpdatePrancha} onDeletePrancha={handleDeletePrancha} onDeleteConjunto={handleDeleteConjunto} /></div>}
             {activeTab === 'suprimentos' && <div className="animate-in fade-in zoom-in-95 duration-200"><SupplyPage orders={filteredSupplyOrders} clients={clients} holidays={holidays} currentUser={currentUser ? formatUsername(currentUser.email) : ''} isAdmin={isMigrationAdmin} readOnly={isReadOnly} onAdd={handleAddSupplyOrder} onUpdate={handleUpdateSupplyOrder} onDelete={handleDeleteSupplyOrder} onMoveStatus={handleMoveSupplyStatus} onToggleItem={handleToggleSupplyItem} onMigrateLegacy={handleMigrateLegacyPurchases} /></div>}
           </Suspense>
         </div>
@@ -535,11 +594,12 @@ export default function App() {
                   className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-base rounded-lg focus:ring-brand-500 focus:border-brand-500 block p-3"
                 >
                   <option value="" disabled>Selecione um cliente...</option>
-                  {clients.map(client => (
+                  {clients.filter(c => c.type !== SiteType.HIGHWAY).map(client => (
                     <option key={client.id} value={client.name}>{client.name}</option>
                   ))}
                 </select>
                 {clients.length === 0 && <p className="text-xs text-rose-500 mt-1">Nenhum cliente cadastrado. Use o botão "Registro de Obra".</p>}
+                {rodoviaClients.length > 0 && <p className="text-xs text-slate-400 mt-1">Obras de Rodovia não aparecem aqui: cadastre os moldes na aba Catálogo e instancie nas bases pela própria referência.</p>}
               </div>
 
               {shouldShowBaseInput && (

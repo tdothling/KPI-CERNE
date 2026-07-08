@@ -196,7 +196,11 @@ export interface SupplyOrder {
 
 export enum SiteType {
   CONSTRUCTION_SITE = 'Canteiro de Obras',
-  OPERATIONAL_BASE = 'Bases Operacionais'
+  OPERATIONAL_BASE = 'Bases Operacionais',
+  // Contrato de rodovia: obras iguais replicadas ao longo do traçado (KM).
+  // Usa o fluxo Catálogo/Carteira (Referência → Conjunto → Prancha) em vez
+  // do fluxo de arquivos da aba Projetos.
+  HIGHWAY = 'Obra de Rodovia'
 }
 
 export enum ObraStatus {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { ProjectFile, ClientDoc, Status, RevisionReason, ProjectPhase, Period, ProjectFilterState, SupplyOrder, SupplyStatus } from '../types';
-import { subscribeToProjects, addProject, updateProjectInDb, deleteProjectFromDb, subscribeToClients, addClient, updateClientInDb, deleteClientFromDb, countLinkedRecords, subscribeToHolidays, saveHolidaysToDb, batchUpdateProjectsInDb, subscribeToSupplyOrders, addSupplyOrder, updateSupplyOrderInDb, deleteSupplyOrderFromDb, applySupplyStatusChange, patchSupplyOrderInDb, migrateLegacyPurchasesToSupply } from '../services/db';
+import { ProjectFile, ClientDoc, Status, RevisionReason, ProjectPhase, Period, ProjectFilterState, SupplyOrder, SupplyStatus, SiteType } from '../types';
+import { subscribeToProjects, addProject, updateProjectInDb, deleteProjectFromDb, subscribeToClients, addClient, updateClientInDb, deleteClientFromDb, countLinkedRecords, subscribeToHolidays, saveHolidaysToDb, batchUpdateProjectsInDb, subscribeToSupplyOrders, addSupplyOrder, updateSupplyOrderInDb, deleteSupplyOrderFromDb, applySupplyStatusChange, patchSupplyOrderInDb, migrateLegacyPurchasesToSupply, subscribeToReferencias, subscribeToConjuntos, subscribeToPranchas, addReferenciaToDb, patchReferenciaInDb, deleteReferenciaFromDb, instanciarConjuntoInDb, deleteConjuntoFromDb, patchPranchaInDb, addPranchaToDb, deletePranchaFromDb, migrateProjectsToPortfolio } from '../services/db';
+import { Referencia, Conjunto, Prancha, PranchaStatus, RefStatus, canRefTransition, canPranchaTransition, instanciarConjunto } from '../domain/portfolio';
 import { buildStatusChangePatch } from '../components/supply/supplyUtils';
 import { formatUsername } from '../services/auth';
 import { subscribeToAuth } from '../services/auth';
@@ -19,6 +20,11 @@ export function useAppData(projectFilter: ProjectFilterState) {
     const [dbConnected, setDbConnected] = useState(false);
     const [currentUser, setCurrentUser] = useState<User | null>(null);
 
+    // Carteira de rodovia (Referência → Conjunto → Prancha)
+    const [referencias, setReferencias] = useState<Referencia[]>([]);
+    const [conjuntos, setConjuntos] = useState<Conjunto[]>([]);
+    const [pranchas, setPranchas] = useState<Prancha[]>([]);
+
     useEffect(() => {
         if (!db) {
             setDbConnected(false);
@@ -30,6 +36,9 @@ export function useAppData(projectFilter: ProjectFilterState) {
         const unsubSupply = subscribeToSupplyOrders(setSupplyOrders);
         const unsubClients = subscribeToClients(setClients);
         const unsubHolidays = subscribeToHolidays(setHolidays);
+        const unsubReferencias = subscribeToReferencias(setReferencias);
+        const unsubConjuntos = subscribeToConjuntos(setConjuntos);
+        const unsubPranchas = subscribeToPranchas(setPranchas);
         const unsubAuth = subscribeToAuth((user) => {
             setCurrentUser(user);
         });
@@ -39,6 +48,9 @@ export function useAppData(projectFilter: ProjectFilterState) {
             unsubSupply();
             unsubClients();
             unsubHolidays();
+            unsubReferencias();
+            unsubConjuntos();
+            unsubPranchas();
             unsubAuth();
         };
     }, [projectFilter]);
@@ -122,6 +134,149 @@ export function useAppData(projectFilter: ProjectFilterState) {
         }
     };
 
+    // --- CARTEIRA DE RODOVIA (Referência → Conjunto → Prancha) ---
+
+    const handleAddReferencia = (ref: Omit<Referencia, 'id'>) => {
+        addReferenciaToDb(ref).catch(e => alert("Erro ao criar a referência: " + (e?.message || e)));
+    };
+
+    const handleUpdateReferencia = (id: string, changes: Partial<Referencia>) => {
+        patchReferenciaInDb(id, changes).catch(e => alert("Erro ao salvar a referência: " + (e?.message || e)));
+    };
+
+    const handleDeleteReferencia = (id: string) => {
+        const ref = referencias.find(r => r.id === id);
+        if (!ref) return;
+        const vinculados = conjuntos.filter(c => c.referenciaId === id).length;
+        if (vinculados > 0) {
+            alert(`A referência "${ref.codigoCliente}" possui ${vinculados} conjunto(s) instanciado(s). Exclua os conjuntos na Carteira antes.`);
+            return;
+        }
+        if (!confirm(`Excluir a referência "${ref.codigoCliente}" do catálogo?`)) return;
+        deleteReferenciaFromDb(id).catch(e => alert("Erro ao excluir a referência: " + (e?.message || e)));
+    };
+
+    // Ciclo de validação da Referência com o cliente (independente do ciclo das pranchas)
+    const handleMoveReferencia = (ref: Referencia, to: RefStatus, date: string, period: Period) => {
+        if (!canRefTransition(ref.statusAprovacao, to)) {
+            alert(`Transição inválida: "${ref.statusAprovacao}" não pode ir para "${to}".`);
+            return;
+        }
+        const changes: Record<string, any> = { statusAprovacao: to };
+        if (to === RefStatus.ENVIADO) {
+            changes.sendDate = date;
+            changes.sendPeriod = period;
+            // Reenvio após reprovação = nova revisão do molde
+            if (ref.statusAprovacao === RefStatus.REPROVADO) {
+                changes.revisao = (ref.revisao || 0) + 1;
+                changes.feedbackDate = '';
+            }
+        }
+        if (to === RefStatus.APROVADO || to === RefStatus.REPROVADO) {
+            changes.feedbackDate = date;
+            changes.feedbackPeriod = period;
+        }
+        patchReferenciaInDb(ref.id, changes).catch(e => alert("Erro ao mover a referência: " + (e?.message || e)));
+    };
+
+    // Instanciar: cria 1 Conjunto na base escolhida e PRÉ-GERA as pranchas do
+    // gabarito. A referência não muda de estado e segue disponível para outras bases.
+    const handleInstanciar = async (referencia: Referencia, base: string, codigoRodovia?: string) => {
+        try {
+            const { conjunto, pranchas: novas } = instanciarConjunto({
+                referencia,
+                base,
+                codigoRodovia,
+                existingConjuntos: conjuntos,
+                today: new Date().toISOString().split('T')[0],
+            });
+            await instanciarConjuntoInDb(conjunto, novas);
+            return true;
+        } catch (e: any) {
+            alert(e?.message || String(e));
+            return false;
+        }
+    };
+
+    const handleDeleteConjunto = (conjunto: Conjunto) => {
+        const n = pranchas.filter(p => p.conjuntoId === conjunto.id).length;
+        if (!confirm(`Excluir o conjunto da base "${conjunto.base}" e suas ${n} prancha(s)? Esta ação não pode ser desfeita.`)) return;
+        deleteConjuntoFromDb(conjunto.id).catch(e => alert("Erro ao excluir o conjunto: " + (e?.message || e)));
+    };
+
+    // Ciclo de execução/entrega da Prancha
+    const handleMovePrancha = (
+        prancha: Prancha,
+        to: PranchaStatus,
+        date: string,
+        period: Period,
+        options: { reason?: RevisionReason; comment?: string } = {}
+    ) => {
+        if (!canPranchaTransition(prancha.status, to)) {
+            alert(`Transição inválida: "${prancha.status}" não pode ir para "${to}".`);
+            return;
+        }
+        const changes: Record<string, any> = { status: to };
+        if (to === PranchaStatus.EM_ANDAMENTO) {
+            changes.startDate = date;
+            changes.startPeriod = period;
+            // Reabertura após reprovação = revisão da prancha
+            if (prancha.status === PranchaStatus.REPROVADO) {
+                changes.revisao = (prancha.revisao || 0) + 1;
+                changes.endDate = ''; changes.sendDate = ''; changes.feedbackDate = '';
+                changes.revisions = [
+                    ...(prancha.revisions || []),
+                    { id: crypto.randomUUID(), date, reason: options.reason || RevisionReason.CLIENT_REQUEST, comment: options.comment || '' }
+                ];
+            }
+        }
+        if (to === PranchaStatus.CONCLUIDO) { changes.endDate = date; changes.endPeriod = period; }
+        if (to === PranchaStatus.ENVIADO) { changes.sendDate = date; changes.sendPeriod = period; }
+        if (to === PranchaStatus.APROVADO || to === PranchaStatus.REPROVADO) {
+            changes.feedbackDate = date;
+            changes.feedbackPeriod = period;
+            // Dias parados aguardando o cliente — mesmo cálculo do fluxo de projetos
+            if (prancha.sendDate) {
+                const send = parseISO(prancha.sendDate);
+                const feedback = parseISO(date);
+                if (isValid(send) && isValid(feedback) && feedback >= send) {
+                    changes.blockedDays = calculateBusinessDaysWithHolidays(send, feedback, holidays, prancha.sendPeriod || 'MANHA', period);
+                }
+            }
+        }
+        patchPranchaInDb(prancha.id, changes).catch(e => alert("Erro ao mover a prancha: " + (e?.message || e)));
+    };
+
+    const handleUpdatePrancha = (id: string, changes: Partial<Prancha>) => {
+        patchPranchaInDb(id, changes).catch(e => alert("Erro ao salvar a prancha: " + (e?.message || e)));
+    };
+
+    // Prancha extra fora do gabarito (ex.: detalhe específico de uma base)
+    const handleAddPrancha = (prancha: Omit<Prancha, 'id'>) => {
+        addPranchaToDb(prancha).catch(e => alert("Erro ao adicionar a prancha: " + (e?.message || e)));
+    };
+
+    const handleDeletePrancha = (prancha: Prancha) => {
+        if (!confirm(`Excluir a prancha "${prancha.codigoCompleto || prancha.papel}"?`)) return;
+        deletePranchaFromDb(prancha.id).catch(e => alert("Erro ao excluir a prancha: " + (e?.message || e)));
+    };
+
+    // Migração one-shot: projetos das obras de RODOVIA → Catálogo/Carteira.
+    // `projects` não é alterada (vira arquivo). Idempotente — pode rodar de novo.
+    const handleMigratePortfolio = async () => {
+        const rodoviaClients = clients.filter(c => c.type === SiteType.HIGHWAY).map(c => c.name);
+        if (rodoviaClients.length === 0) {
+            alert('Nenhuma obra classificada como "Obra de Rodovia". Ajuste o tipo da obra na aba Obras antes de migrar.');
+            return;
+        }
+        try {
+            const r = await migrateProjectsToPortfolio(rodoviaClients);
+            alert(`Migração concluída:\n- ${r.referencias} referências\n- ${r.conjuntos} conjuntos\n- ${r.pranchas} pranchas\n- ${r.skipped} registros já migrados (ignorados)`);
+        } catch (e: any) {
+            alert("Erro na migração: " + (e?.message || e));
+        }
+    };
+
     // --- SUPRIMENTOS ---
 
     const handleAddSupplyOrder = (order: Omit<SupplyOrder, 'id'>) => {
@@ -193,9 +348,9 @@ export function useAppData(projectFilter: ProjectFilterState) {
             return;
         }
 
-        const total = counts.projects + counts.materials + counts.purchases + counts.supplyOrders;
+        const total = counts.projects + counts.materials + counts.purchases + counts.supplyOrders + counts.referencias + counts.conjuntos;
         if (total > 0) {
-            alert(`Não é possível excluir a obra "${clientToDelete.name}".\n\nExistem registros vinculados:\n- ${counts.projects} Projetos\n- ${counts.supplyOrders} Pedidos de Suprimentos\n- ${counts.materials} Listas de Materiais (arquivo)\n- ${counts.purchases} Compras (arquivo)\n\nPor favor, exclua ou reatribua esses registros antes de remover a obra.`);
+            alert(`Não é possível excluir a obra "${clientToDelete.name}".\n\nExistem registros vinculados:\n- ${counts.projects} Projetos\n- ${counts.referencias} Referências (Catálogo)\n- ${counts.conjuntos} Conjuntos (Carteira)\n- ${counts.supplyOrders} Pedidos de Suprimentos\n- ${counts.materials} Listas de Materiais (arquivo)\n- ${counts.purchases} Compras (arquivo)\n\nPor favor, exclua ou reatribua esses registros antes de remover a obra.`);
             return;
         }
 
@@ -262,6 +417,11 @@ export function useAppData(projectFilter: ProjectFilterState) {
     return {
         projects, supplyOrders, clients, holidays, dbConnected, currentUser,
         updateProject, deleteProject, addProjectRevision, promoteProjectToExecutive,
+        referencias, conjuntos, pranchas,
+        handleAddReferencia, handleUpdateReferencia, handleDeleteReferencia, handleMoveReferencia,
+        handleInstanciar, handleDeleteConjunto,
+        handleMovePrancha, handleUpdatePrancha, handleAddPrancha, handleDeletePrancha,
+        handleMigratePortfolio,
         handleAddSupplyOrder, handleUpdateSupplyOrder, handleDeleteSupplyOrder,
         handleMoveSupplyStatus, handleToggleSupplyItem, handleMigrateLegacyPurchases,
         handleAddClient, handleUpdateClient, handleDeleteClient,

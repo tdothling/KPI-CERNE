@@ -406,7 +406,7 @@ function ObraCard({
                 <MapPin size={11} /> {client.location || 'Local não informado'}
               </span>
               <span>•</span>
-              <span>{client.type === SiteType.CONSTRUCTION_SITE ? 'Canteiro de Obras' : `Bases Operacionais${client.numberOfBases ? ` (${client.numberOfBases})` : ''}`}</span>
+              <span>{client.type === SiteType.CONSTRUCTION_SITE ? 'Canteiro de Obras' : `${client.type === SiteType.HIGHWAY ? 'Obra de Rodovia' : 'Bases Operacionais'}${client.numberOfBases ? ` (${client.numberOfBases})` : ''}`}</span>
               {projCount > 0 && (
                 <><span>•</span><span className="font-semibold text-brand-600 dark:text-brand-400">{projCount} projeto{projCount !== 1 ? 's' : ''}</span></>
               )}
@@ -614,10 +614,11 @@ function ObraFormModal({ form, onChange, onSubmit, onClose, isEditing }: ObraFor
 
               <div>
                 <Label>Tipo de Instalação</Label>
-                <div className="grid grid-cols-2 gap-3 mt-1">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-1">
                   {[
                     { value: SiteType.CONSTRUCTION_SITE, title: 'Canteiro de Obras', sub: 'Obra única centralizada' },
                     { value: SiteType.OPERATIONAL_BASE, title: 'Bases Operacionais', sub: 'Múltiplos pontos de atendimento' },
+                    { value: SiteType.HIGHWAY, title: 'Obra de Rodovia', sub: 'Bases replicadas ao longo do traçado (usa Catálogo/Carteira)' },
                   ].map(opt => (
                     <label key={opt.value} className={`flex items-center gap-2 cursor-pointer p-3 rounded-lg border transition-colors ${form.type === opt.value ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}`}>
                       <input type="radio" name="siteType" value={opt.value} checked={form.type === opt.value}
@@ -633,7 +634,7 @@ function ObraFormModal({ form, onChange, onSubmit, onClose, isEditing }: ObraFor
                 </div>
               </div>
 
-              {form.type === SiteType.OPERATIONAL_BASE && (
+              {(form.type === SiteType.OPERATIONAL_BASE || form.type === SiteType.HIGHWAY) && (
                 <div className="animate-in fade-in slide-in-from-top-2 duration-200">
                   <Label>Número de Bases</Label>
                   <input type="number" min="1" value={form.numberOfBases || ''}
