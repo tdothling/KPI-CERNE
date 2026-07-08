@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { FolderKanban, Play, Send, BadgeCheck, ThumbsDown, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Layers, ListTodo, MapPin, PencilLine, Trash2, X, RotateCcw, Database } from 'lucide-react';
 import { ClientDoc, Discipline, Period, RevisionReason } from '../../types';
-import { Referencia, Conjunto, Prancha, PranchaStatus, canPranchaTransition, carteiraKpis, conjuntosKpis, rollupConjunto } from '../../domain/portfolio';
+import { Referencia, Conjunto, Prancha, PranchaStatus, canPranchaTransition, carteiraKpis, conjuntosKpis, rollupConjunto, inferPranchaStatusFromDates } from '../../domain/portfolio';
 import { KpiCard, StatusBadge, PRANCHA_STATUS_STYLE, DateActionModal, DateActionRequest, TimelineDatesEditor, TimelineDates, PRANCHA_TIMELINE_FIELDS } from './shared';
 import { calculateDeadlineDate, formatDateDisplay } from '../../utils';
 import { format } from 'date-fns';
@@ -348,7 +348,17 @@ function PranchaEditModal({ prancha, onClose, onSave }: {
             datePayload[f.dateKey] = date || '';
             if (date) datePayload[f.periodKey] = dates[f.periodKey];
         });
-        onSave({ papel: papel.trim(), codigoCompleto: codigo.trim(), observacao: observacao.trim() || undefined, ...datePayload });
+
+        // Lógica do fluxo: se alguma data mudou, o status é derivado da linha do tempo
+        // (apagar datas retroage o status; preencher avança).
+        const dateChanged = ['startDate', 'endDate', 'sendDate', 'feedbackDate'].some(
+            k => (dates[k as keyof TimelineDates] as string || '') !== ((prancha as any)[k] || '')
+        );
+        const statusPatch = dateChanged
+            ? { status: inferPranchaStatusFromDates({ startDate: dates.startDate, endDate: dates.endDate, sendDate: dates.sendDate, feedbackDate: dates.feedbackDate }, prancha.status) }
+            : {};
+
+        onSave({ papel: papel.trim(), codigoCompleto: codigo.trim(), observacao: observacao.trim() || undefined, ...datePayload, ...statusPatch });
     };
 
     return (
@@ -372,6 +382,7 @@ function PranchaEditModal({ prancha, onClose, onSave }: {
                         fields={PRANCHA_TIMELINE_FIELDS}
                         value={dates}
                         onChange={patch => setDates(prev => ({ ...prev, ...patch }))}
+                        note="O status segue a linha do tempo: apagar datas retroage o status (ex.: Concluída → Em Andamento/A Fazer) e preencher avança. Aprovada/Reprovada preservam a decisão. Os dias com o cliente recalculam de envio e feedback."
                     />
                 </div>
 

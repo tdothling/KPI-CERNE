@@ -3,6 +3,7 @@ import {
     RefStatus, PranchaStatus, Referencia, GabaritoItem,
     instanciarConjunto, conjuntoIdFor, rollupConjunto,
     canRefTransition, canPranchaTransition,
+    inferRefStatusFromDates, inferPranchaStatusFromDates,
     catalogoKpis, carteiraKpis, conjuntosKpis,
     planPortfolioMigration, inferPapel, execMoldeKey, buildCodigoCompleto,
 } from './portfolio';
@@ -203,6 +204,31 @@ describe('ciclos de vida independentes', () => {
             { statusAprovacao: RefStatus.APROVADO },
         ]);
         expect(k).toEqual({ total: 6, rascunho: 1, emElaboracao: 2, elaborado: 1, enviado: 1, aprovado: 1, reprovado: 0 });
+    });
+
+    it('status da referência retroage/avança conforme as datas editadas', () => {
+        // Apagar início e fim de elaboração retroage "Elaborado" → "Rascunho"
+        expect(inferRefStatusFromDates({}, RefStatus.ELABORADO)).toBe(RefStatus.RASCUNHO);
+        // Apagar só o fim retroage "Elaborado" → "Em Elaboração"
+        expect(inferRefStatusFromDates({ startDate: '2026-05-01' }, RefStatus.ELABORADO)).toBe(RefStatus.EM_ELABORACAO);
+        // Datas completas de elaboração → "Elaborado"
+        expect(inferRefStatusFromDates({ startDate: '2026-05-01', endDate: '2026-05-10' }, RefStatus.EM_ELABORACAO)).toBe(RefStatus.ELABORADO);
+        // Com envio → "Enviado"; apagar envio retroage para "Elaborado"
+        expect(inferRefStatusFromDates({ startDate: 'a', endDate: 'b', sendDate: 'c' }, RefStatus.ELABORADO)).toBe(RefStatus.ENVIADO);
+        // Terminal preserva a decisão (Aprovado/Reprovado não é derivável de data)
+        expect(inferRefStatusFromDates({ startDate: 'a', endDate: 'b', sendDate: 'c', feedbackDate: 'd' }, RefStatus.APROVADO)).toBe(RefStatus.APROVADO);
+        expect(inferRefStatusFromDates({ startDate: 'a', endDate: 'b', sendDate: 'c', feedbackDate: 'd' }, RefStatus.REPROVADO)).toBe(RefStatus.REPROVADO);
+        // Apagar o feedback tira do terminal e volta para "Enviado"
+        expect(inferRefStatusFromDates({ startDate: 'a', endDate: 'b', sendDate: 'c' }, RefStatus.APROVADO)).toBe(RefStatus.ENVIADO);
+    });
+
+    it('status da prancha retroage/avança conforme as datas editadas', () => {
+        expect(inferPranchaStatusFromDates({}, PranchaStatus.CONCLUIDO)).toBe(PranchaStatus.A_FAZER);
+        expect(inferPranchaStatusFromDates({ startDate: 'a' }, PranchaStatus.CONCLUIDO)).toBe(PranchaStatus.EM_ANDAMENTO);
+        expect(inferPranchaStatusFromDates({ startDate: 'a', endDate: 'b' }, PranchaStatus.EM_ANDAMENTO)).toBe(PranchaStatus.CONCLUIDO);
+        expect(inferPranchaStatusFromDates({ startDate: 'a', endDate: 'b', sendDate: 'c' }, PranchaStatus.CONCLUIDO)).toBe(PranchaStatus.ENVIADO);
+        expect(inferPranchaStatusFromDates({ startDate: 'a', endDate: 'b', sendDate: 'c', feedbackDate: 'd' }, PranchaStatus.REPROVADO)).toBe(PranchaStatus.REPROVADO);
+        expect(inferPranchaStatusFromDates({ startDate: 'a', endDate: 'b', sendDate: 'c' }, PranchaStatus.REPROVADO)).toBe(PranchaStatus.ENVIADO);
     });
 
     it('os KPIs contam apenas entidades comparáveis — nunca misturam os níveis', () => {

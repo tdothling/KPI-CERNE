@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { BookOpen, Plus, Send, BadgeCheck, ThumbsDown, FileEdit, Trash2, Layers, X, ChevronDown, ChevronRight, MapPin, GripVertical, PencilLine, Play, CheckCircle2, Hammer, Timer } from 'lucide-react';
 import { parseISO, isValid } from 'date-fns';
 import { ClientDoc, Discipline, Period } from '../../types';
-import { Referencia, Conjunto, RefStatus, GabaritoItem, canRefTransition, catalogoKpis, buildCodigoCompleto } from '../../domain/portfolio';
+import { Referencia, Conjunto, RefStatus, GabaritoItem, canRefTransition, catalogoKpis, buildCodigoCompleto, inferRefStatusFromDates } from '../../domain/portfolio';
 import { KpiCard, StatusBadge, REF_STATUS_STYLE, DateActionModal, DateActionRequest, TimelineDatesEditor, TimelineDates, REF_TIMELINE_FIELDS } from './shared';
 import { formatDateDisplay, calculateBusinessDaysWithHolidays } from '../../utils';
 
@@ -315,12 +315,24 @@ function ReferenciaModal({ referencia, clients, onClose, onSave }: {
             }
         });
 
+        // Aplica a lógica do fluxo: se o usuário mexeu nas datas, o status é derivado
+        // da linha do tempo (apagar início/fim retroage o status; preencher avança).
+        const dateChanged = isEdit && ['startDate', 'endDate', 'sendDate', 'feedbackDate'].some(
+            k => (dates[k as keyof TimelineDates] as string || '') !== ((referencia as any)[k] || '')
+        );
+        const nextStatus = dateChanged
+            ? inferRefStatusFromDates(
+                { startDate: dates.startDate, endDate: dates.endDate, sendDate: dates.sendDate, feedbackDate: dates.feedbackDate },
+                referencia!.statusAprovacao,
+            )
+            : (referencia?.statusAprovacao || RefStatus.RASCUNHO);
+
         onSave({
             codigoCliente: codigoCliente.trim(),
             client: client.trim(),
             discipline,
             revisao,
-            statusAprovacao: referencia?.statusAprovacao || RefStatus.RASCUNHO,
+            statusAprovacao: nextStatus,
             gabarito: cleanGabarito,
             ...(observacao.trim() ? { observacao: observacao.trim() } : {}),
             ...datePayload,
@@ -406,7 +418,7 @@ function ReferenciaModal({ referencia, clients, onClose, onSave }: {
                             fields={REF_TIMELINE_FIELDS}
                             value={dates}
                             onChange={patch => setDates(prev => ({ ...prev, ...patch }))}
-                            note="Ajuste qualquer data do preliminar. O tempo de execução usa início/conclusão; os dias úteis com o cliente recalculam a partir de envio e feedback. Deixe em branco para limpar."
+                            note="Ajuste qualquer data do preliminar. O status segue a linha do tempo: apagar início/fim de elaboração retroage o status (ex.: Elaborado → Em Elaboração/Rascunho). Os dias úteis com o cliente recalculam a partir de envio e feedback."
                         />
                     </div>
                 )}

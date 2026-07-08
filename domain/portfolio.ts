@@ -145,6 +145,44 @@ export const canPranchaTransition = (from: unknown, to: unknown): boolean => {
     return PRANCHA_TRANSITIONS[from].includes(to);
 };
 
+// --- STATUS DERIVADO DAS DATAS (edição manual = correção da linha do tempo) ---
+//
+// Quando o usuário edita/apaga datas, o status deve refletir a etapa mais avançada
+// cujo marco (data) existe — retroagindo ou avançando conforme a linha do tempo.
+// A decisão TERMINAL (Aprovado vs Reprovado) não é derivável de uma data: ambas têm
+// feedback. Por isso, com envio+feedback presentes, preserva-se a decisão atual;
+// se ainda não havia decisão, o status para em "Enviado" (o veredito é dado pelos
+// botões Aprovar/Reprovar).
+
+export interface CycleDates {
+    startDate?: string;
+    endDate?: string;
+    sendDate?: string;
+    feedbackDate?: string;
+}
+
+export const inferRefStatusFromDates = (dates: CycleDates, current: RefStatus): RefStatus => {
+    const { startDate, endDate, sendDate, feedbackDate } = dates;
+    if (sendDate && feedbackDate) {
+        return current === RefStatus.APROVADO || current === RefStatus.REPROVADO ? current : RefStatus.ENVIADO;
+    }
+    if (sendDate) return RefStatus.ENVIADO;
+    if (endDate) return RefStatus.ELABORADO;
+    if (startDate) return RefStatus.EM_ELABORACAO;
+    return RefStatus.RASCUNHO;
+};
+
+export const inferPranchaStatusFromDates = (dates: CycleDates, current: PranchaStatus): PranchaStatus => {
+    const { startDate, endDate, sendDate, feedbackDate } = dates;
+    if (sendDate && feedbackDate) {
+        return current === PranchaStatus.APROVADO || current === PranchaStatus.REPROVADO ? current : PranchaStatus.ENVIADO;
+    }
+    if (sendDate) return PranchaStatus.ENVIADO;
+    if (endDate) return PranchaStatus.CONCLUIDO;
+    if (startDate) return PranchaStatus.EM_ANDAMENTO;
+    return PranchaStatus.A_FAZER;
+};
+
 // --- IDENTIDADE DO CONJUNTO (unicidade referência+base) ---
 
 // Slug tolerante a maiúsculas/acentos/espaços: "KM 104+000" e "km 104+000"
