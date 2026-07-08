@@ -9,17 +9,23 @@
 //   Prancha    (documento individual do conjunto)
 //
 // Os DOIS ciclos de vida são independentes e nunca compartilham a mesma coluna:
-//   Referência (validação com o cliente): Rascunho → Enviado → Aprovado/Reprovado
+//   Referência (elaboração + validação): Rascunho → Em Elaboração → Elaborado → Enviado → Aprovado/Reprovado
 //   Prancha (execução/entrega): A Fazer → Em Andamento → Concluído → Enviado → Aprovado/Reprovado
-// "Reprovado" na prancha é terminal encerrável: gera-se uma revisão e o ciclo recomeça.
+// "Reprovado" é terminal encerrável nos dois ciclos: gera-se uma revisão e o ciclo recomeça.
+// As etapas de elaboração da referência existem para MEDIR o tempo de execução do
+// projeto preliminar (início→conclusão) e os dias com o cliente (envio→feedback).
 
 import { Discipline, Period, ProjectFile, ProjectPhase, Revision, Status } from '../types';
 import { getProjectBaseName } from '../utils';
 
-// --- CICLO DA REFERÊNCIA (validação com o cliente) ---
+// --- CICLO DA REFERÊNCIA (elaboração do preliminar + validação com o cliente) ---
+// Os valores são strings DISTINTAS das do ciclo da prancha ("Em Elaboração" ≠
+// "Em Andamento") para que uma máquina de estado rejeite status da outra.
 
 export enum RefStatus {
-    RASCUNHO = 'Rascunho',
+    RASCUNHO = 'Rascunho',                 // registrada, elaboração ainda não iniciada
+    EM_ELABORACAO = 'Em Elaboração',       // preliminar sendo produzido (mede execução)
+    ELABORADO = 'Elaborado',               // execução concluída, pronto para envio
     ENVIADO = 'Enviado ao Cliente',
     APROVADO = 'Aprovado',
     REPROVADO = 'Reprovado',
@@ -55,10 +61,14 @@ export interface Referencia {
     gabarito: GabaritoItem[];   // saídas esperadas ao instanciar (NUNCA é consumida)
 
     startDate?: string;         // ISO — início da elaboração do molde
+    startPeriod?: Period;
+    endDate?: string;           // conclusão da elaboração (fecha o tempo de execução)
+    endPeriod?: Period;
     sendDate?: string;          // envio ao cliente
     sendPeriod?: Period;
     feedbackDate?: string;      // aprovação/reprovação
     feedbackPeriod?: Period;
+    blockedDays?: number;       // dias úteis parados com o cliente (envio→feedback)
 
     observacao?: string;
     importada?: boolean;        // stub criado pela migração (executivo sem preliminar)
@@ -98,10 +108,13 @@ export interface Prancha {
 // --- MÁQUINAS DE ESTADO (independentes: uma NÃO aceita status da outra) ---
 
 const REF_TRANSITIONS: Record<RefStatus, RefStatus[]> = {
-    [RefStatus.RASCUNHO]: [RefStatus.ENVIADO],
+    [RefStatus.RASCUNHO]: [RefStatus.EM_ELABORACAO],
+    [RefStatus.EM_ELABORACAO]: [RefStatus.ELABORADO],
+    [RefStatus.ELABORADO]: [RefStatus.ENVIADO],
     [RefStatus.ENVIADO]: [RefStatus.APROVADO, RefStatus.REPROVADO],
-    // Reprovado: gera-se nova revisão do molde e reenvia
-    [RefStatus.REPROVADO]: [RefStatus.ENVIADO],
+    // Reprovado: o retrabalho reabre a ELABORAÇÃO (nova revisão do molde) — assim
+    // o tempo de retrabalho também é medido antes do reenvio
+    [RefStatus.REPROVADO]: [RefStatus.EM_ELABORACAO],
     [RefStatus.APROVADO]: [],
 };
 
@@ -248,11 +261,13 @@ export const rollupConjunto = (pranchas: Pick<Prancha, 'status'>[]): ConjuntoRol
 
 // --- KPIs EM 3 NÍVEIS (cada nível conta APENAS entidades comparáveis) ---
 
-// Nível Referência: validação dos tipos com o cliente
+// Nível Referência: elaboração + validação dos tipos com o cliente
 export const catalogoKpis = (referencias: Pick<Referencia, 'statusAprovacao'>[]) => {
-    const k = { total: referencias.length, rascunho: 0, enviado: 0, aprovado: 0, reprovado: 0 };
+    const k = { total: referencias.length, rascunho: 0, emElaboracao: 0, elaborado: 0, enviado: 0, aprovado: 0, reprovado: 0 };
     referencias.forEach(r => {
         if (r.statusAprovacao === RefStatus.RASCUNHO) k.rascunho++;
+        else if (r.statusAprovacao === RefStatus.EM_ELABORACAO) k.emElaboracao++;
+        else if (r.statusAprovacao === RefStatus.ELABORADO) k.elaborado++;
         else if (r.statusAprovacao === RefStatus.ENVIADO) k.enviado++;
         else if (r.statusAprovacao === RefStatus.APROVADO) k.aprovado++;
         else if (r.statusAprovacao === RefStatus.REPROVADO) k.reprovado++;
@@ -331,13 +346,13 @@ export const inferPapel = (filename: string, fallbackIndex: number): string => {
 };
 
 const REF_STATUS_MAP: Partial<Record<Status, RefStatus>> = {
-    [Status.IN_PROGRESS]: RefStatus.RASCUNHO,
-    [Status.DONE]: RefStatus.RASCUNHO,
+    [Status.IN_PROGRESS]: RefStatus.EM_ELABORACAO,
+    [Status.DONE]: RefStatus.ELABORADO,
     [Status.WAITING_APPROVAL]: RefStatus.ENVIADO,
     [Status.APPROVED]: RefStatus.APROVADO,
     [Status.REJECTED]: RefStatus.REPROVADO,
-    // Executivo gerado sem envio: o novo modelo permite instanciar sem aprovação
-    [Status.SUPERSEDED]: RefStatus.RASCUNHO,
+    // Preliminar substituído pelo executivo: a elaboração terminou, mesmo sem envio
+    [Status.SUPERSEDED]: RefStatus.ELABORADO,
 };
 
 const PRANCHA_STATUS_MAP: Partial<Record<Status, PranchaStatus>> = {
@@ -408,10 +423,14 @@ export const planPortfolioMigration = (input: MigrationInput): MigrationPlan => 
             statusAprovacao: REF_STATUS_MAP[active.status] || RefStatus.RASCUNHO,
             gabarito: [], // semeado no passo 3
             ...(active.startDate ? { startDate: active.startDate } : {}),
+            ...(active.startPeriod ? { startPeriod: active.startPeriod } : {}),
+            ...(active.endDate ? { endDate: active.endDate } : {}),
+            ...(active.endPeriod ? { endPeriod: active.endPeriod } : {}),
             ...(active.sendDate ? { sendDate: active.sendDate } : {}),
             ...(active.sendPeriod ? { sendPeriod: active.sendPeriod } : {}),
             ...(active.feedbackDate ? { feedbackDate: active.feedbackDate } : {}),
             ...(active.feedbackPeriod ? { feedbackPeriod: active.feedbackPeriod } : {}),
+            ...(active.blockedDays ? { blockedDays: active.blockedDays } : {}),
             legacy: { source: 'projects', originalId: active.id },
         };
         refByKey.set(key, ref);

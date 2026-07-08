@@ -156,25 +156,42 @@ export function useAppData(projectFilter: ProjectFilterState) {
         deleteReferenciaFromDb(id).catch(e => alert("Erro ao excluir a referência: " + (e?.message || e)));
     };
 
-    // Ciclo de validação da Referência com o cliente (independente do ciclo das pranchas)
+    // Ciclo da Referência: elaboração do preliminar (mede o tempo de execução) +
+    // validação com o cliente. Independente do ciclo das pranchas.
     const handleMoveReferencia = (ref: Referencia, to: RefStatus, date: string, period: Period) => {
         if (!canRefTransition(ref.statusAprovacao, to)) {
             alert(`Transição inválida: "${ref.statusAprovacao}" não pode ir para "${to}".`);
             return;
         }
         const changes: Record<string, any> = { statusAprovacao: to };
+        if (to === RefStatus.EM_ELABORACAO) {
+            changes.startDate = date;
+            changes.startPeriod = period;
+            // Retrabalho após reprovação = nova revisão do molde, ciclo recomeça
+            if (ref.statusAprovacao === RefStatus.REPROVADO) {
+                changes.revisao = (ref.revisao || 0) + 1;
+                changes.endDate = ''; changes.sendDate = ''; changes.feedbackDate = '';
+            }
+        }
+        if (to === RefStatus.ELABORADO) {
+            changes.endDate = date;   // fecha o tempo de execução do preliminar
+            changes.endPeriod = period;
+        }
         if (to === RefStatus.ENVIADO) {
             changes.sendDate = date;
             changes.sendPeriod = period;
-            // Reenvio após reprovação = nova revisão do molde
-            if (ref.statusAprovacao === RefStatus.REPROVADO) {
-                changes.revisao = (ref.revisao || 0) + 1;
-                changes.feedbackDate = '';
-            }
         }
         if (to === RefStatus.APROVADO || to === RefStatus.REPROVADO) {
             changes.feedbackDate = date;
             changes.feedbackPeriod = period;
+            // Dias parados aguardando o cliente — mesmo cálculo das pranchas/projetos
+            if (ref.sendDate) {
+                const send = parseISO(ref.sendDate);
+                const feedback = parseISO(date);
+                if (isValid(send) && isValid(feedback) && feedback >= send) {
+                    changes.blockedDays = calculateBusinessDaysWithHolidays(send, feedback, holidays, ref.sendPeriod || 'MANHA', period);
+                }
+            }
         }
         patchReferenciaInDb(ref.id, changes).catch(e => alert("Erro ao mover a referência: " + (e?.message || e)));
     };

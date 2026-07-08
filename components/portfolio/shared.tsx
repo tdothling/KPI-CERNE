@@ -38,6 +38,8 @@ export function KpiCard({ color, icon, label, value, active, onClick }: { color:
 
 export const REF_STATUS_STYLE: Record<RefStatus, string> = {
     [RefStatus.RASCUNHO]: 'text-slate-600 bg-slate-100 border-slate-300 dark:bg-slate-700/60 dark:border-slate-600 dark:text-slate-300',
+    [RefStatus.EM_ELABORACAO]: 'text-amber-700 bg-amber-100 border-amber-300 dark:bg-amber-900/40 dark:border-amber-700 dark:text-amber-400',
+    [RefStatus.ELABORADO]: 'text-violet-700 bg-violet-100 border-violet-300 dark:bg-violet-900/40 dark:border-violet-700 dark:text-violet-400',
     [RefStatus.ENVIADO]: 'text-blue-700 bg-blue-100 border-blue-300 dark:bg-blue-900/40 dark:border-blue-700 dark:text-blue-400',
     [RefStatus.APROVADO]: 'text-emerald-700 bg-emerald-100 border-emerald-300 dark:bg-emerald-900/40 dark:border-emerald-700 dark:text-emerald-400',
     [RefStatus.REPROVADO]: 'text-rose-700 bg-rose-100 border-rose-300 dark:bg-rose-900/40 dark:border-rose-700 dark:text-rose-400',

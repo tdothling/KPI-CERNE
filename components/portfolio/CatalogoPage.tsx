@@ -1,14 +1,16 @@
 import React, { useMemo, useState } from 'react';
-import { BookOpen, Plus, Send, BadgeCheck, ThumbsDown, FileEdit, Trash2, Layers, X, ChevronDown, ChevronRight, MapPin, GripVertical, PencilLine } from 'lucide-react';
+import { BookOpen, Plus, Send, BadgeCheck, ThumbsDown, FileEdit, Trash2, Layers, X, ChevronDown, ChevronRight, MapPin, GripVertical, PencilLine, Play, CheckCircle2, Hammer, Timer } from 'lucide-react';
+import { parseISO, isValid } from 'date-fns';
 import { ClientDoc, Discipline, Period } from '../../types';
 import { Referencia, Conjunto, RefStatus, GabaritoItem, canRefTransition, catalogoKpis, buildCodigoCompleto } from '../../domain/portfolio';
 import { KpiCard, StatusBadge, REF_STATUS_STYLE, DateActionModal, DateActionRequest } from './shared';
-import { formatDateDisplay } from '../../utils';
+import { formatDateDisplay, calculateBusinessDaysWithHolidays } from '../../utils';
 
 interface CatalogoPageProps {
     referencias: Referencia[];
     conjuntos: Conjunto[];
     clients: ClientDoc[];       // apenas obras de rodovia
+    holidays: string[];
     readOnly: boolean;
     onAdd: (ref: Omit<Referencia, 'id'>) => void;
     onUpdate: (id: string, changes: Partial<Referencia>) => void;
@@ -17,10 +19,27 @@ interface CatalogoPageProps {
     onInstanciar: (ref: Referencia, base: string, codigoRodovia?: string) => Promise<boolean>;
 }
 
+// Tempo de execução do preliminar em dias úteis: início → conclusão da elaboração;
+// se ainda está em elaboração, mede até hoje (contador "correndo").
+const execDaysOf = (ref: Referencia, holidays: string[]): { days: number; running: boolean } | null => {
+    if (!ref.startDate) return null;
+    const start = parseISO(ref.startDate);
+    if (!isValid(start)) return null;
+    if (ref.endDate) {
+        const end = parseISO(ref.endDate);
+        if (!isValid(end) || end < start) return null;
+        return { days: calculateBusinessDaysWithHolidays(start, end, holidays, ref.startPeriod || 'MANHA', ref.endPeriod || 'TARDE'), running: false };
+    }
+    if (ref.statusAprovacao !== RefStatus.EM_ELABORACAO) return null;
+    const today = new Date();
+    if (today < start) return null;
+    return { days: calculateBusinessDaysWithHolidays(start, today, holidays, ref.startPeriod || 'MANHA', 'TARDE'), running: true };
+};
+
 type RefFilter = 'ALL' | RefStatus;
 
 export const CatalogoPage: React.FC<CatalogoPageProps> = ({
-    referencias, conjuntos, clients, readOnly,
+    referencias, conjuntos, clients, holidays, readOnly,
     onAdd, onUpdate, onDelete, onMove, onInstanciar,
 }) => {
     const [statusFilter, setStatusFilter] = useState<RefFilter>('ALL');
@@ -59,27 +78,35 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
 
     const askMove = (ref: Referencia, to: RefStatus) => {
         const cfg: Record<string, { title: string; confirmLabel: string; tone: DateActionRequest['tone'] }> = {
+            [RefStatus.EM_ELABORACAO]: { title: `Iniciar elaboração de "${ref.codigoCliente}"`, confirmLabel: 'Iniciar Elaboração', tone: 'brand' },
+            [RefStatus.ELABORADO]: { title: `Concluir elaboração de "${ref.codigoCliente}"`, confirmLabel: 'Concluir', tone: 'violet' },
             [RefStatus.ENVIADO]: { title: `Enviar "${ref.codigoCliente}" ao cliente`, confirmLabel: 'Registrar Envio', tone: 'blue' },
             [RefStatus.APROVADO]: { title: `Aprovar "${ref.codigoCliente}"`, confirmLabel: 'Aprovar', tone: 'emerald' },
             [RefStatus.REPROVADO]: { title: `Reprovar "${ref.codigoCliente}"`, confirmLabel: 'Reprovar', tone: 'rose' },
         };
         const c = cfg[to];
+        const descriptions: Partial<Record<RefStatus, string>> = {
+            [RefStatus.EM_ELABORACAO]: ref.statusAprovacao === RefStatus.REPROVADO
+                ? 'Retrabalho após reprovação: a revisão do molde será incrementada e o tempo de execução recomeça a contar.'
+                : 'A partir desta data o tempo de execução do preliminar passa a ser medido.',
+            [RefStatus.ELABORADO]: 'Fecha a medição do tempo de execução (dias úteis entre início e conclusão).',
+        };
         setDateAction({
             ...c,
-            description: ref.statusAprovacao === RefStatus.REPROVADO && to === RefStatus.ENVIADO
-                ? 'Reenvio após reprovação: a revisão do molde será incrementada automaticamente.'
-                : undefined,
+            description: descriptions[to],
             onConfirm: (date, period) => onMove(ref, to, date, period),
         });
     };
 
     return (
         <div className="space-y-4">
-            {/* KPIs nível Referência: validação dos TIPOS com o cliente (nunca mistura com pranchas) */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+            {/* KPIs nível Referência: elaboração + validação dos TIPOS (nunca mistura com pranchas) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
                 <KpiCard color="slate" icon={<BookOpen size={16} />} label="Todos os Tipos" value={kpis.total} active={statusFilter === 'ALL'} onClick={() => setStatusFilter('ALL')} />
-                <KpiCard color="blue" icon={<FileEdit size={16} />} label="Rascunho" value={kpis.rascunho} active={statusFilter === RefStatus.RASCUNHO} onClick={() => setStatusFilter(f => f === RefStatus.RASCUNHO ? 'ALL' : RefStatus.RASCUNHO)} />
-                <KpiCard color="amber" icon={<Send size={16} />} label="Com o Cliente" value={kpis.enviado} active={statusFilter === RefStatus.ENVIADO} onClick={() => setStatusFilter(f => f === RefStatus.ENVIADO ? 'ALL' : RefStatus.ENVIADO)} />
+                <KpiCard color="slate" icon={<FileEdit size={16} />} label="Rascunho" value={kpis.rascunho} active={statusFilter === RefStatus.RASCUNHO} onClick={() => setStatusFilter(f => f === RefStatus.RASCUNHO ? 'ALL' : RefStatus.RASCUNHO)} />
+                <KpiCard color="amber" icon={<Hammer size={16} />} label="Em Elaboração" value={kpis.emElaboracao} active={statusFilter === RefStatus.EM_ELABORACAO} onClick={() => setStatusFilter(f => f === RefStatus.EM_ELABORACAO ? 'ALL' : RefStatus.EM_ELABORACAO)} />
+                <KpiCard color="violet" icon={<CheckCircle2 size={16} />} label="Elaborados" value={kpis.elaborado} active={statusFilter === RefStatus.ELABORADO} onClick={() => setStatusFilter(f => f === RefStatus.ELABORADO ? 'ALL' : RefStatus.ELABORADO)} />
+                <KpiCard color="blue" icon={<Send size={16} />} label="Com o Cliente" value={kpis.enviado} active={statusFilter === RefStatus.ENVIADO} onClick={() => setStatusFilter(f => f === RefStatus.ENVIADO ? 'ALL' : RefStatus.ENVIADO)} />
                 <KpiCard color="emerald" icon={<BadgeCheck size={16} />} label="Tipos Aprovados" value={kpis.aprovado} active={statusFilter === RefStatus.APROVADO} onClick={() => setStatusFilter(f => f === RefStatus.APROVADO ? 'ALL' : RefStatus.APROVADO)} />
                 <KpiCard color="rose" icon={<ThumbsDown size={16} />} label="Reprovados" value={kpis.reprovado} active={statusFilter === RefStatus.REPROVADO} onClick={() => setStatusFilter(f => f === RefStatus.REPROVADO ? 'ALL' : RefStatus.REPROVADO)} />
             </div>
@@ -124,6 +151,7 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
                         <div className="divide-y divide-slate-100 dark:divide-slate-700/60">
                             {refs.map(ref => {
                                 const bases = conjuntosByRef.get(ref.id) || [];
+                                const exec = execDaysOf(ref, holidays);
                                 return (
                                     <div key={ref.id} className="px-4 py-3 flex flex-col lg:flex-row lg:items-center gap-3">
                                         <div className="flex-1 min-w-0">
@@ -133,12 +161,20 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
                                                 <StatusBadge label={ref.statusAprovacao} className={REF_STATUS_STYLE[ref.statusAprovacao]} />
                                                 {ref.importada && <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400" title="Criada pela migração a partir de executivos sem preliminar">importada</span>}
                                             </div>
-                                            <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                                            <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-500 dark:text-slate-400 flex-wrap">
                                                 <span>{ref.client}</span>
                                                 <span className="flex items-center gap-1"><GripVertical size={11} /> {ref.gabarito.length} entregável(is) no gabarito</span>
                                                 <span className="flex items-center gap-1"><MapPin size={11} /> {bases.length} base(s) instanciada(s)</span>
+                                                {ref.startDate && <span>Início: {formatDateDisplay(ref.startDate)}</span>}
+                                                {ref.endDate && <span>Conclusão: {formatDateDisplay(ref.endDate)}</span>}
                                                 {ref.sendDate && <span>Envio: {formatDateDisplay(ref.sendDate)}</span>}
                                                 {ref.feedbackDate && <span>Feedback: {formatDateDisplay(ref.feedbackDate)}</span>}
+                                                {exec && (
+                                                    <span className={`flex items-center gap-1 font-semibold ${exec.running ? 'text-amber-600 dark:text-amber-400' : 'text-violet-600 dark:text-violet-400'}`}>
+                                                        <Timer size={11} /> {exec.running ? `Em elaboração há ${exec.days}d úteis` : `Execução: ${exec.days}d úteis`}
+                                                    </span>
+                                                )}
+                                                {(ref.blockedDays || 0) > 0 && <span className="text-amber-600 dark:text-amber-400">{ref.blockedDays}d com o cliente</span>}
                                             </div>
                                         </div>
 
@@ -152,6 +188,12 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
                                                 >
                                                     <MapPin size={12} /> Instanciar em Base
                                                 </button>
+                                                {canRefTransition(ref.statusAprovacao, RefStatus.EM_ELABORACAO) && (
+                                                    <ActionBtn title={ref.statusAprovacao === RefStatus.REPROVADO ? 'Retrabalhar (nova revisão do molde)' : 'Iniciar elaboração (começa a medir o tempo de execução)'} tone="text-amber-600" onClick={() => askMove(ref, RefStatus.EM_ELABORACAO)}><Play size={13} /></ActionBtn>
+                                                )}
+                                                {canRefTransition(ref.statusAprovacao, RefStatus.ELABORADO) && (
+                                                    <ActionBtn title="Concluir elaboração (fecha o tempo de execução)" tone="text-violet-600" onClick={() => askMove(ref, RefStatus.ELABORADO)}><CheckCircle2 size={13} /></ActionBtn>
+                                                )}
                                                 {canRefTransition(ref.statusAprovacao, RefStatus.ENVIADO) && (
                                                     <ActionBtn title="Registrar envio ao cliente" onClick={() => askMove(ref, RefStatus.ENVIADO)}><Send size={13} /></ActionBtn>
                                                 )}

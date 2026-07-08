@@ -154,12 +154,20 @@ describe('unicidade referência+base', () => {
 // --- (d) Os dois ciclos de vida não se cruzam ---
 
 describe('ciclos de vida independentes', () => {
-    it('ciclo da referência: rascunho → enviado → aprovado/reprovado; reprovado permite reenvio', () => {
-        expect(canRefTransition(RefStatus.RASCUNHO, RefStatus.ENVIADO)).toBe(true);
+    it('ciclo da referência: rascunho → em elaboração → elaborado → enviado → aprovado/reprovado', () => {
+        expect(canRefTransition(RefStatus.RASCUNHO, RefStatus.EM_ELABORACAO)).toBe(true);
+        expect(canRefTransition(RefStatus.EM_ELABORACAO, RefStatus.ELABORADO)).toBe(true);
+        expect(canRefTransition(RefStatus.ELABORADO, RefStatus.ENVIADO)).toBe(true);
         expect(canRefTransition(RefStatus.ENVIADO, RefStatus.APROVADO)).toBe(true);
         expect(canRefTransition(RefStatus.ENVIADO, RefStatus.REPROVADO)).toBe(true);
-        expect(canRefTransition(RefStatus.REPROVADO, RefStatus.ENVIADO)).toBe(true);
-        expect(canRefTransition(RefStatus.RASCUNHO, RefStatus.APROVADO)).toBe(false); // não pula envio
+        // Reprovado reabre a ELABORAÇÃO (mede o retrabalho), não vai direto ao reenvio
+        expect(canRefTransition(RefStatus.REPROVADO, RefStatus.EM_ELABORACAO)).toBe(true);
+        expect(canRefTransition(RefStatus.REPROVADO, RefStatus.ENVIADO)).toBe(false);
+        // Etapas não podem ser puladas — é isso que garante a medição do tempo
+        expect(canRefTransition(RefStatus.RASCUNHO, RefStatus.ENVIADO)).toBe(false);
+        expect(canRefTransition(RefStatus.RASCUNHO, RefStatus.ELABORADO)).toBe(false);
+        expect(canRefTransition(RefStatus.EM_ELABORACAO, RefStatus.ENVIADO)).toBe(false);
+        expect(canRefTransition(RefStatus.RASCUNHO, RefStatus.APROVADO)).toBe(false);
         expect(canRefTransition(RefStatus.APROVADO, RefStatus.RASCUNHO)).toBe(false); // terminal
     });
 
@@ -176,10 +184,25 @@ describe('ciclos de vida independentes', () => {
         // Estados exclusivos da prancha não entram no ciclo da referência...
         expect(canRefTransition(PranchaStatus.A_FAZER, RefStatus.ENVIADO)).toBe(false);
         expect(canRefTransition(RefStatus.RASCUNHO, PranchaStatus.EM_ANDAMENTO)).toBe(false);
+        expect(canRefTransition(RefStatus.EM_ELABORACAO, PranchaStatus.CONCLUIDO)).toBe(false);
         expect(canRefTransition(PranchaStatus.CONCLUIDO, PranchaStatus.ENVIADO)).toBe(false);
         // ...e estados exclusivos da referência não entram no ciclo da prancha
         expect(canPranchaTransition(RefStatus.RASCUNHO, PranchaStatus.EM_ANDAMENTO)).toBe(false);
+        expect(canPranchaTransition(PranchaStatus.A_FAZER, RefStatus.EM_ELABORACAO)).toBe(false);
+        expect(canPranchaTransition(RefStatus.EM_ELABORACAO, RefStatus.ELABORADO)).toBe(false);
         expect(canPranchaTransition(PranchaStatus.ENVIADO, RefStatus.RASCUNHO)).toBe(false);
+    });
+
+    it('kpis do catálogo contam as etapas de elaboração separadamente', () => {
+        const k = catalogoKpis([
+            { statusAprovacao: RefStatus.RASCUNHO },
+            { statusAprovacao: RefStatus.EM_ELABORACAO },
+            { statusAprovacao: RefStatus.EM_ELABORACAO },
+            { statusAprovacao: RefStatus.ELABORADO },
+            { statusAprovacao: RefStatus.ENVIADO },
+            { statusAprovacao: RefStatus.APROVADO },
+        ]);
+        expect(k).toEqual({ total: 6, rascunho: 1, emElaboracao: 2, elaborado: 1, enviado: 1, aprovado: 1, reprovado: 0 });
     });
 
     it('os KPIs contam apenas entidades comparáveis — nunca misturam os níveis', () => {
@@ -292,6 +315,32 @@ describe('planPortfolioMigration', () => {
         });
         expect(plan.referencias).toHaveLength(1);
         expect(plan.referencias[0].client).toBe('Construcap 040RJ');
+    });
+
+    it('preliminar em produção migra para o fluxo de execução com as datas preservadas', () => {
+        const emProducao = makeProject({
+            id: 'p2', filename: 'PSP-CLIENTE-EST-R00',
+            phase: ProjectPhase.PRELIMINARY, status: Status.IN_PROGRESS,
+            startDate: '2026-06-01', startPeriod: 'MANHA',
+        });
+        const concluido = makeProject({
+            id: 'p3', filename: 'TCD-CLIENTE-DRE-R00',
+            phase: ProjectPhase.PRELIMINARY, status: Status.DONE,
+            startDate: '2026-05-04', endDate: '2026-05-22', endPeriod: 'TARDE',
+        });
+        const plan = planPortfolioMigration({
+            projects: [emProducao, concluido],
+            rodoviaClients: ['Construcap 040RJ'],
+            ...noExisting,
+        });
+        const psp = plan.referencias.find(r => r.codigoCliente.startsWith('PSP'))!;
+        const tcd = plan.referencias.find(r => r.codigoCliente.startsWith('TCD'))!;
+        // Em produção → Em Elaboração (o tempo segue correndo); Concluído → Elaborado
+        expect(psp.statusAprovacao).toBe(RefStatus.EM_ELABORACAO);
+        expect(psp.startDate).toBe('2026-06-01');
+        expect(tcd.statusAprovacao).toBe(RefStatus.ELABORADO);
+        expect(tcd.endDate).toBe('2026-05-22'); // fecha o tempo de execução medido
+        expect(tcd.endPeriod).toBe('TARDE');
     });
 
     it('famílias de revisão colapsam na revisão vigente', () => {
