@@ -270,6 +270,11 @@ function ReferenciaModal({ referencia, clients, onClose, onSave }: {
     const [discipline, setDiscipline] = useState<Discipline>(referencia?.discipline || Discipline.ARCHITECTURE);
     const [revisao, setRevisao] = useState(referencia?.revisao ?? 0);
     const [observacao, setObservacao] = useState(referencia?.observacao || '');
+    // Datas de execução editáveis (correção de lançamentos errados)
+    const [startDate, setStartDate] = useState(referencia?.startDate || '');
+    const [startPeriod, setStartPeriod] = useState<Period>(referencia?.startPeriod || 'MANHA');
+    const [endDate, setEndDate] = useState(referencia?.endDate || '');
+    const [endPeriod, setEndPeriod] = useState<Period>(referencia?.endPeriod || 'TARDE');
     const [gabarito, setGabarito] = useState<GabaritoItem[]>(
         referencia?.gabarito?.length ? referencia.gabarito : [{ id: crypto.randomUUID(), papel: 'Folha 101', sufixoCodigo: '' }]
     );
@@ -284,6 +289,14 @@ function ReferenciaModal({ referencia, clients, onClose, onSave }: {
             .map(g => ({ ...g, papel: g.papel.trim(), sufixoCodigo: g.sufixoCodigo?.trim() || undefined }))
             .filter(g => g.papel.length > 0);
         if (cleanGabarito.length === 0) { alert('O gabarito precisa de ao menos 1 entregável (ex.: Folha 101).'); return; }
+        if (startDate && endDate && endDate < startDate) {
+            alert('A data de conclusão da execução não pode ser anterior à data de início.'); return;
+        }
+
+        // Ao editar, enviamos as datas mesmo vazias ('') para que o patch as APAGUE
+        // quando o usuário limpa um lançamento errado. Numa referência nova, só enviamos
+        // o que estiver preenchido.
+        const isEdit = !!referencia;
 
         onSave({
             codigoCliente: codigoCliente.trim(),
@@ -293,7 +306,9 @@ function ReferenciaModal({ referencia, clients, onClose, onSave }: {
             statusAprovacao: referencia?.statusAprovacao || RefStatus.RASCUNHO,
             gabarito: cleanGabarito,
             ...(observacao.trim() ? { observacao: observacao.trim() } : {}),
-            ...(referencia?.startDate ? { startDate: referencia.startDate } : {}),
+            ...(isEdit ? { startDate, endDate } : (startDate ? { startDate } : {})),
+            ...(isEdit || startDate ? { startPeriod } : {}),
+            ...(isEdit || endDate ? { endPeriod } : {}),
             ...(referencia?.importada ? { importada: true } : {}),
         } as Omit<Referencia, 'id'>);
     };
@@ -367,6 +382,46 @@ function ReferenciaModal({ referencia, clients, onClose, onSave }: {
                         ))}
                     </div>
                 </div>
+
+                {/* Datas de execução do preliminar — editáveis para corrigir lançamentos.
+                    Só aparecem ao EDITAR: numa referência nova elas são registradas pelo fluxo (Iniciar/Concluir). */}
+                {referencia && (
+                    <div className="mb-4 bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-lg p-3">
+                        <div className="flex items-center gap-1.5 mb-1">
+                            <Timer size={13} className="text-violet-500" />
+                            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Datas de Execução (correção)</label>
+                        </div>
+                        <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-3">
+                            Ajuste início e conclusão da elaboração do preliminar. O tempo de execução (dias úteis) é recalculado a partir delas. Deixe em branco para limpar.
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <span className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Início da Execução</span>
+                                <div className="flex gap-2">
+                                    <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+                                        className="flex-1 min-w-0 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-sm rounded-lg p-2" />
+                                    <select value={startPeriod} onChange={e => setStartPeriod(e.target.value as Period)}
+                                        className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-xs rounded-lg p-2">
+                                        <option value="MANHA">Manhã</option>
+                                        <option value="TARDE">Tarde</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <span className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Conclusão da Execução</span>
+                                <div className="flex gap-2">
+                                    <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
+                                        className="flex-1 min-w-0 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-sm rounded-lg p-2" />
+                                    <select value={endPeriod} onChange={e => setEndPeriod(e.target.value as Period)}
+                                        className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-xs rounded-lg p-2">
+                                        <option value="MANHA">Manhã</option>
+                                        <option value="TARDE">Tarde</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 <div className="mb-6">
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Observações</label>
