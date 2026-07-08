@@ -39,14 +39,24 @@ const checkAuth = () => {
 const normalizeName = (s: string | undefined | null) => (s || '').trim().toLowerCase();
 
 // Security Helper: Remove campos undefined que podem quebrar o Firestore ou causar inconsistência
-const sanitizeData = (data: any) => {
-  const clean: any = {};
-  Object.keys(data).forEach(key => {
-    if (data[key] !== undefined) {
-      clean[key] = data[key];
-    }
-  });
-  return clean;
+// Remove `undefined` recursivamente. O Firestore rejeita `undefined` em QUALQUER
+// nível (inclusive dentro de arrays de objetos, ex.: gabarito[].sufixoCodigo),
+// então a limpeza precisa descer na estrutura, não só no nível raiz.
+const sanitizeData = (data: any): any => {
+  if (Array.isArray(data)) {
+    return data.map(sanitizeData);
+  }
+  // Objetos "puros" (mapas). Datas, Timestamps e outros objetos de classe passam intactos.
+  if (data && typeof data === 'object' && (data.constructor === Object || Object.getPrototypeOf(data) === null)) {
+    const clean: any = {};
+    Object.keys(data).forEach(key => {
+      if (data[key] !== undefined) {
+        clean[key] = sanitizeData(data[key]);
+      }
+    });
+    return clean;
+  }
+  return data;
 };
 
 export const subscribeToProjects = (callback: (data: ProjectFile[]) => void, filter?: ProjectFilterState) => {
