@@ -140,8 +140,27 @@ export function useAppData(projectFilter: ProjectFilterState) {
         addReferenciaToDb(ref).catch(e => alert("Erro ao criar a referência: " + (e?.message || e)));
     };
 
+    // Recalcula os dias úteis parados com o cliente (envio→feedback) a partir do
+    // estado resultante da edição. Retorna 0 quando falta alguma das duas datas.
+    const recomputeBlockedDays = (sendDate?: string, sendPeriod?: Period, feedbackDate?: string, feedbackPeriod?: Period) => {
+        if (!sendDate || !feedbackDate) return 0;
+        const send = parseISO(sendDate);
+        const feedback = parseISO(feedbackDate);
+        if (isValid(send) && isValid(feedback) && feedback >= send) {
+            return calculateBusinessDaysWithHolidays(send, feedback, holidays, sendPeriod || 'MANHA', feedbackPeriod || 'TARDE');
+        }
+        return 0;
+    };
+
     const handleUpdateReferencia = (id: string, changes: Partial<Referencia>) => {
-        patchReferenciaInDb(id, changes).catch(e => alert("Erro ao salvar a referência: " + (e?.message || e)));
+        const patch: Record<string, any> = { ...changes };
+        // Se a edição tocou envio/feedback, mantém blockedDays coerente
+        if (['sendDate', 'sendPeriod', 'feedbackDate', 'feedbackPeriod'].some(k => k in changes)) {
+            const ref = referencias.find(r => r.id === id);
+            const next = { ...ref, ...changes };
+            patch.blockedDays = recomputeBlockedDays(next.sendDate, next.sendPeriod, next.feedbackDate, next.feedbackPeriod);
+        }
+        patchReferenciaInDb(id, patch).catch(e => alert("Erro ao salvar a referência: " + (e?.message || e)));
     };
 
     const handleDeleteReferencia = (id: string) => {
@@ -265,7 +284,13 @@ export function useAppData(projectFilter: ProjectFilterState) {
     };
 
     const handleUpdatePrancha = (id: string, changes: Partial<Prancha>) => {
-        patchPranchaInDb(id, changes).catch(e => alert("Erro ao salvar a prancha: " + (e?.message || e)));
+        const patch: Record<string, any> = { ...changes };
+        if (['sendDate', 'sendPeriod', 'feedbackDate', 'feedbackPeriod'].some(k => k in changes)) {
+            const prancha = pranchas.find(p => p.id === id);
+            const next = { ...prancha, ...changes };
+            patch.blockedDays = recomputeBlockedDays(next.sendDate, next.sendPeriod, next.feedbackDate, next.feedbackPeriod);
+        }
+        patchPranchaInDb(id, patch).catch(e => alert("Erro ao salvar a prancha: " + (e?.message || e)));
     };
 
     // Prancha extra fora do gabarito (ex.: detalhe específico de uma base)

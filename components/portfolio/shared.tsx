@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Clock } from 'lucide-react';
 import { Period } from '../../types';
 import { PranchaStatus, RefStatus } from '../../domain/portfolio';
 
@@ -80,6 +80,80 @@ const TONE_BTN: Record<NonNullable<DateActionRequest['tone']>, string> = {
     blue: 'bg-blue-600 hover:bg-blue-700',
     violet: 'bg-violet-600 hover:bg-violet-700',
 };
+
+// --- Editor de linha do tempo (todas as datas de input viram editáveis) ---
+// Reutilizado nos modais de Referência e Prancha. Cada data traz seu período
+// (Manhã/Tarde). Deixar uma data em branco a APAGA no salvamento (correção).
+
+export interface TimelineDates {
+    startDate?: string; startPeriod?: Period;
+    endDate?: string; endPeriod?: Period;
+    sendDate?: string; sendPeriod?: Period;
+    feedbackDate?: string; feedbackPeriod?: Period;
+}
+
+// Quais campos de data expor e com que rótulo (a ordem segue o ciclo).
+export interface TimelineFieldSpec {
+    dateKey: keyof TimelineDates;
+    periodKey: keyof TimelineDates;
+    label: string;
+}
+
+export const REF_TIMELINE_FIELDS: TimelineFieldSpec[] = [
+    { dateKey: 'startDate', periodKey: 'startPeriod', label: 'Início da Execução' },
+    { dateKey: 'endDate', periodKey: 'endPeriod', label: 'Conclusão da Execução' },
+    { dateKey: 'sendDate', periodKey: 'sendPeriod', label: 'Envio ao Cliente' },
+    { dateKey: 'feedbackDate', periodKey: 'feedbackPeriod', label: 'Feedback (aprov./reprov.)' },
+];
+
+export const PRANCHA_TIMELINE_FIELDS: TimelineFieldSpec[] = [
+    { dateKey: 'startDate', periodKey: 'startPeriod', label: 'Início da Execução' },
+    { dateKey: 'endDate', periodKey: 'endPeriod', label: 'Conclusão (fim da execução)' },
+    { dateKey: 'sendDate', periodKey: 'sendPeriod', label: 'Envio ao Cliente' },
+    { dateKey: 'feedbackDate', periodKey: 'feedbackPeriod', label: 'Feedback (aprov./reprov.)' },
+];
+
+export function TimelineDatesEditor({ fields, value, onChange, note }: {
+    fields: TimelineFieldSpec[];
+    value: TimelineDates;
+    onChange: (patch: Partial<TimelineDates>) => void;
+    note?: string;
+}) {
+    return (
+        <div className="bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-lg p-3">
+            <div className="flex items-center gap-1.5 mb-1">
+                <Clock size={13} className="text-violet-500" />
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Linha do Tempo (correção)</label>
+            </div>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-3">
+                {note || 'Ajuste qualquer data do processo. Os dias úteis com o cliente são recalculados a partir de envio e feedback. Deixe em branco para limpar.'}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {fields.map(f => (
+                    <div key={f.dateKey as string}>
+                        <span className="block text-[10px] font-bold text-slate-400 uppercase mb-1">{f.label}</span>
+                        <div className="flex gap-2">
+                            <input
+                                type="date"
+                                value={(value[f.dateKey] as string) || ''}
+                                onChange={e => onChange({ [f.dateKey]: e.target.value })}
+                                className="flex-1 min-w-0 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-sm rounded-lg p-2"
+                            />
+                            <select
+                                value={(value[f.periodKey] as Period) || 'MANHA'}
+                                onChange={e => onChange({ [f.periodKey]: e.target.value as Period })}
+                                className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-xs rounded-lg p-2"
+                            >
+                                <option value="MANHA">Manhã</option>
+                                <option value="TARDE">Tarde</option>
+                            </select>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
 
 export function DateActionModal({ request, onClose }: { request: DateActionRequest; onClose: () => void }) {
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
