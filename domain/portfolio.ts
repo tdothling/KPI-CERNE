@@ -335,6 +335,36 @@ export const gerarReferenciasDisciplinas = (input: GerarDisciplinasInput): Gerar
     return result;
 };
 
+// Geração em LOTE: várias referências de origem (ex.: todas as ARQ) → disciplinas.
+// Reaproveita gerarReferenciasDisciplinas por origem, acumulando os códigos já
+// planejados para que o próprio lote nunca gere duplicata (dedup intra-lote).
+export interface GerarDisciplinasLoteInput {
+    origens: Pick<Referencia, 'codigoCliente' | 'client' | 'discipline' | 'gabarito' | 'observacao'>[];
+    destinos: { discipline: Discipline; sigla: string }[];
+    existingReferencias: Pick<Referencia, 'client' | 'codigoCliente'>[];
+}
+
+export interface GerarDisciplinasLotePlan {
+    novas: Omit<Referencia, 'id'>[];
+    puladas: string[];
+    porOrigem: { codigoCliente: string; count: number }[];
+}
+
+export const planGerarDisciplinasLote = (input: GerarDisciplinasLoteInput): GerarDisciplinasLotePlan => {
+    const plan: GerarDisciplinasLotePlan = { novas: [], puladas: [], porOrigem: [] };
+    // Cresce à medida que planeja: o que já foi planejado conta como "existente"
+    // para as próximas origens (evita duas origens gerarem o mesmo código).
+    const acc: Pick<Referencia, 'client' | 'codigoCliente'>[] = [...input.existingReferencias];
+    input.origens.forEach(origem => {
+        const r = gerarReferenciasDisciplinas({ origem, destinos: input.destinos, existingReferencias: acc });
+        plan.novas.push(...r.novas);
+        plan.puladas.push(...r.puladas);
+        plan.porOrigem.push({ codigoCliente: origem.codigoCliente, count: r.novas.length });
+        r.novas.forEach(n => acc.push({ client: n.client, codigoCliente: n.codigoCliente }));
+    });
+    return plan;
+};
+
 // --- INSTANCIAR EM LOTE (matriz referências × bases) ---
 //
 // Planejador puro para replicação em massa: cada combinação referência×base vira

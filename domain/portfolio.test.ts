@@ -5,7 +5,7 @@ import {
     canRefTransition, canPranchaTransition,
     inferRefStatusFromDates, inferPranchaStatusFromDates,
     planInstanciacaoLote,
-    swapDisciplinaSigla, gerarReferenciasDisciplinas, DISCIPLINA_SIGLA,
+    swapDisciplinaSigla, gerarReferenciasDisciplinas, planGerarDisciplinasLote, DISCIPLINA_SIGLA,
     catalogoKpis, carteiraKpis, conjuntosKpis,
     planPortfolioMigration, inferPapel, execMoldeKey, buildCodigoCompleto,
 } from './portfolio';
@@ -221,6 +221,41 @@ describe('gerarReferenciasDisciplinas', () => {
             existingReferencias: [arq, outraObra],
         });
         expect(r.novas).toHaveLength(1);
+    });
+
+    it('lote: gera para várias origens de uma vez, com resumo por origem', () => {
+        const arqBSO = { ...arq };
+        const arqPSP: Referencia = { ...arq, id: 'ref-arq-psp', codigoCliente: 'PSP200-VIARAPOSOS-ARQ' };
+        const plan = planGerarDisciplinasLote({
+            origens: [arqBSO, arqPSP],
+            destinos: [
+                { discipline: Discipline.COVERAGE, sigla: 'COB' },
+                { discipline: Discipline.ELECTRICAL, sigla: 'ELE' },
+            ],
+            existingReferencias: [arqBSO, arqPSP],
+        });
+        expect(plan.novas).toHaveLength(4); // 2 origens × 2 disciplinas
+        expect(plan.novas.map(n => n.codigoCliente).sort()).toEqual([
+            'BSO100-VIARAPOSOS-COB', 'BSO100-VIARAPOSOS-ELE',
+            'PSP200-VIARAPOSOS-COB', 'PSP200-VIARAPOSOS-ELE',
+        ]);
+        expect(plan.porOrigem).toEqual([
+            { codigoCliente: 'BSO100-VIARAPOSOS-ARQ', count: 2 },
+            { codigoCliente: 'PSP200-VIARAPOSOS-ARQ', count: 2 },
+        ]);
+    });
+
+    it('lote: pula no total o que já existe e não duplica dentro do próprio lote', () => {
+        const arqBSO = { ...arq };
+        const cobExistente: Referencia = { ...arq, id: 'c', codigoCliente: 'BSO100-VIARAPOSOS-COB', discipline: Discipline.COVERAGE };
+        const plan = planGerarDisciplinasLote({
+            origens: [arqBSO, arqBSO], // mesma origem repetida: a 2ª não recria o que a 1ª planejou
+            destinos: [{ discipline: Discipline.COVERAGE, sigla: 'COB' }, { discipline: Discipline.FOUNDATION, sigla: 'FUN' }],
+            existingReferencias: [arqBSO, cobExistente],
+        });
+        // COB já existe (pulada nas duas passagens); FUN é criada uma única vez
+        expect(plan.novas.map(n => n.codigoCliente)).toEqual(['BSO100-VIARAPOSOS-FUN']);
+        expect(plan.puladas).toContain('BSO100-VIARAPOSOS-COB');
     });
 
     it('catálogo de siglas cobre as disciplinas do contrato', () => {

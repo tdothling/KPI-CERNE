@@ -142,12 +142,16 @@ export function useAppData(projectFilter: ProjectFilterState) {
 
     // Criação em lote (geração de disciplinas a partir da Arquitetura).
     // Sequencial e tolerante a falha isolada: reporta o resumo em vez de abortar.
-    const handleAddReferencias = async (refs: Omit<Referencia, 'id'>[]): Promise<{ criadas: number; erros: string[] }> => {
+    const handleAddReferencias = async (
+        refs: Omit<Referencia, 'id'>[],
+        onProgress?: (done: number, total: number) => void
+    ): Promise<{ criadas: number; erros: string[] }> => {
         let criadas = 0;
         const erros: string[] = [];
-        for (const ref of refs) {
-            try { await addReferenciaToDb(ref); criadas++; }
-            catch (e: any) { erros.push(`${ref.codigoCliente}: ${e?.message || e}`); }
+        for (let i = 0; i < refs.length; i++) {
+            try { await addReferenciaToDb(refs[i]); criadas++; }
+            catch (e: any) { erros.push(`${refs[i].codigoCliente}: ${e?.message || e}`); }
+            onProgress?.(i + 1, refs.length);
         }
         return { criadas, erros };
     };
