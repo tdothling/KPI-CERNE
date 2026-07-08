@@ -216,6 +216,10 @@ export interface ClientDoc {
   location: string;
   type: SiteType;
   numberOfBases?: number;
+  // Obras de rodovia: bases (KM/trecho) NOMEADAS, registradas aqui e usadas como
+  // fonte única de seleção na instanciação do Catálogo — evita grafias divergentes
+  // da mesma base ("KM 104" vs "104+000"). Para HIGHWAY, numberOfBases = bases.length.
+  bases?: string[];
 
   // SLA Padrão da Obra
   contractDate?: string;

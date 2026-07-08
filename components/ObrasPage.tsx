@@ -7,6 +7,7 @@ import {
 import { ClientDoc, SiteType, ObraStatus } from '../types';
 import { format, parseISO, differenceInDays, addDays } from 'date-fns';
 import { getEffectiveStatus } from '../utils';
+import { slugify } from '../domain/portfolio';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -72,6 +73,7 @@ interface FormState {
   location: string;
   type: SiteType;
   numberOfBases: number;
+  bases: string[];          // rodovia: bases nomeadas (fonte da instanciação no Catálogo)
   contractDate: string;
   deadlineDays: number | undefined;
   obraStatus: ObraStatus;
@@ -82,7 +84,7 @@ interface FormState {
 }
 
 const defaultForm: FormState = {
-  name: '', location: '', type: SiteType.CONSTRUCTION_SITE, numberOfBases: 0,
+  name: '', location: '', type: SiteType.CONSTRUCTION_SITE, numberOfBases: 0, bases: [],
   contractDate: '', deadlineDays: undefined, obraStatus: ObraStatus.ACTIVE,
   completedAt: '', expectedCompletionDate: '', responsavel: '', observacoes: '',
 };
@@ -93,6 +95,7 @@ function clientToForm(c: ClientDoc): FormState {
     location: c.location || '',
     type: c.type,
     numberOfBases: c.numberOfBases || 0,
+    bases: c.bases || [],
     contractDate: c.contractDate || '',
     deadlineDays: c.deadlineDays,
     obraStatus: getEffectiveStatus(c),
@@ -178,11 +181,18 @@ export const ObrasPage: React.FC<ObrasPageProps> = ({
     if (isDuplicate) { alert('Já existe uma obra com este nome.'); return; }
 
     const needsCompletedAt = formData.obraStatus === ObraStatus.COMPLETED || formData.obraStatus === ObraStatus.CANCELLED;
+    // Rodovia: bases nomeadas limpas; o número de bases deriva da lista (sem redundância)
+    const cleanBases = formData.type === SiteType.HIGHWAY
+      ? formData.bases.map(b => b.trim()).filter(Boolean)
+      : [];
     const payload: Omit<ClientDoc, 'id'> = {
       name: formData.name.trim(),
       location: formData.location,
       type: formData.type,
-      numberOfBases: formData.numberOfBases || undefined,
+      numberOfBases: formData.type === SiteType.HIGHWAY
+        ? (cleanBases.length || undefined)
+        : (formData.numberOfBases || undefined),
+      bases: cleanBases.length > 0 ? cleanBases : undefined,
       contractDate: formData.contractDate || undefined,
       deadlineDays: formData.deadlineDays,
       obraStatus: formData.obraStatus,
@@ -622,7 +632,7 @@ function ObraFormModal({ form, onChange, onSubmit, onClose, isEditing }: ObraFor
                   ].map(opt => (
                     <label key={opt.value} className={`flex items-center gap-2 cursor-pointer p-3 rounded-lg border transition-colors ${form.type === opt.value ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}`}>
                       <input type="radio" name="siteType" value={opt.value} checked={form.type === opt.value}
-                        onChange={() => set({ type: opt.value, numberOfBases: 0 })}
+                        onChange={() => set({ type: opt.value, numberOfBases: 0, bases: [] })}
                         className="text-brand-600 focus:ring-brand-500"
                       />
                       <div>
@@ -634,13 +644,25 @@ function ObraFormModal({ form, onChange, onSubmit, onClose, isEditing }: ObraFor
                 </div>
               </div>
 
-              {(form.type === SiteType.OPERATIONAL_BASE || form.type === SiteType.HIGHWAY) && (
+              {form.type === SiteType.OPERATIONAL_BASE && (
                 <div className="animate-in fade-in slide-in-from-top-2 duration-200">
                   <Label>Número de Bases</Label>
                   <input type="number" min="1" value={form.numberOfBases || ''}
                     onChange={e => set({ numberOfBases: parseInt(e.target.value) || 0 })}
                     placeholder="Qtd." className={inputCls + ' w-32'}
                   />
+                </div>
+              )}
+
+              {/* Rodovia: bases NOMEADAS — fonte única de seleção ao instanciar no Catálogo */}
+              {form.type === SiteType.HIGHWAY && (
+                <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+                  <Label>Bases da Rodovia (KM / trecho) — {form.bases.length} registrada(s)</Label>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-2">
+                    Estas bases aparecem para seleção ao instanciar referências no Catálogo. Registre aqui para padronizar a grafia
+                    (evita duplicidade como "KM 104" e "104+000").
+                  </p>
+                  <BasesEditor bases={form.bases} onChange={bases => set({ bases })} />
                 </div>
               )}
             </Section>
@@ -736,6 +758,55 @@ function ObraFormModal({ form, onChange, onSubmit, onClose, isEditing }: ObraFor
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+// ─── BasesEditor (rodovia: bases nomeadas com dedupe tolerante a grafia) ──────
+
+function BasesEditor({ bases, onChange }: { bases: string[]; onChange: (bases: string[]) => void }) {
+  const [draft, setDraft] = useState('');
+
+  const add = () => {
+    const value = draft.trim();
+    if (!value) return;
+    // Mesma normalização usada no ID do conjunto: "KM 104+000" e "km 104+000" são a MESMA base
+    if (bases.some(b => slugify(b) === slugify(value))) {
+      alert(`A base "${value}" já está registrada (grafia equivalente).`);
+      return;
+    }
+    onChange([...bases, value]);
+    setDraft('');
+  };
+
+  return (
+    <div>
+      <div className="flex gap-2 mb-2">
+        <input
+          type="text" value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+          placeholder="Ex: 104+000 (Enter para adicionar)"
+          className={inputCls + ' font-mono'}
+        />
+        <button type="button" onClick={add}
+          className="flex-shrink-0 flex items-center gap-1 px-3 py-2 bg-brand-700 hover:bg-brand-800 text-white text-xs font-bold rounded-lg transition-colors">
+          <Plus size={13} /> Adicionar
+        </button>
+      </div>
+      {bases.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {bases.map(b => (
+            <span key={b} className="inline-flex items-center gap-1 pl-2 pr-1 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-xs font-mono font-semibold text-slate-700 dark:text-slate-200">
+              <MapPin size={10} className="text-brand-600 dark:text-brand-400" /> {b}
+              <button type="button" onClick={() => onChange(bases.filter(x => x !== b))}
+                className="p-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 hover:text-rose-600" title={`Remover ${b}`}>
+                <X size={11} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

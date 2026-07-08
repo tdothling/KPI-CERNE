@@ -382,6 +382,28 @@ export const instanciarConjuntoInDb = async (conjunto: Conjunto, pranchas: Omit<
   });
 };
 
+// Instanciação em LOTE: executa cada conjunto na SUA transação (atômica por
+// conjunto — nunca fica prancha órfã). Combinações que falharem (ex.: corrida com
+// outro usuário) são coletadas e reportadas; o restante do lote continua.
+export const instanciarLoteInDb = async (
+  items: { conjunto: Conjunto; pranchas: Omit<Prancha, 'id'>[] }[],
+  onProgress?: (done: number, total: number) => void
+): Promise<{ criados: number; erros: string[] }> => {
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+  let criados = 0;
+  const erros: string[] = [];
+  for (let i = 0; i < items.length; i++) {
+    try {
+      await instanciarConjuntoInDb(items[i].conjunto, items[i].pranchas);
+      criados++;
+    } catch (e: any) {
+      erros.push(`Base "${items[i].conjunto.base}": ${e?.message || e}`);
+    }
+    onProgress?.(i + 1, items.length);
+  }
+  return { criados, erros };
+};
+
 // Exclui o conjunto e TODAS as suas pranchas em lote (nada fica órfão).
 export const deleteConjuntoFromDb = async (conjuntoId: string) => {
   if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");

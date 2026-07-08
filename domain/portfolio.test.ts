@@ -4,6 +4,7 @@ import {
     instanciarConjunto, conjuntoIdFor, rollupConjunto,
     canRefTransition, canPranchaTransition,
     inferRefStatusFromDates, inferPranchaStatusFromDates,
+    planInstanciacaoLote,
     catalogoKpis, carteiraKpis, conjuntosKpis,
     planPortfolioMigration, inferPapel, execMoldeKey, buildCodigoCompleto,
 } from './portfolio';
@@ -149,6 +150,66 @@ describe('unicidade referência+base', () => {
         expect(() => instanciarConjunto({
             referencia: refBSO, base: '090+500', existingConjuntos: [first.conjunto], today: '2026-07-08',
         })).not.toThrow();
+    });
+});
+
+// --- Instanciação em LOTE (matriz referências × bases) ---
+
+describe('planInstanciacaoLote', () => {
+    const refPSP: Referencia = {
+        ...refBSO, id: 'ref-psp', codigoCliente: 'PSP-CONSTRUCAP-EST-R00',
+        gabarito: [{ id: 'g1', papel: 'Folha 201' }, { id: 'g2', papel: 'Folha 202' }],
+    };
+
+    it('cria a matriz completa: N referências × M bases, com as pranchas do gabarito', () => {
+        const plan = planInstanciacaoLote({
+            referencias: [refBSO, refPSP],
+            bases: ['104+000', '090+500', '075+300'],
+            existingConjuntos: [],
+            today: '2026-07-08',
+        });
+        expect(plan.items).toHaveLength(6);                    // 2 × 3
+        expect(plan.totalPranchas).toBe(3 * 7 + 3 * 2);        // BSO tem 7 no gabarito, PSP tem 2
+        expect(plan.puladas).toHaveLength(0);
+        // Cada conjunto aponta para a referência certa e cada prancha para o conjunto certo
+        plan.items.forEach(({ conjunto, pranchas }) => {
+            expect(pranchas.every(p => p.conjuntoId === conjunto.id)).toBe(true);
+            expect(pranchas.every(p => p.status === PranchaStatus.A_FAZER)).toBe(true);
+        });
+    });
+
+    it('pula combinações já instanciadas em vez de duplicar', () => {
+        const jaExiste = instanciarConjunto({ referencia: refBSO, base: '104+000', existingConjuntos: [], today: '2026-07-08' });
+        const plan = planInstanciacaoLote({
+            referencias: [refBSO, refPSP],
+            bases: ['104+000', '090+500'],
+            existingConjuntos: [jaExiste.conjunto],
+            today: '2026-07-08',
+        });
+        expect(plan.items).toHaveLength(3);                    // 4 combos - 1 existente
+        expect(plan.puladas).toEqual([{ codigoCliente: 'BSO-CONSTRUCAP-ARQ-R00', base: '104+000' }]);
+    });
+
+    it('bases com grafias equivalentes colapsam (sem redundância dentro do lote)', () => {
+        const plan = planInstanciacaoLote({
+            referencias: [refBSO],
+            bases: ['KM 104+000', 'km  104+000 ', '104+000-x'],
+            existingConjuntos: [],
+            today: '2026-07-08',
+        });
+        expect(plan.items).toHaveLength(2);                    // as duas primeiras são a MESMA base
+    });
+
+    it('referência sem gabarito é reportada e não gera conjunto vazio', () => {
+        const semGab: Referencia = { ...refBSO, id: 'ref-vazia', codigoCliente: 'VAZIA-R00', gabarito: [] };
+        const plan = planInstanciacaoLote({
+            referencias: [semGab, refPSP],
+            bases: ['104+000'],
+            existingConjuntos: [],
+            today: '2026-07-08',
+        });
+        expect(plan.semGabarito).toEqual(['VAZIA-R00']);
+        expect(plan.items).toHaveLength(1);
     });
 });
 

@@ -260,6 +260,61 @@ export const instanciarConjunto = (input: InstanciarInput): InstanciarResult => 
     return { conjunto, pranchas };
 };
 
+// --- INSTANCIAR EM LOTE (matriz referências × bases) ---
+//
+// Planejador puro para replicação em massa: cada combinação referência×base vira
+// um Conjunto com suas pranchas. Consistência garantida por:
+//  - bases duplicadas na entrada (grafias equivalentes) colapsam na primeira;
+//  - combinações já instanciadas (ID determinístico) são PULADAS, nunca recriadas;
+//  - referências sem gabarito são reportadas, não geram conjunto vazio.
+
+export interface InstanciarLoteInput {
+    referencias: Referencia[];
+    bases: string[];
+    existingConjuntos: Pick<Conjunto, 'id'>[];
+    today: string;
+}
+
+export interface InstanciarLotePlan {
+    items: InstanciarResult[];                                            // o que será criado
+    puladas: { codigoCliente: string; base: string }[];                   // já existiam
+    semGabarito: string[];                                                // refs ignoradas (sem gabarito)
+    totalPranchas: number;
+}
+
+export const planInstanciacaoLote = (input: InstanciarLoteInput): InstanciarLotePlan => {
+    const plan: InstanciarLotePlan = { items: [], puladas: [], semGabarito: [], totalPranchas: 0 };
+
+    // Dedupe de bases tolerante a caixa/acentos/espaços, preservando a primeira grafia
+    const seen = new Set<string>();
+    const bases: string[] = [];
+    input.bases.map(b => (b || '').trim()).filter(Boolean).forEach(b => {
+        const key = slugify(b);
+        if (!seen.has(key)) { seen.add(key); bases.push(b); }
+    });
+
+    const existing = new Set(input.existingConjuntos.map(c => c.id));
+    input.referencias.forEach(ref => {
+        if (!ref.gabarito || ref.gabarito.length === 0) {
+            plan.semGabarito.push(ref.codigoCliente);
+            return;
+        }
+        bases.forEach(base => {
+            const id = conjuntoIdFor(ref.id, base);
+            if (existing.has(id)) {
+                plan.puladas.push({ codigoCliente: ref.codigoCliente, base });
+                return;
+            }
+            existing.add(id); // também protege contra repetição DENTRO do próprio lote
+            const item = instanciarConjunto({ referencia: ref, base, existingConjuntos: [], today: input.today });
+            plan.items.push(item);
+            plan.totalPranchas += item.pranchas.length;
+        });
+    });
+
+    return plan;
+};
+
 // --- ROLLUP (Conjunto deriva das pranchas; nada é gravado) ---
 
 export interface ConjuntoRollup {

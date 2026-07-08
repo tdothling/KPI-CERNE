@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { ProjectFile, ClientDoc, Status, RevisionReason, ProjectPhase, Period, ProjectFilterState, SupplyOrder, SupplyStatus, SiteType } from '../types';
-import { subscribeToProjects, addProject, updateProjectInDb, deleteProjectFromDb, subscribeToClients, addClient, updateClientInDb, deleteClientFromDb, countLinkedRecords, subscribeToHolidays, saveHolidaysToDb, batchUpdateProjectsInDb, subscribeToSupplyOrders, addSupplyOrder, updateSupplyOrderInDb, deleteSupplyOrderFromDb, applySupplyStatusChange, patchSupplyOrderInDb, migrateLegacyPurchasesToSupply, subscribeToReferencias, subscribeToConjuntos, subscribeToPranchas, addReferenciaToDb, patchReferenciaInDb, deleteReferenciaFromDb, instanciarConjuntoInDb, deleteConjuntoFromDb, patchPranchaInDb, addPranchaToDb, deletePranchaFromDb, migrateProjectsToPortfolio } from '../services/db';
-import { Referencia, Conjunto, Prancha, PranchaStatus, RefStatus, canRefTransition, canPranchaTransition, instanciarConjunto } from '../domain/portfolio';
+import { subscribeToProjects, addProject, updateProjectInDb, deleteProjectFromDb, subscribeToClients, addClient, updateClientInDb, deleteClientFromDb, countLinkedRecords, subscribeToHolidays, saveHolidaysToDb, batchUpdateProjectsInDb, subscribeToSupplyOrders, addSupplyOrder, updateSupplyOrderInDb, deleteSupplyOrderFromDb, applySupplyStatusChange, patchSupplyOrderInDb, migrateLegacyPurchasesToSupply, subscribeToReferencias, subscribeToConjuntos, subscribeToPranchas, addReferenciaToDb, patchReferenciaInDb, deleteReferenciaFromDb, instanciarConjuntoInDb, instanciarLoteInDb, deleteConjuntoFromDb, patchPranchaInDb, addPranchaToDb, deletePranchaFromDb, migrateProjectsToPortfolio } from '../services/db';
+import { Referencia, Conjunto, Prancha, PranchaStatus, RefStatus, canRefTransition, canPranchaTransition, instanciarConjunto, planInstanciacaoLote } from '../domain/portfolio';
 import { buildStatusChangePatch } from '../components/supply/supplyUtils';
 import { formatUsername } from '../services/auth';
 import { subscribeToAuth } from '../services/auth';
@@ -234,6 +234,32 @@ export function useAppData(projectFilter: ProjectFilterState) {
         }
     };
 
+    // Instanciação em LOTE: matriz referências × bases. O planejador puro deduplica
+    // bases equivalentes e pula combinações já existentes; a escrita é atômica por
+    // conjunto e reporta progresso. Retorna o resumo para a UI exibir.
+    const handleInstanciarLote = async (
+        refs: Referencia[],
+        bases: string[],
+        onProgress?: (done: number, total: number) => void
+    ): Promise<{ criados: number; puladas: number; semGabarito: string[]; erros: string[] } | null> => {
+        try {
+            const plan = planInstanciacaoLote({
+                referencias: refs,
+                bases,
+                existingConjuntos: conjuntos,
+                today: new Date().toISOString().split('T')[0],
+            });
+            if (plan.items.length === 0) {
+                return { criados: 0, puladas: plan.puladas.length, semGabarito: plan.semGabarito, erros: [] };
+            }
+            const { criados, erros } = await instanciarLoteInDb(plan.items, onProgress);
+            return { criados, puladas: plan.puladas.length, semGabarito: plan.semGabarito, erros };
+        } catch (e: any) {
+            alert("Erro na instanciação em lote: " + (e?.message || e));
+            return null;
+        }
+    };
+
     const handleDeleteConjunto = (conjunto: Conjunto) => {
         const n = pranchas.filter(p => p.conjuntoId === conjunto.id).length;
         if (!confirm(`Excluir o conjunto da base "${conjunto.base}" e suas ${n} prancha(s)? Esta ação não pode ser desfeita.`)) return;
@@ -461,7 +487,7 @@ export function useAppData(projectFilter: ProjectFilterState) {
         updateProject, deleteProject, addProjectRevision, promoteProjectToExecutive,
         referencias, conjuntos, pranchas,
         handleAddReferencia, handleUpdateReferencia, handleDeleteReferencia, handleMoveReferencia,
-        handleInstanciar, handleDeleteConjunto,
+        handleInstanciar, handleInstanciarLote, handleDeleteConjunto,
         handleMovePrancha, handleUpdatePrancha, handleAddPrancha, handleDeletePrancha,
         handleMigratePortfolio,
         handleAddSupplyOrder, handleUpdateSupplyOrder, handleDeleteSupplyOrder,

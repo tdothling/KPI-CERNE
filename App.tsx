@@ -46,7 +46,7 @@ export default function App() {
     updateProject, deleteProject, addProjectRevision, promoteProjectToExecutive,
     referencias, conjuntos, pranchas,
     handleAddReferencia, handleUpdateReferencia, handleDeleteReferencia, handleMoveReferencia,
-    handleInstanciar, handleDeleteConjunto,
+    handleInstanciar, handleInstanciarLote, handleDeleteConjunto,
     handleMovePrancha, handleUpdatePrancha, handleDeletePrancha,
     handleMigratePortfolio,
     handleAddSupplyOrder, handleUpdateSupplyOrder, handleDeleteSupplyOrder,
@@ -554,7 +554,7 @@ export default function App() {
             {activeTab === 'timeline' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectTimeline projects={filteredProjects} holidays={holidays} clients={clients} /></div>}
             {activeTab === 'obras' && <div className="animate-in fade-in zoom-in-95 duration-200"><ObrasPage clients={clients} projectCount={(name) => projects.filter(p => p.client === name).length} onAddClient={handleAddClient} onUpdateClient={handleUpdateClient} onDeleteClient={handleDeleteClient} /></div>}
             {activeTab === 'projects' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectList projects={filteredProjects} clients={clients} onUpdate={updateProject} onDelete={deleteProject} onAddRevision={addProjectRevision} onPromote={promoteProjectToExecutive} holidays={holidays} readOnly={isReadOnly} /></div>}
-            {activeTab === 'catalogo' && <div className="animate-in fade-in zoom-in-95 duration-200"><CatalogoPage referencias={filteredReferencias} conjuntos={conjuntos} clients={rodoviaClients} holidays={holidays} readOnly={isReadOnly} onAdd={handleAddReferencia} onUpdate={handleUpdateReferencia} onDelete={handleDeleteReferencia} onMove={handleMoveReferencia} onInstanciar={handleInstanciar} /></div>}
+            {activeTab === 'catalogo' && <div className="animate-in fade-in zoom-in-95 duration-200"><CatalogoPage referencias={filteredReferencias} conjuntos={conjuntos} clients={rodoviaClients} holidays={holidays} readOnly={isReadOnly} onAdd={handleAddReferencia} onUpdate={handleUpdateReferencia} onDelete={handleDeleteReferencia} onMove={handleMoveReferencia} onInstanciar={handleInstanciar} onInstanciarLote={handleInstanciarLote} /></div>}
             {activeTab === 'carteira' && <div className="animate-in fade-in zoom-in-95 duration-200"><CarteiraPage referencias={referencias} conjuntos={filteredConjuntos} pranchas={filteredPranchas} clients={rodoviaClients} readOnly={isReadOnly} legacyPendingCount={legacyPendingCount} isMigrationAdmin={isMigrationAdmin} onMigrate={handleMigratePortfolio} onMovePrancha={handleMovePrancha} onUpdatePrancha={handleUpdatePrancha} onDeletePrancha={handleDeletePrancha} onDeleteConjunto={handleDeleteConjunto} /></div>}
             {activeTab === 'suprimentos' && <div className="animate-in fade-in zoom-in-95 duration-200"><SupplyPage orders={filteredSupplyOrders} clients={clients} holidays={holidays} currentUser={currentUser ? formatUsername(currentUser.email) : ''} isAdmin={isMigrationAdmin} readOnly={isReadOnly} onAdd={handleAddSupplyOrder} onUpdate={handleUpdateSupplyOrder} onDelete={handleDeleteSupplyOrder} onMoveStatus={handleMoveSupplyStatus} onToggleItem={handleToggleSupplyItem} onMigrateLegacy={handleMigrateLegacyPurchases} /></div>}
           </Suspense>
