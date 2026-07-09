@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo, useEffect, memo } from 'react';
-import { ProjectFile, Status, Discipline, RevisionReason, Period, ProjectPhase, ClientDoc } from '../types';
+import { ProjectFile, Status, Discipline, RevisionReason, Period, ProjectPhase, ClientDoc, SiteType } from '../types';
+import { useObraAtiva, ObraSelectScreen, ObraAtivaBar, ObraCardStat } from './ObraGate';
 import { format, parseISO, isValid } from 'date-fns';
 import { Trash2, GitBranch, History, CornerDownRight, AlertTriangle, Edit2, Save, X, Eye, ArrowUpDown, ArrowUp, ArrowDown, BadgeCheck, Send, CheckSquare, ThumbsDown, List, Search, ArrowUpCircle, ChevronRight, ChevronDown, Play, Pause, ListTree, LayoutList, ClipboardList, Minimize2, Maximize2, CheckCircle2 } from 'lucide-react';
 import { getProjectBaseName, getRevisionNumber, formatDateDisplay, calculateBusinessDaysWithHolidays, getStatusColor, inferStatusFromDates, calculateDeadlineDate, canTransitionTo, getExecutiveMatchKey } from '../utils';
@@ -248,7 +249,7 @@ const BATCH_META: Record<BatchAction, { title: string; description: string; conf
     REJECT: { title: 'Reprovar em Lote', description: 'A data de reprovação será aplicada a todos os projetos selecionados que estão "Aguardando Aprovação".', confirmLabel: 'Reprovar Selecionados', btnClass: 'bg-rose-600 hover:bg-rose-700', iconBg: 'bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400' },
 };
 
-export const ProjectList: React.FC<ProjectListProps> = ({ projects, clients, onUpdate, onDelete, onAddRevision, onPromote, holidays, readOnly = false }) => {
+const ProjectListInner: React.FC<ProjectListProps> = ({ projects, clients, onUpdate, onDelete, onAddRevision, onPromote, holidays, readOnly = false }) => {
     const [activeRevModal, setActiveRevModal] = useState<string | null>(null);
     const [projectToDelete, setProjectToDelete] = useState<ProjectFile | null>(null);
     const [editingProject, setEditingProject] = useState<ProjectFile | null>(null);
@@ -1164,6 +1165,63 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, clients, onU
                     </div>
                 );
             })()}
+        </div>
+    );
+};
+
+// --- Navegação por obra: tela de seleção antes da lista (mesma dinâmica do Catálogo/Carteira) ---
+// Wrapper fino: escolhida a obra, a lista original roda intacta, só que escopada.
+export const ProjectList: React.FC<ProjectListProps> = (props) => {
+    const { projects, clients } = props;
+
+    // Obras da aba: todas as que NÃO são de rodovia (rodovia vive no Catálogo/Carteira),
+    // mais nomes de obra presentes em projetos antigos e não cadastrados na aba Obras.
+    const obras = useMemo(() => {
+        const registradas = clients.filter(c => c.type !== SiteType.HIGHWAY);
+        const nomes = new Set(registradas.map(c => c.name));
+        const extras = [...new Set(projects.map(p => p.client).filter(Boolean))].filter(n => !nomes.has(n)).sort();
+        return [
+            ...registradas.map(c => ({ id: c.id, name: c.name })),
+            ...extras.map(n => ({ id: `legado-${n}`, name: n })),
+        ];
+    }, [clients, projects]);
+    const obraNames = useMemo(() => obras.map(o => o.name), [obras]);
+
+    const { obraAtiva, selecionarObra, trocarObra } = useObraAtiva('kpicerne.projetos.obraAtiva', obraNames);
+    const projetosDaObra = useMemo(() => projects.filter(p => p.client === obraAtiva), [projects, obraAtiva]);
+
+    if (!obraAtiva) {
+        return (
+            <ObraSelectScreen
+                obras={obras}
+                subtitle="Os projetos são navegados por obra. A escolha fica salva — nas próximas visitas você entra direto nela."
+                emptyTitle="Nenhuma obra cadastrada"
+                emptyHint="Cadastre uma obra na aba Obras para gerenciar os projetos."
+                onSelect={selecionarObra}
+                statsOf={(name) => {
+                    const da = projects.filter(p => p.client === name);
+                    const n = (s: Status) => da.filter(p => p.status === s).length;
+                    const stats: ObraCardStat[] = [
+                        { value: da.length, label: 'arquivo(s) de projeto' },
+                        { value: n(Status.IN_PROGRESS), label: 'em andamento' },
+                    ];
+                    const aguardando = n(Status.WAITING_APPROVAL);
+                    const aprovados = n(Status.APPROVED);
+                    const reprovados = n(Status.REJECTED);
+                    if (aguardando > 0) stats.push({ value: aguardando, label: 'aguardando aprovação', tone: 'text-amber-600 dark:text-amber-400 font-semibold' });
+                    if (aprovados > 0) stats.push({ value: aprovados, label: 'aprovado(s)', tone: 'text-emerald-600 dark:text-emerald-400 font-semibold' });
+                    if (reprovados > 0) stats.push({ value: reprovados, label: 'reprovado(s)', tone: 'text-rose-600 dark:text-rose-400 font-semibold' });
+                    if (da.length === 0) stats.push({ value: '', label: 'Sem arquivos nesta obra', tone: 'italic col-span-2' });
+                    return stats;
+                }}
+            />
+        );
+    }
+
+    return (
+        <div className="space-y-4">
+            <ObraAtivaBar obra={obraAtiva} canTrocar={obras.length > 1} onTrocar={trocarObra} />
+            <ProjectListInner {...props} projects={projetosDaObra} />
         </div>
     );
 };

@@ -5,6 +5,7 @@ import { Referencia, Conjunto, Prancha, PranchaStatus, canPranchaTransition, car
 import { KpiCard, StatusBadge, PRANCHA_STATUS_STYLE, DateActionModal, DateActionRequest, TimelineDatesEditor, TimelineDates, PRANCHA_TIMELINE_FIELDS, RevisionHistoryModal } from './shared';
 import { calculateDeadlineDate, formatDateDisplay } from '../../utils';
 import { format } from 'date-fns';
+import { useObraAtiva, ObraSelectScreen, ObraAtivaBar, ObraCardStat } from '../ObraGate';
 
 interface CarteiraPageProps {
     referencias: Referencia[];
@@ -33,6 +34,21 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
     const [dateAction, setDateAction] = useState<DateActionRequest | null>(null);
     const [editingPrancha, setEditingPrancha] = useState<Prancha | null>(null);
     const [historicoDe, setHistoricoDe] = useState<Prancha | null>(null);
+
+    // Navegação por obra — MESMA chave do Catálogo: a obra ativa é compartilhada
+    // entre as duas abas (trocar em uma reflete na outra).
+    const obraNames = useMemo(() => clients.map(c => c.name), [clients]);
+    const { obraAtiva, selecionarObra: selecionarObraRaw, trocarObra: trocarObraRaw } =
+        useObraAtiva('kpicerne.rodovia.obraAtiva', obraNames, ['kpicerne.catalogo.obraAtiva']);
+    const selecionarObra = (name: string) => { selecionarObraRaw(name); setStatusFilter('ALL'); };
+    const trocarObra = () => { trocarObraRaw(); setStatusFilter('ALL'); };
+
+    // Toda a carteira abaixo enxerga só a obra ativa
+    const conjuntosDaObra = useMemo(() => conjuntos.filter(c => c.client === obraAtiva), [conjuntos, obraAtiva]);
+    const pranchasDaObra = useMemo(() => {
+        const ids = new Set(conjuntosDaObra.map(c => c.id));
+        return pranchas.filter(p => ids.has(p.conjuntoId));
+    }, [pranchas, conjuntosDaObra]);
 
     const refById = useMemo(() => new Map(referencias.map(r => [r.id, r])), [referencias]);
     const clientsMap = useMemo(() => {
@@ -68,12 +84,12 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
     const conjuntoById = useMemo(() => new Map(conjuntos.map(c => [c.id, c])), [conjuntos]);
 
     // --- KPIs: nível Prancha e nível Conjunto, cada um contando SÓ a sua entidade ---
-    const kpis = useMemo(() => carteiraKpis(pranchas, (p: Prancha) => {
+    const kpis = useMemo(() => carteiraKpis(pranchasDaObra, (p: Prancha) => {
         const c = conjuntoById.get(p.conjuntoId);
         return c ? isPranchaOverdue(p, c) : false;
-    }), [pranchas, conjuntoById, clientsMap]);
+    }), [pranchasDaObra, conjuntoById, clientsMap]);
 
-    const baseKpis = useMemo(() => conjuntosKpis(conjuntos, pranchasByConjunto), [conjuntos, pranchasByConjunto]);
+    const baseKpis = useMemo(() => conjuntosKpis(conjuntosDaObra, pranchasByConjunto), [conjuntosDaObra, pranchasByConjunto]);
 
     const matchesFilter = (p: Prancha, c: Conjunto) => {
         if (statusFilter === 'ALL') return true;
@@ -84,7 +100,7 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
     // Disciplina (da referência) → conjuntos com pranchas visíveis
     const grouped = useMemo(() => {
         const byDiscipline = new Map<Discipline, { conjunto: Conjunto; ref: Referencia | undefined; visiveis: Prancha[] }[]>();
-        conjuntos.forEach(conjunto => {
+        conjuntosDaObra.forEach(conjunto => {
             const ref = refById.get(conjunto.referenciaId);
             const todas = pranchasByConjunto.get(conjunto.id) || [];
             const visiveis = todas.filter(p => matchesFilter(p, conjunto));
@@ -97,7 +113,7 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
             `${a.ref?.codigoCliente || ''}|${a.conjunto.base}`.localeCompare(`${b.ref?.codigoCliente || ''}|${b.conjunto.base}`)
         ));
         return [...byDiscipline.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-    }, [conjuntos, refById, pranchasByConjunto, statusFilter, clientsMap]);
+    }, [conjuntosDaObra, refById, pranchasByConjunto, statusFilter, clientsMap]);
 
     const toggleExpanded = (id: string) => setExpanded(prev => {
         const next = new Set(prev);
@@ -124,26 +140,62 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
         });
     };
 
+    // Migração pendente: global (independe da obra ativa) — aparece nas duas telas
+    const migracaoBanner = legacyPendingCount > 0 && isMigrationAdmin && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center justify-between gap-4 animate-in fade-in">
+            <div className="flex items-start gap-3">
+                <Database className="text-amber-600 dark:text-amber-400 mt-0.5" size={18} />
+                <div>
+                    <p className="text-sm font-bold text-amber-800 dark:text-amber-300">Migração pendente (apenas admin)</p>
+                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                        Existem {legacyPendingCount} projeto(s) de obras de rodovia no modelo antigo. A migração converte preliminares em
+                        Referências e executivos em Conjuntos com pranchas — sem apagar nada da coleção original. Pode rodar mais de uma vez.
+                    </p>
+                </div>
+            </div>
+            <button onClick={onMigrate} className="flex-shrink-0 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm">
+                Migrar para a Carteira
+            </button>
+        </div>
+    );
+
+    // --- Tela de seleção de obra (antes da carteira) ---
+    if (!obraAtiva) {
+        return (
+            <div className="space-y-4">
+                {migracaoBanner}
+                <ObraSelectScreen
+                    obras={clients}
+                    subtitle="A carteira é navegada por obra — a mesma obra ativa do Catálogo. A escolha fica salva para as próximas visitas."
+                    emptyTitle="Nenhuma obra de rodovia cadastrada"
+                    emptyHint='Cadastre uma obra do tipo "Obra de Rodovia" na aba Obras para usar a carteira.'
+                    onSelect={selecionarObra}
+                    statsOf={(name) => {
+                        const cjs = conjuntos.filter(c => c.client === name);
+                        const ids = new Set(cjs.map(c => c.id));
+                        const k = carteiraKpis(pranchas.filter(p => ids.has(p.conjuntoId)));
+                        const stats: ObraCardStat[] = [
+                            { value: cjs.length, label: 'base(s) instanciada(s)' },
+                            { value: k.total, label: 'prancha(s)' },
+                        ];
+                        if (k.emAndamento > 0) stats.push({ value: k.emAndamento, label: 'em andamento', tone: 'text-blue-600 dark:text-blue-400 font-semibold' });
+                        if (k.aguardando > 0) stats.push({ value: k.aguardando, label: 'aguardando cliente', tone: 'text-amber-600 dark:text-amber-400 font-semibold' });
+                        if (k.aprovado > 0) stats.push({ value: k.aprovado, label: 'aprovada(s)', tone: 'text-emerald-600 dark:text-emerald-400 font-semibold' });
+                        if (k.reprovado > 0) stats.push({ value: k.reprovado, label: 'reprovada(s)', tone: 'text-rose-600 dark:text-rose-400 font-semibold' });
+                        if (cjs.length === 0) stats.push({ value: '', label: 'Sem conjuntos — instancie pelo Catálogo', tone: 'italic col-span-2' });
+                        return stats;
+                    }}
+                />
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-4">
-            {/* Migração pendente: projetos antigos de obras de rodovia ainda no modelo 1:1 */}
-            {legacyPendingCount > 0 && isMigrationAdmin && (
-                <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center justify-between gap-4 animate-in fade-in">
-                    <div className="flex items-start gap-3">
-                        <Database className="text-amber-600 dark:text-amber-400 mt-0.5" size={18} />
-                        <div>
-                            <p className="text-sm font-bold text-amber-800 dark:text-amber-300">Migração pendente (apenas admin)</p>
-                            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                                Existem {legacyPendingCount} projeto(s) de obras de rodovia no modelo antigo. A migração converte preliminares em
-                                Referências e executivos em Conjuntos com pranchas — sem apagar nada da coleção original. Pode rodar mais de uma vez.
-                            </p>
-                        </div>
-                    </div>
-                    <button onClick={onMigrate} className="flex-shrink-0 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm">
-                        Migrar para a Carteira
-                    </button>
-                </div>
-            )}
+            {migracaoBanner}
+
+            {/* Obra ativa: toda a carteira abaixo é SÓ desta obra */}
+            <ObraAtivaBar obra={obraAtiva} canTrocar={clients.length > 1} onTrocar={trocarObra} />
 
             {/* Rollup nível Conjunto: bases instanciadas / concluídas */}
             <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2">
@@ -166,10 +218,10 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
                 <KpiCard color="red" icon={<AlertTriangle size={16} />} label="Atrasadas" value={kpis.atrasado} active={statusFilter === 'OVERDUE'} onClick={() => setStatusFilter(f => f === 'OVERDUE' ? 'ALL' : 'OVERDUE')} />
             </div>
 
-            {conjuntos.length === 0 && (
+            {conjuntosDaObra.length === 0 && (
                 <div className="text-center py-16 bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-600">
                     <FolderKanban className="mx-auto text-slate-300 dark:text-slate-600 mb-3" size={40} />
-                    <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Nenhum conjunto instanciado</p>
+                    <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Nenhum conjunto instanciado em {obraAtiva}</p>
                     <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Use "Instanciar em Base" no Catálogo para replicar uma referência em uma base (KM).</p>
                 </div>
             )}

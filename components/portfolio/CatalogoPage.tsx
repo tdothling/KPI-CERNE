@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BookOpen, Plus, Send, BadgeCheck, ThumbsDown, FileEdit, Trash2, Layers, X, ChevronDown, ChevronRight, MapPin, GripVertical, PencilLine, Play, CheckCircle2, Hammer, Timer, CopyPlus, CheckSquare, Square, Loader2, Wand2, ArrowLeftRight, HardHat } from 'lucide-react';
+import { BookOpen, Plus, Send, BadgeCheck, ThumbsDown, FileEdit, Trash2, Layers, X, ChevronDown, ChevronRight, MapPin, GripVertical, PencilLine, Play, CheckCircle2, Hammer, Timer, CopyPlus, CheckSquare, Square, Loader2, Wand2 } from 'lucide-react';
+import { useObraAtiva, ObraSelectScreen, ObraAtivaBar, ObraCardStat } from '../ObraGate';
 import { parseISO, isValid } from 'date-fns';
 import { ClientDoc, Discipline, Period, RevisionReason } from '../../types';
 import { Referencia, Conjunto, RefStatus, GabaritoItem, canRefTransition, catalogoKpis, buildCodigoCompleto, inferRefStatusFromDates, planInstanciacaoLote, slugify, DISCIPLINA_SIGLA, gerarReferenciasDisciplinas, planGerarDisciplinasLote, swapDisciplinaSigla } from '../../domain/portfolio';
@@ -57,27 +58,12 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
     // Origem da geração de disciplinas (a ref de ARQ; sem id quando recém-cadastrada)
     const [gerandoDe, setGerandoDe] = useState<Pick<Referencia, 'codigoCliente' | 'client' | 'discipline' | 'gabarito' | 'observacao'> | null>(null);
 
-    // O catálogo é navegado POR OBRA: antes da lista aparece a tela de seleção.
-    // A escolha fica salva no navegador (próximas visitas entram direto na obra);
-    // "Trocar Obra" volta para os cards. Com uma única obra cadastrada, entra direto.
-    const [obraSalva, setObraSalva] = useState<string | null>(() => {
-        try { return localStorage.getItem('kpicerne.catalogo.obraAtiva'); } catch { return null; }
-    });
-    const obraAtiva = useMemo(() => {
-        if (obraSalva && clients.some(c => c.name === obraSalva)) return obraSalva;
-        if (clients.length === 1) return clients[0].name;
-        return null;
-    }, [obraSalva, clients]);
-    const selecionarObra = (name: string) => {
-        setObraSalva(name);
-        setStatusFilter('ALL');
-        try { localStorage.setItem('kpicerne.catalogo.obraAtiva', name); } catch { /* modo privado */ }
-    };
-    const trocarObra = () => {
-        setObraSalva(null);
-        setStatusFilter('ALL');
-        try { localStorage.removeItem('kpicerne.catalogo.obraAtiva'); } catch { /* modo privado */ }
-    };
+    // Navegação por obra (gate compartilhado com a Carteira — mesma obra ativa)
+    const obraNames = useMemo(() => clients.map(c => c.name), [clients]);
+    const { obraAtiva, selecionarObra: selecionarObraRaw, trocarObra: trocarObraRaw } =
+        useObraAtiva('kpicerne.rodovia.obraAtiva', obraNames, ['kpicerne.catalogo.obraAtiva']);
+    const selecionarObra = (name: string) => { selecionarObraRaw(name); setStatusFilter('ALL'); };
+    const trocarObra = () => { trocarObraRaw(); setStatusFilter('ALL'); };
 
     // TODA a página (KPIs, lista, lotes, exclusão de disciplina) enxerga só a obra ativa
     const refsDaObra = useMemo(() => referencias.filter(r => r.client === obraAtiva), [referencias, obraAtiva]);
@@ -174,73 +160,34 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
     // --- Tela de seleção de obra (antes da lista do catálogo) ---
     if (!obraAtiva) {
         return (
-            <div className="space-y-4">
-                <div className="text-center pt-8 pb-2">
-                    <HardHat className="mx-auto text-brand-600 dark:text-brand-400 mb-3" size={32} />
-                    <h2 className="text-xl font-bold text-slate-800 dark:text-white">Selecione a Obra</h2>
-                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                        O catálogo é navegado por obra. A escolha fica salva — nas próximas visitas você entra direto nela.
-                    </p>
-                </div>
-
-                {clients.length === 0 ? (
-                    <div className="text-center py-16 bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-600">
-                        <MapPin className="mx-auto text-slate-300 dark:text-slate-600 mb-3" size={40} />
-                        <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Nenhuma obra de rodovia cadastrada</p>
-                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Cadastre uma obra do tipo "Obra de Rodovia" na aba Obras para começar o catálogo.</p>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-w-4xl mx-auto">
-                        {clients.map(c => {
-                            const k = catalogoKpis(referencias.filter(r => r.client === c.name));
-                            const nBases = (c.bases || []).length;
-                            return (
-                                <button
-                                    key={c.id}
-                                    onClick={() => selecionarObra(c.name)}
-                                    className="text-left bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 hover:border-brand-400 dark:hover:border-brand-500 hover:shadow-md transition-all active:scale-[0.99] group"
-                                >
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <span className="flex-shrink-0 w-9 h-9 rounded-lg bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 flex items-center justify-center group-hover:bg-brand-100 dark:group-hover:bg-brand-900/50 transition-colors">
-                                            <HardHat size={18} />
-                                        </span>
-                                        <span className="font-bold text-sm text-slate-800 dark:text-slate-100 leading-tight">{c.name}</span>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
-                                        <span><strong className="text-slate-700 dark:text-slate-200">{k.total}</strong> projeto(s) no catálogo</span>
-                                        <span><strong className="text-slate-700 dark:text-slate-200">{nBases}</strong> base(s) registrada(s)</span>
-                                        {k.emElaboracao > 0 && <span className="text-amber-600 dark:text-amber-400 font-semibold">{k.emElaboracao} em elaboração</span>}
-                                        {k.enviado > 0 && <span className="text-blue-600 dark:text-blue-400 font-semibold">{k.enviado} com o cliente</span>}
-                                        {k.aprovado > 0 && <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{k.aprovado} aprovado(s)</span>}
-                                        {k.reprovado > 0 && <span className="text-rose-600 dark:text-rose-400 font-semibold">{k.reprovado} reprovado(s)</span>}
-                                        {k.total === 0 && <span className="italic col-span-2">Catálogo vazio — comece por aqui</span>}
-                                    </div>
-                                </button>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
+            <ObraSelectScreen
+                obras={clients}
+                subtitle="O catálogo é navegado por obra. A escolha fica salva — nas próximas visitas você entra direto nela."
+                emptyTitle="Nenhuma obra de rodovia cadastrada"
+                emptyHint='Cadastre uma obra do tipo "Obra de Rodovia" na aba Obras para começar o catálogo.'
+                onSelect={selecionarObra}
+                statsOf={(name) => {
+                    const k = catalogoKpis(referencias.filter(r => r.client === name));
+                    const nBases = (clients.find(c => c.name === name)?.bases || []).length;
+                    const stats: ObraCardStat[] = [
+                        { value: k.total, label: 'projeto(s) no catálogo' },
+                        { value: nBases, label: 'base(s) registrada(s)' },
+                    ];
+                    if (k.emElaboracao > 0) stats.push({ value: k.emElaboracao, label: 'em elaboração', tone: 'text-amber-600 dark:text-amber-400 font-semibold' });
+                    if (k.enviado > 0) stats.push({ value: k.enviado, label: 'com o cliente', tone: 'text-blue-600 dark:text-blue-400 font-semibold' });
+                    if (k.aprovado > 0) stats.push({ value: k.aprovado, label: 'aprovado(s)', tone: 'text-emerald-600 dark:text-emerald-400 font-semibold' });
+                    if (k.reprovado > 0) stats.push({ value: k.reprovado, label: 'reprovado(s)', tone: 'text-rose-600 dark:text-rose-400 font-semibold' });
+                    if (k.total === 0) stats.push({ value: '', label: 'Catálogo vazio — comece por aqui', tone: 'italic col-span-2' });
+                    return stats;
+                }}
+            />
         );
     }
 
     return (
         <div className="space-y-4">
             {/* Obra ativa: todo o catálogo abaixo é SÓ desta obra */}
-            <div className="flex items-center justify-between bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2">
-                <span className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-slate-200">
-                    <HardHat size={16} className="text-brand-600 dark:text-brand-400" /> {obraAtiva}
-                </span>
-                {clients.length > 1 && (
-                    <button
-                        onClick={trocarObra}
-                        className="flex items-center gap-1.5 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-brand-700 dark:hover:text-brand-400 border border-slate-200 dark:border-slate-600 hover:border-brand-300 rounded-lg px-2.5 py-1.5 transition-colors"
-                        title="Voltar para a seleção de obras"
-                    >
-                        <ArrowLeftRight size={13} /> Trocar Obra
-                    </button>
-                )}
-            </div>
+            <ObraAtivaBar obra={obraAtiva} canTrocar={clients.length > 1} onTrocar={trocarObra} />
 
             {/* KPIs nível Referência: elaboração + validação dos TIPOS (nunca mistura com pranchas) */}
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
