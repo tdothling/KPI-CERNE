@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BookOpen, Plus, Send, BadgeCheck, ThumbsDown, FileEdit, Trash2, Layers, X, ChevronDown, ChevronRight, MapPin, GripVertical, PencilLine, Play, CheckCircle2, Hammer, Timer, CopyPlus, CheckSquare, Square, Loader2, Wand2 } from 'lucide-react';
+import { BookOpen, Plus, Send, BadgeCheck, ThumbsDown, FileEdit, Trash2, Layers, X, ChevronDown, ChevronRight, MapPin, GripVertical, PencilLine, Play, CheckCircle2, Hammer, Timer, CopyPlus, CheckSquare, Square, Loader2, Wand2, ArrowLeftRight, HardHat } from 'lucide-react';
 import { parseISO, isValid } from 'date-fns';
 import { ClientDoc, Discipline, Period, RevisionReason } from '../../types';
 import { Referencia, Conjunto, RefStatus, GabaritoItem, canRefTransition, catalogoKpis, buildCodigoCompleto, inferRefStatusFromDates, planInstanciacaoLote, slugify, DISCIPLINA_SIGLA, gerarReferenciasDisciplinas, planGerarDisciplinasLote, swapDisciplinaSigla } from '../../domain/portfolio';
@@ -57,12 +57,37 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
     // Origem da geração de disciplinas (a ref de ARQ; sem id quando recém-cadastrada)
     const [gerandoDe, setGerandoDe] = useState<Pick<Referencia, 'codigoCliente' | 'client' | 'discipline' | 'gabarito' | 'observacao'> | null>(null);
 
-    const temArquitetura = useMemo(() => referencias.some(r => r.discipline === Discipline.ARCHITECTURE), [referencias]);
+    // O catálogo é navegado POR OBRA: antes da lista aparece a tela de seleção.
+    // A escolha fica salva no navegador (próximas visitas entram direto na obra);
+    // "Trocar Obra" volta para os cards. Com uma única obra cadastrada, entra direto.
+    const [obraSalva, setObraSalva] = useState<string | null>(() => {
+        try { return localStorage.getItem('kpicerne.catalogo.obraAtiva'); } catch { return null; }
+    });
+    const obraAtiva = useMemo(() => {
+        if (obraSalva && clients.some(c => c.name === obraSalva)) return obraSalva;
+        if (clients.length === 1) return clients[0].name;
+        return null;
+    }, [obraSalva, clients]);
+    const selecionarObra = (name: string) => {
+        setObraSalva(name);
+        setStatusFilter('ALL');
+        try { localStorage.setItem('kpicerne.catalogo.obraAtiva', name); } catch { /* modo privado */ }
+    };
+    const trocarObra = () => {
+        setObraSalva(null);
+        setStatusFilter('ALL');
+        try { localStorage.removeItem('kpicerne.catalogo.obraAtiva'); } catch { /* modo privado */ }
+    };
+
+    // TODA a página (KPIs, lista, lotes, exclusão de disciplina) enxerga só a obra ativa
+    const refsDaObra = useMemo(() => referencias.filter(r => r.client === obraAtiva), [referencias, obraAtiva]);
+
+    const temArquitetura = useMemo(() => refsDaObra.some(r => r.discipline === Discipline.ARCHITECTURE), [refsDaObra]);
     const [dateAction, setDateAction] = useState<DateActionRequest | null>(null);
     const [historicoDe, setHistoricoDe] = useState<Referencia | null>(null);
     const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
-    const kpis = useMemo(() => catalogoKpis(referencias), [referencias]);
+    const kpis = useMemo(() => catalogoKpis(refsDaObra), [refsDaObra]);
 
     const conjuntosByRef = useMemo(() => {
         const map = new Map<string, Conjunto[]>();
@@ -74,7 +99,7 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
     }, [conjuntos]);
 
     const grouped = useMemo(() => {
-        const filtered = referencias.filter(r => statusFilter === 'ALL' || r.statusAprovacao === statusFilter);
+        const filtered = refsDaObra.filter(r => statusFilter === 'ALL' || r.statusAprovacao === statusFilter);
         const byDiscipline = new Map<Discipline, Referencia[]>();
         filtered.forEach(r => {
             if (!byDiscipline.has(r.discipline)) byDiscipline.set(r.discipline, []);
@@ -82,7 +107,7 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
         });
         byDiscipline.forEach(list => list.sort((a, b) => a.codigoCliente.localeCompare(b.codigoCliente)));
         return [...byDiscipline.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-    }, [referencias, statusFilter]);
+    }, [refsDaObra, statusFilter]);
 
     const toggleCollapsed = (d: string) => setCollapsed(prev => {
         const next = new Set(prev);
@@ -90,11 +115,11 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
         return next;
     });
 
-    // Exclui TODAS as referências de uma disciplina. Dupla proteção: referências com
-    // conjuntos instanciados são bloqueadas (aqui e de novo no banco) e a confirmação
-    // exige DIGITAR o nome da disciplina — nada de excluir sem querer.
+    // Exclui TODAS as referências de uma disciplina DA OBRA ATIVA (nunca de outras
+    // obras). Dupla proteção: referências com conjuntos instanciados são bloqueadas
+    // (aqui e de novo no banco) e a confirmação exige DIGITAR o nome da disciplina.
     const excluirDisciplina = async (discipline: Discipline) => {
-        const daDisciplina = referencias.filter(r => r.discipline === discipline);
+        const daDisciplina = refsDaObra.filter(r => r.discipline === discipline);
         if (daDisciplina.length === 0) return;
         const comConjuntos = daDisciplina.filter(r => (conjuntosByRef.get(r.id) || []).length > 0);
         const excluiveis = daDisciplina.filter(r => (conjuntosByRef.get(r.id) || []).length === 0);
@@ -108,7 +133,7 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
             ? `\n\nATENÇÃO: ${comConjuntos.length} referência(s) com conjuntos instanciados NÃO serão excluídas:\n${comConjuntos.map(r => `  • ${r.codigoCliente}`).join('\n')}`
             : '';
         const digitado = prompt(
-            `Excluir ${excluiveis.length} referência(s) da disciplina ${discipline}:\n${excluiveis.map(r => `  • ${r.codigoCliente}`).join('\n')}${aviso}\n\nEsta ação NÃO pode ser desfeita. Para confirmar, digite o nome da disciplina:`
+            `Excluir ${excluiveis.length} referência(s) da disciplina ${discipline} na obra "${obraAtiva}":\n${excluiveis.map(r => `  • ${r.codigoCliente}`).join('\n')}${aviso}\n\nEsta ação NÃO pode ser desfeita. Para confirmar, digite o nome da disciplina:`
         );
         if (digitado === null) return;
         if (digitado.trim().toLowerCase() !== discipline.toLowerCase()) {
@@ -146,8 +171,77 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
         });
     };
 
+    // --- Tela de seleção de obra (antes da lista do catálogo) ---
+    if (!obraAtiva) {
+        return (
+            <div className="space-y-4">
+                <div className="text-center pt-8 pb-2">
+                    <HardHat className="mx-auto text-brand-600 dark:text-brand-400 mb-3" size={32} />
+                    <h2 className="text-xl font-bold text-slate-800 dark:text-white">Selecione a Obra</h2>
+                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                        O catálogo é navegado por obra. A escolha fica salva — nas próximas visitas você entra direto nela.
+                    </p>
+                </div>
+
+                {clients.length === 0 ? (
+                    <div className="text-center py-16 bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-600">
+                        <MapPin className="mx-auto text-slate-300 dark:text-slate-600 mb-3" size={40} />
+                        <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Nenhuma obra de rodovia cadastrada</p>
+                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Cadastre uma obra do tipo "Obra de Rodovia" na aba Obras para começar o catálogo.</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-w-4xl mx-auto">
+                        {clients.map(c => {
+                            const k = catalogoKpis(referencias.filter(r => r.client === c.name));
+                            const nBases = (c.bases || []).length;
+                            return (
+                                <button
+                                    key={c.id}
+                                    onClick={() => selecionarObra(c.name)}
+                                    className="text-left bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 hover:border-brand-400 dark:hover:border-brand-500 hover:shadow-md transition-all active:scale-[0.99] group"
+                                >
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <span className="flex-shrink-0 w-9 h-9 rounded-lg bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 flex items-center justify-center group-hover:bg-brand-100 dark:group-hover:bg-brand-900/50 transition-colors">
+                                            <HardHat size={18} />
+                                        </span>
+                                        <span className="font-bold text-sm text-slate-800 dark:text-slate-100 leading-tight">{c.name}</span>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                                        <span><strong className="text-slate-700 dark:text-slate-200">{k.total}</strong> projeto(s) no catálogo</span>
+                                        <span><strong className="text-slate-700 dark:text-slate-200">{nBases}</strong> base(s) registrada(s)</span>
+                                        {k.emElaboracao > 0 && <span className="text-amber-600 dark:text-amber-400 font-semibold">{k.emElaboracao} em elaboração</span>}
+                                        {k.enviado > 0 && <span className="text-blue-600 dark:text-blue-400 font-semibold">{k.enviado} com o cliente</span>}
+                                        {k.aprovado > 0 && <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{k.aprovado} aprovado(s)</span>}
+                                        {k.reprovado > 0 && <span className="text-rose-600 dark:text-rose-400 font-semibold">{k.reprovado} reprovado(s)</span>}
+                                        {k.total === 0 && <span className="italic col-span-2">Catálogo vazio — comece por aqui</span>}
+                                    </div>
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-4">
+            {/* Obra ativa: todo o catálogo abaixo é SÓ desta obra */}
+            <div className="flex items-center justify-between bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2">
+                <span className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-slate-200">
+                    <HardHat size={16} className="text-brand-600 dark:text-brand-400" /> {obraAtiva}
+                </span>
+                {clients.length > 1 && (
+                    <button
+                        onClick={trocarObra}
+                        className="flex items-center gap-1.5 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-brand-700 dark:hover:text-brand-400 border border-slate-200 dark:border-slate-600 hover:border-brand-300 rounded-lg px-2.5 py-1.5 transition-colors"
+                        title="Voltar para a seleção de obras"
+                    >
+                        <ArrowLeftRight size={13} /> Trocar Obra
+                    </button>
+                )}
+            </div>
+
             {/* KPIs nível Referência: elaboração + validação dos TIPOS (nunca mistura com pranchas) */}
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
                 <KpiCard color="slate" icon={<BookOpen size={16} />} label="Todos os Tipos" value={kpis.total} active={statusFilter === 'ALL'} onClick={() => setStatusFilter('ALL')} />
@@ -175,7 +269,7 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
                         </button>
                         <button
                             onClick={() => setLoteAberto(true)}
-                            disabled={referencias.length === 0}
+                            disabled={refsDaObra.length === 0}
                             className="flex items-center gap-2 bg-violet-700 hover:bg-violet-800 disabled:bg-slate-300 dark:disabled:bg-slate-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-all"
                             title="Instanciar várias referências em várias bases de uma vez"
                         >
@@ -191,11 +285,11 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
                 )}
             </div>
 
-            {referencias.length === 0 && (
+            {refsDaObra.length === 0 && (
                 <div className="text-center py-16 bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-600">
                     <BookOpen className="mx-auto text-slate-300 dark:text-slate-600 mb-3" size={40} />
-                    <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Nenhuma referência no catálogo</p>
-                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Cadastre o projeto básico de cada TIPO de obra (ex.: BSO, PSP) com seu gabarito de pranchas.</p>
+                    <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Nenhuma referência no catálogo de {obraAtiva}</p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Cadastre o projeto básico de cada TIPO de edificação (ex.: BSO, PSP) com seu gabarito de pranchas.</p>
                 </div>
             )}
 
@@ -250,7 +344,6 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
                                                 {ref.importada && <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400" title="Criada pela migração a partir de executivos sem preliminar">importada</span>}
                                             </div>
                                             <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-500 dark:text-slate-400 flex-wrap">
-                                                <span>{ref.client}</span>
                                                 <span className="flex items-center gap-1"><GripVertical size={11} /> {ref.gabarito.length} entregável(is) no gabarito</span>
                                                 <span className="flex items-center gap-1"><MapPin size={11} /> {bases.length} base(s) instanciada(s)</span>
                                                 {ref.startDate && <span>Início: {formatDateDisplay(ref.startDate)}</span>}
@@ -310,6 +403,7 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
                 <ReferenciaModal
                     referencia={editing === 'NEW' ? null : editing}
                     clients={clients}
+                    defaultClient={obraAtiva}
                     onClose={() => setEditing(null)}
                     onSave={(data) => {
                         if (editing === 'NEW') {
@@ -339,7 +433,7 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
 
             {loteAberto && (
                 <InstanciarLoteModal
-                    referencias={referencias}
+                    referencias={refsDaObra}
                     conjuntos={conjuntos}
                     clients={clients}
                     onClose={() => setLoteAberto(false)}
@@ -358,7 +452,7 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
 
             {gerarLoteAberto && (
                 <GerarDisciplinasLoteModal
-                    referencias={referencias}
+                    referencias={refsDaObra}
                     clients={clients}
                     onClose={() => setGerarLoteAberto(false)}
                     onConfirm={onAddMany}
@@ -397,14 +491,15 @@ function ActionBtn({ children, title, onClick, tone }: { children: React.ReactNo
 
 // --- Modal de cadastro/edição da Referência (molde + gabarito) ---
 
-function ReferenciaModal({ referencia, clients, onClose, onSave }: {
+function ReferenciaModal({ referencia, clients, defaultClient, onClose, onSave }: {
     referencia: Referencia | null;
     clients: ClientDoc[];
+    defaultClient?: string;    // obra ativa do catálogo — referência nova nasce nela
     onClose: () => void;
     onSave: (data: Omit<Referencia, 'id'>) => void;
 }) {
     const [codigoCliente, setCodigoCliente] = useState(referencia?.codigoCliente || '');
-    const [client, setClient] = useState(referencia?.client || clients[0]?.name || '');
+    const [client, setClient] = useState(referencia?.client || defaultClient || clients[0]?.name || '');
     const [discipline, setDiscipline] = useState<Discipline>(referencia?.discipline || Discipline.ARCHITECTURE);
     const [revisao, setRevisao] = useState(referencia?.revisao ?? 0);
     const [observacao, setObservacao] = useState(referencia?.observacao || '');
