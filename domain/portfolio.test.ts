@@ -6,10 +6,10 @@ import {
     inferRefStatusFromDates, inferPranchaStatusFromDates,
     planInstanciacaoLote,
     swapDisciplinaSigla, gerarReferenciasDisciplinas, planGerarDisciplinasLote, DISCIPLINA_SIGLA,
-    catalogoKpis, carteiraKpis, conjuntosKpis,
+    catalogoKpis, carteiraKpis, conjuntosKpis, revisaoStats,
     planPortfolioMigration, inferPapel, execMoldeKey, buildCodigoCompleto,
 } from './portfolio';
-import { Discipline, ProjectFile, ProjectPhase, Status } from '../types';
+import { Discipline, ProjectFile, ProjectPhase, RevisionReason, Status } from '../types';
 
 // --- Fixtures ---
 
@@ -426,6 +426,33 @@ describe('ciclos de vida independentes', () => {
     });
 });
 
+// --- Estatísticas de revisão (KPI) ---
+
+describe('revisaoStats', () => {
+    const rev = (reason: RevisionReason, date = '2026-07-01') => ({ id: crypto.randomUUID(), date, reason, comment: '' });
+
+    it('conta revisões, itens revisados, taxa e distribuição por motivo', () => {
+        const items = [
+            { revisions: [rev(RevisionReason.CLIENT_REQUEST), rev(RevisionReason.INTERNAL_ERROR)] },
+            { revisions: [rev(RevisionReason.CLIENT_REQUEST)] },
+            { revisions: [] },
+            {}, // sem histórico
+        ];
+        const s = revisaoStats(items);
+        expect(s.totalRevisoes).toBe(3);
+        expect(s.itensRevisados).toBe(2);
+        expect(s.taxaRevisao).toBeCloseTo(0.5);
+        expect(s.porMotivo[RevisionReason.CLIENT_REQUEST]).toBe(2);
+        expect(s.porMotivo[RevisionReason.INTERNAL_ERROR]).toBe(1);
+    });
+
+    it('catálogo vazio não divide por zero', () => {
+        const s = revisaoStats([]);
+        expect(s.taxaRevisao).toBe(0);
+        expect(s.totalRevisoes).toBe(0);
+    });
+});
+
 // --- Migração ---
 
 describe('planPortfolioMigration', () => {
@@ -479,6 +506,23 @@ describe('planPortfolioMigration', () => {
         expect(ref.gabarito).toHaveLength(3);
         expect(ref.gabarito.map(g => g.papel)).toContain('Memorial Descritivo');
         expect(ref.gabarito.map(g => g.papel)).toContain('Folha 101');
+    });
+
+    it('histórico de revisões da família legada é preservado na referência', () => {
+        const r0 = makeProject({
+            id: 'p-r0', filename: 'BSO-CONSTRUCAP-ARQ-R00', phase: ProjectPhase.PRELIMINARY,
+            status: Status.REVISED, revision: 0,
+        });
+        const r1 = makeProject({
+            id: 'p-r1', filename: 'BSO-CONSTRUCAP-ARQ-R00', phase: ProjectPhase.PRELIMINARY,
+            status: Status.APPROVED, revision: 1,
+            revisions: [{ id: 'rev-1', date: '2026-03-01', reason: RevisionReason.CLIENT_REQUEST, comment: 'ajuste de layout' }],
+        });
+        const plan = planPortfolioMigration({ projects: [r0, r1], rodoviaClients: ['Construcap 040RJ'], ...noExisting });
+        expect(plan.referencias).toHaveLength(1);
+        expect(plan.referencias[0].revisao).toBe(1);
+        expect(plan.referencias[0].revisions).toHaveLength(1);
+        expect(plan.referencias[0].revisions![0].reason).toBe(RevisionReason.CLIENT_REQUEST);
     });
 
     it('executivo sem preliminar gera referência-stub marcada como importada', () => {

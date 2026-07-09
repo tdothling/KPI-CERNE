@@ -70,6 +70,7 @@ export interface Referencia {
     feedbackPeriod?: Period;
     blockedDays?: number;       // dias úteis parados com o cliente (envio→feedback)
 
+    revisions?: Revision[];     // histórico: 1 entrada por revisão aberta (motivo+comentário)
     observacao?: string;
     importada?: boolean;        // stub criado pela migração (executivo sem preliminar)
     legacy?: { source: 'projects'; originalId: string };
@@ -506,6 +507,28 @@ export const carteiraKpis = (
     return k;
 };
 
+// Estatísticas de revisão (KPI): funciona para Referências E Pranchas, pois ambas
+// carregam `revisions[]`. taxaRevisao = itens que já sofreram ao menos 1 revisão / total.
+export interface RevisaoStats {
+    totalRevisoes: number;
+    itensRevisados: number;
+    taxaRevisao: number;                 // 0..1
+    porMotivo: Record<string, number>;   // RevisionReason → quantidade
+}
+
+export const revisaoStats = (items: { revisions?: Revision[] }[]): RevisaoStats => {
+    const stats: RevisaoStats = { totalRevisoes: 0, itensRevisados: 0, taxaRevisao: 0, porMotivo: {} };
+    items.forEach(item => {
+        const revs = item.revisions || [];
+        if (revs.length === 0) return;
+        stats.itensRevisados++;
+        stats.totalRevisoes += revs.length;
+        revs.forEach(r => { stats.porMotivo[r.reason] = (stats.porMotivo[r.reason] || 0) + 1; });
+    });
+    stats.taxaRevisao = items.length > 0 ? stats.itensRevisados / items.length : 0;
+    return stats;
+};
+
 // --- MIGRAÇÃO (planejador puro; a escrita no Firestore fica em services/db.ts) ---
 //
 // Entrada: docs atuais da coleção `projects` das obras de rodovia.
@@ -612,6 +635,8 @@ export const planPortfolioMigration = (input: MigrationInput): MigrationPlan => 
         const latest = fam[fam.length - 1];
         // Vigente = maior revisão não-Revisado se existir; senão, a última mesmo
         const active = [...fam].reverse().find(p => p.status !== Status.REVISED) || latest;
+        // Histórico: motivos de revisão de TODA a família legada viram o histórico do molde
+        const mergedRevisions: Revision[] = fam.flatMap(p => p.revisions || []);
         const ref: Referencia = {
             id: refIdOf(key),
             codigoCliente: cleanMoldeName(active.filename),
@@ -629,6 +654,7 @@ export const planPortfolioMigration = (input: MigrationInput): MigrationPlan => 
             ...(active.feedbackDate ? { feedbackDate: active.feedbackDate } : {}),
             ...(active.feedbackPeriod ? { feedbackPeriod: active.feedbackPeriod } : {}),
             ...(active.blockedDays ? { blockedDays: active.blockedDays } : {}),
+            ...(mergedRevisions.length > 0 ? { revisions: mergedRevisions } : {}),
             legacy: { source: 'projects', originalId: active.id },
         };
         refByKey.set(key, ref);

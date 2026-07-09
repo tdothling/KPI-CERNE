@@ -207,7 +207,13 @@ export function useAppData(projectFilter: ProjectFilterState) {
 
     // Ciclo da Referência: elaboração do preliminar (mede o tempo de execução) +
     // validação com o cliente. Independente do ciclo das pranchas.
-    const handleMoveReferencia = (ref: Referencia, to: RefStatus, date: string, period: Period) => {
+    const handleMoveReferencia = (
+        ref: Referencia,
+        to: RefStatus,
+        date: string,
+        period: Period,
+        options: { reason?: RevisionReason; comment?: string } = {}
+    ) => {
         if (!canRefTransition(ref.statusAprovacao, to)) {
             alert(`Transição inválida: "${ref.statusAprovacao}" não pode ir para "${to}".`);
             return;
@@ -216,10 +222,15 @@ export function useAppData(projectFilter: ProjectFilterState) {
         if (to === RefStatus.EM_ELABORACAO) {
             changes.startDate = date;
             changes.startPeriod = period;
-            // Retrabalho após reprovação = nova revisão do molde, ciclo recomeça
+            // Retrabalho após reprovação = nova revisão do molde, ciclo recomeça.
+            // O motivo entra no histórico — mesma estrutura da aba Projetos (KPI futuro).
             if (ref.statusAprovacao === RefStatus.REPROVADO) {
                 changes.revisao = (ref.revisao || 0) + 1;
                 changes.endDate = ''; changes.sendDate = ''; changes.feedbackDate = '';
+                changes.revisions = [
+                    ...(ref.revisions || []),
+                    { id: crypto.randomUUID(), date, reason: options.reason || RevisionReason.CLIENT_REQUEST, comment: options.comment || '' }
+                ];
             }
         }
         if (to === RefStatus.ELABORADO) {
@@ -327,6 +338,11 @@ export function useAppData(projectFilter: ProjectFilterState) {
         if (to === PranchaStatus.APROVADO || to === PranchaStatus.REPROVADO) {
             changes.feedbackDate = date;
             changes.feedbackPeriod = period;
+            // O comentário da reprovação não pode se perder: fica na observação da prancha
+            if (to === PranchaStatus.REPROVADO && options.comment) {
+                const nota = `Reprovação (${date}): ${options.comment}`;
+                changes.observacao = prancha.observacao ? `${prancha.observacao}\n${nota}` : nota;
+            }
             // Dias parados aguardando o cliente — mesmo cálculo do fluxo de projetos
             if (prancha.sendDate) {
                 const send = parseISO(prancha.sendDate);

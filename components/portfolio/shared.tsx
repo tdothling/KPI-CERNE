@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { X, Clock } from 'lucide-react';
-import { Period } from '../../types';
+import { X, Clock, History, PencilLine } from 'lucide-react';
+import { Period, Revision, RevisionReason } from '../../types';
 import { PranchaStatus, RefStatus } from '../../domain/portfolio';
+import { formatDateDisplay } from '../../utils';
 
 // --- Card de resumo / filtro rápido (mesmo visual da aba Projetos) ---
 
@@ -70,7 +71,8 @@ export interface DateActionRequest {
     confirmLabel: string;
     tone?: 'brand' | 'emerald' | 'rose' | 'blue' | 'violet';
     withComment?: boolean;
-    onConfirm: (date: string, period: Period, comment: string) => void;
+    withReason?: boolean;   // exibe o seletor de Motivo da Revisão (mesma lista da aba Projetos)
+    onConfirm: (date: string, period: Period, comment: string, reason: RevisionReason) => void;
 }
 
 const TONE_BTN: Record<NonNullable<DateActionRequest['tone']>, string> = {
@@ -159,6 +161,7 @@ export function DateActionModal({ request, onClose }: { request: DateActionReque
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [period, setPeriod] = useState<Period>(new Date().getHours() < 12 ? 'MANHA' : 'TARDE');
     const [comment, setComment] = useState('');
+    const [reason, setReason] = useState<RevisionReason>(RevisionReason.CLIENT_REQUEST);
 
     return (
         <div className="fixed inset-0 bg-black/60 dark:bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
@@ -192,6 +195,19 @@ export function DateActionModal({ request, onClose }: { request: DateActionReque
                     ))}
                 </div>
 
+                {request.withReason && (
+                    <>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Motivo da Revisão</label>
+                        <select
+                            value={reason}
+                            onChange={e => setReason(e.target.value as RevisionReason)}
+                            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-sm rounded-lg p-2.5 mb-4"
+                        >
+                            {Object.values(RevisionReason).map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                    </>
+                )}
+
                 {request.withComment && (
                     <>
                         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Comentário</label>
@@ -206,11 +222,105 @@ export function DateActionModal({ request, onClose }: { request: DateActionReque
                 <div className="flex justify-end gap-2">
                     <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg font-medium">Cancelar</button>
                     <button
-                        onClick={() => { if (date) { request.onConfirm(date, period, comment); onClose(); } }}
+                        onClick={() => { if (date) { request.onConfirm(date, period, comment, reason); onClose(); } }}
                         className={`px-4 py-2 text-sm text-white rounded-lg font-semibold shadow-sm ${TONE_BTN[request.tone || 'brand']}`}
                     >
                         {request.confirmLabel}
                     </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// --- Histórico de Revisões (Referências E Pranchas — mesmo formato da aba Projetos) ---
+// Cada entrada nasce quando uma revisão é ABERTA (reprovado → retrabalho). Motivo e
+// comentário são editáveis depois, para corrigir classificações sem mexer no ciclo.
+
+export function RevisionHistoryModal({ title, revisions, readOnly, onSave, onClose }: {
+    title: string;
+    revisions: Revision[];
+    readOnly?: boolean;
+    onSave: (updated: Revision[]) => void;
+    onClose: () => void;
+}) {
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [draft, setDraft] = useState<{ reason: RevisionReason; comment: string }>({ reason: RevisionReason.CLIENT_REQUEST, comment: '' });
+
+    const startEdit = (rev: Revision) => {
+        setEditingId(rev.id);
+        setDraft({ reason: rev.reason, comment: rev.comment });
+    };
+    const saveEdit = () => {
+        if (!editingId) return;
+        onSave(revisions.map(r => r.id === editingId ? { ...r, reason: draft.reason, comment: draft.comment } : r));
+        setEditingId(null);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/60 dark:bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-lg w-full p-6 border dark:border-slate-700 animate-in fade-in zoom-in-95 duration-150 max-h-[85vh] flex flex-col">
+                <div className="flex justify-between items-center mb-1">
+                    <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                        <History size={18} className="text-amber-500" /> Histórico de Revisões
+                    </h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" aria-label="Fechar">
+                        <X size={20} />
+                    </button>
+                </div>
+                <p className="text-xs text-slate-400 dark:text-slate-500 font-mono mb-4 truncate">{title}</p>
+
+                <div className="overflow-y-auto space-y-2 pr-1">
+                    {revisions.length === 0 && (
+                        <p className="text-sm text-slate-400 dark:text-slate-500 italic text-center py-6">Nenhuma revisão registrada.</p>
+                    )}
+                    {[...revisions].reverse().map((rev, i) => {
+                        const numero = revisions.length - i; // mais recente primeiro
+                        const isEditing = editingId === rev.id;
+                        return (
+                            <div key={rev.id} className="border border-slate-200 dark:border-slate-700 rounded-lg p-3 bg-slate-50/60 dark:bg-slate-900/40">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-[10px] font-bold px-1.5 py-0.5 rounded">R{String(numero).padStart(2, '0')}</span>
+                                    <span className="text-xs text-slate-500 dark:text-slate-400">{formatDateDisplay(rev.date)}</span>
+                                    {!isEditing && (
+                                        <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{rev.reason}</span>
+                                    )}
+                                    {!readOnly && !isEditing && (
+                                        <button onClick={() => startEdit(rev)} className="ml-auto text-slate-400 hover:text-brand-600 dark:hover:text-brand-400" title="Editar motivo/comentário" aria-label="Editar revisão">
+                                            <PencilLine size={13} />
+                                        </button>
+                                    )}
+                                </div>
+                                {isEditing ? (
+                                    <div className="mt-2 space-y-2">
+                                        <select
+                                            value={draft.reason}
+                                            onChange={e => setDraft(d => ({ ...d, reason: e.target.value as RevisionReason }))}
+                                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-sm rounded-lg p-2"
+                                        >
+                                            {Object.values(RevisionReason).map(r => <option key={r} value={r}>{r}</option>)}
+                                        </select>
+                                        <textarea
+                                            value={draft.comment}
+                                            onChange={e => setDraft(d => ({ ...d, comment: e.target.value }))}
+                                            placeholder="Comentário (opcional)"
+                                            className="w-full h-16 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-sm rounded-lg p-2 resize-none"
+                                        />
+                                        <div className="flex justify-end gap-2">
+                                            <button onClick={() => setEditingId(null)} className="px-3 py-1.5 text-xs text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg font-medium">Cancelar</button>
+                                            <button onClick={saveEdit} className="px-3 py-1.5 text-xs text-white bg-brand-700 hover:bg-brand-800 rounded-lg font-semibold">Salvar</button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    rev.comment && <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 whitespace-pre-wrap">{rev.comment}</p>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+
+                <div className="flex justify-end mt-4">
+                    <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg font-medium">Fechar</button>
                 </div>
             </div>
         </div>

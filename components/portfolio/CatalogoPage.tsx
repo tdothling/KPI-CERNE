@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { BookOpen, Plus, Send, BadgeCheck, ThumbsDown, FileEdit, Trash2, Layers, X, ChevronDown, ChevronRight, MapPin, GripVertical, PencilLine, Play, CheckCircle2, Hammer, Timer, CopyPlus, CheckSquare, Square, Loader2, Wand2 } from 'lucide-react';
 import { parseISO, isValid } from 'date-fns';
-import { ClientDoc, Discipline, Period } from '../../types';
+import { ClientDoc, Discipline, Period, RevisionReason } from '../../types';
 import { Referencia, Conjunto, RefStatus, GabaritoItem, canRefTransition, catalogoKpis, buildCodigoCompleto, inferRefStatusFromDates, planInstanciacaoLote, slugify, DISCIPLINA_SIGLA, gerarReferenciasDisciplinas, planGerarDisciplinasLote, swapDisciplinaSigla } from '../../domain/portfolio';
-import { KpiCard, StatusBadge, REF_STATUS_STYLE, DateActionModal, DateActionRequest, TimelineDatesEditor, TimelineDates, REF_TIMELINE_FIELDS } from './shared';
+import { KpiCard, StatusBadge, REF_STATUS_STYLE, DateActionModal, DateActionRequest, TimelineDatesEditor, TimelineDates, REF_TIMELINE_FIELDS, RevisionHistoryModal } from './shared';
 import { formatDateDisplay, calculateBusinessDaysWithHolidays } from '../../utils';
 
 interface CatalogoPageProps {
@@ -15,7 +15,7 @@ interface CatalogoPageProps {
     onAdd: (ref: Omit<Referencia, 'id'>) => void;
     onUpdate: (id: string, changes: Partial<Referencia>) => void;
     onDelete: (id: string) => void;
-    onMove: (ref: Referencia, to: RefStatus, date: string, period: Period) => void;
+    onMove: (ref: Referencia, to: RefStatus, date: string, period: Period, options?: { reason?: RevisionReason; comment?: string }) => void;
     onInstanciar: (ref: Referencia, base: string, codigoRodovia?: string) => Promise<boolean>;
     onInstanciarLote: (
         refs: Referencia[],
@@ -59,6 +59,7 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
 
     const temArquitetura = useMemo(() => referencias.some(r => r.discipline === Discipline.ARCHITECTURE), [referencias]);
     const [dateAction, setDateAction] = useState<DateActionRequest | null>(null);
+    const [historicoDe, setHistoricoDe] = useState<Referencia | null>(null);
     const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
     const kpis = useMemo(() => catalogoKpis(referencias), [referencias]);
@@ -119,8 +120,13 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
     };
 
     const askMove = (ref: Referencia, to: RefStatus) => {
-        const cfg: Record<string, { title: string; confirmLabel: string; tone: DateActionRequest['tone'] }> = {
-            [RefStatus.EM_ELABORACAO]: { title: `Iniciar elaboração de "${ref.codigoCliente}"`, confirmLabel: 'Iniciar Elaboração', tone: 'brand' },
+        // Reprovado → Em Elaboração é a abertura de REVISÃO: pede motivo + comentário,
+        // que entram no histórico do molde (mesma dinâmica da aba Projetos).
+        const isRevisao = to === RefStatus.EM_ELABORACAO && ref.statusAprovacao === RefStatus.REPROVADO;
+        const cfg: Record<string, { title: string; confirmLabel: string; tone: DateActionRequest['tone']; withReason?: boolean; withComment?: boolean }> = {
+            [RefStatus.EM_ELABORACAO]: isRevisao
+                ? { title: `Revisar "${ref.codigoCliente}"`, confirmLabel: 'Iniciar Revisão', tone: 'brand', withReason: true, withComment: true }
+                : { title: `Iniciar elaboração de "${ref.codigoCliente}"`, confirmLabel: 'Iniciar Elaboração', tone: 'brand' },
             [RefStatus.ELABORADO]: { title: `Concluir elaboração de "${ref.codigoCliente}"`, confirmLabel: 'Concluir', tone: 'violet' },
             [RefStatus.ENVIADO]: { title: `Enviar "${ref.codigoCliente}" ao cliente`, confirmLabel: 'Registrar Envio', tone: 'blue' },
             [RefStatus.APROVADO]: { title: `Aprovar "${ref.codigoCliente}"`, confirmLabel: 'Aprovar', tone: 'emerald' },
@@ -128,15 +134,15 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
         };
         const c = cfg[to];
         const descriptions: Partial<Record<RefStatus, string>> = {
-            [RefStatus.EM_ELABORACAO]: ref.statusAprovacao === RefStatus.REPROVADO
-                ? 'Retrabalho após reprovação: a revisão do molde será incrementada e o tempo de execução recomeça a contar.'
+            [RefStatus.EM_ELABORACAO]: isRevisao
+                ? `O molde reprovado volta para elaboração como R${String((ref.revisao || 0) + 1).padStart(2, '0')}. O motivo fica no histórico e as datas de conclusão/envio/feedback são reiniciadas.`
                 : 'A partir desta data o tempo de execução do preliminar passa a ser medido.',
             [RefStatus.ELABORADO]: 'Fecha a medição do tempo de execução (dias úteis entre início e conclusão).',
         };
         setDateAction({
             ...c,
             description: descriptions[to],
-            onConfirm: (date, period) => onMove(ref, to, date, period),
+            onConfirm: (date, period, comment, reason) => onMove(ref, to, date, period, isRevisao ? { reason, comment } : undefined),
         });
     };
 
@@ -228,7 +234,18 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-2 flex-wrap">
                                                 <span className="font-mono text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{ref.codigoCliente}</span>
-                                                <span className="text-[10px] font-bold text-slate-400 border border-slate-200 dark:border-slate-600 rounded px-1.5 py-0.5">R{String(ref.revisao ?? 0).padStart(2, '0')}</span>
+                                                {(ref.revisao ?? 0) > 0 || (ref.revisions?.length ?? 0) > 0 ? (
+                                                    <button
+                                                        onClick={() => setHistoricoDe(ref)}
+                                                        className="text-[10px] font-bold bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 rounded px-1.5 py-0.5 hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors"
+                                                        title="Ver histórico de revisões (motivos e comentários)"
+                                                        aria-label={`Ver histórico de revisões de ${ref.codigoCliente}`}
+                                                    >
+                                                        R{String(ref.revisao ?? 0).padStart(2, '0')}
+                                                    </button>
+                                                ) : (
+                                                    <span className="text-[10px] font-bold text-slate-400 border border-slate-200 dark:border-slate-600 rounded px-1.5 py-0.5">R00</span>
+                                                )}
                                                 <StatusBadge label={ref.statusAprovacao} className={REF_STATUS_STYLE[ref.statusAprovacao]} />
                                                 {ref.importada && <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400" title="Criada pela migração a partir de executivos sem preliminar">importada</span>}
                                             </div>
@@ -349,6 +366,19 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
             )}
 
             {dateAction && <DateActionModal request={dateAction} onClose={() => setDateAction(null)} />}
+
+            {historicoDe && (
+                <RevisionHistoryModal
+                    title={historicoDe.codigoCliente}
+                    revisions={historicoDe.revisions || []}
+                    readOnly={readOnly}
+                    onSave={(updated) => {
+                        onUpdate(historicoDe.id, { revisions: updated });
+                        setHistoricoDe({ ...historicoDe, revisions: updated });
+                    }}
+                    onClose={() => setHistoricoDe(null)}
+                />
+            )}
         </div>
     );
 };

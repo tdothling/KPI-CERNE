@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { FolderKanban, Play, Send, BadgeCheck, ThumbsDown, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Layers, ListTodo, MapPin, PencilLine, Trash2, X, RotateCcw, Database } from 'lucide-react';
 import { ClientDoc, Discipline, Period, RevisionReason } from '../../types';
 import { Referencia, Conjunto, Prancha, PranchaStatus, canPranchaTransition, carteiraKpis, conjuntosKpis, rollupConjunto, inferPranchaStatusFromDates } from '../../domain/portfolio';
-import { KpiCard, StatusBadge, PRANCHA_STATUS_STYLE, DateActionModal, DateActionRequest, TimelineDatesEditor, TimelineDates, PRANCHA_TIMELINE_FIELDS } from './shared';
+import { KpiCard, StatusBadge, PRANCHA_STATUS_STYLE, DateActionModal, DateActionRequest, TimelineDatesEditor, TimelineDates, PRANCHA_TIMELINE_FIELDS, RevisionHistoryModal } from './shared';
 import { calculateDeadlineDate, formatDateDisplay } from '../../utils';
 import { format } from 'date-fns';
 
@@ -32,6 +32,7 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
     const [expanded, setExpanded] = useState<Set<string>>(new Set());
     const [dateAction, setDateAction] = useState<DateActionRequest | null>(null);
     const [editingPrancha, setEditingPrancha] = useState<Prancha | null>(null);
+    const [historicoDe, setHistoricoDe] = useState<Prancha | null>(null);
 
     const refById = useMemo(() => new Map(referencias.map(r => [r.id, r])), [referencias]);
     const clientsMap = useMemo(() => {
@@ -105,9 +106,10 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
     });
 
     const askMovePrancha = (p: Prancha, to: PranchaStatus) => {
-        const cfg: Partial<Record<PranchaStatus, { title: string; confirmLabel: string; tone: DateActionRequest['tone']; withComment?: boolean; description?: string }>> = {
-            [PranchaStatus.EM_ANDAMENTO]: p.status === PranchaStatus.REPROVADO
-                ? { title: `Revisar "${p.codigoCompleto || p.papel}"`, confirmLabel: 'Iniciar Revisão', tone: 'brand', withComment: true, description: 'A prancha reprovada volta para execução como nova revisão. As datas de fim/envio/feedback serão reiniciadas.' }
+        const isRevisao = to === PranchaStatus.EM_ANDAMENTO && p.status === PranchaStatus.REPROVADO;
+        const cfg: Partial<Record<PranchaStatus, { title: string; confirmLabel: string; tone: DateActionRequest['tone']; withComment?: boolean; withReason?: boolean; description?: string }>> = {
+            [PranchaStatus.EM_ANDAMENTO]: isRevisao
+                ? { title: `Revisar "${p.codigoCompleto || p.papel}"`, confirmLabel: 'Iniciar Revisão', tone: 'brand', withReason: true, withComment: true, description: 'A prancha reprovada volta para execução como nova revisão. O motivo fica no histórico e as datas de fim/envio/feedback serão reiniciadas.' }
                 : { title: `Iniciar "${p.codigoCompleto || p.papel}"`, confirmLabel: 'Iniciar Execução', tone: 'brand' },
             [PranchaStatus.CONCLUIDO]: { title: `Concluir execução de "${p.codigoCompleto || p.papel}"`, confirmLabel: 'Concluir', tone: 'violet' },
             [PranchaStatus.ENVIADO]: { title: `Enviar "${p.codigoCompleto || p.papel}"`, confirmLabel: 'Registrar Envio', tone: 'blue' },
@@ -117,7 +119,8 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
         const c = cfg[to]!;
         setDateAction({
             ...c,
-            onConfirm: (date, period, comment) => onMovePrancha(p, to, date, period, comment ? { comment } : undefined),
+            onConfirm: (date, period, comment, reason) =>
+                onMovePrancha(p, to, date, period, isRevisao ? { reason, comment } : (comment ? { comment } : undefined)),
         });
     };
 
@@ -240,7 +243,16 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
                                                     <div className="flex-1 min-w-0">
                                                         <div className="flex items-center gap-2 flex-wrap">
                                                             <span className="text-xs font-bold text-slate-600 dark:text-slate-300">{p.papel}</span>
-                                                            {p.revisao > 0 && <span className="text-[10px] font-bold text-slate-400 border border-slate-200 dark:border-slate-600 rounded px-1 py-0.5">R{String(p.revisao).padStart(2, '0')}</span>}
+                                                            {(p.revisao > 0 || (p.revisions?.length ?? 0) > 0) && (
+                                                                <button
+                                                                    onClick={() => setHistoricoDe(p)}
+                                                                    className="text-[10px] font-bold bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 rounded px-1 py-0.5 hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors"
+                                                                    title="Ver histórico de revisões (motivos e comentários)"
+                                                                    aria-label={`Ver histórico de revisões de ${p.codigoCompleto || p.papel}`}
+                                                                >
+                                                                    R{String(p.revisao).padStart(2, '0')}
+                                                                </button>
+                                                            )}
                                                             <StatusBadge label={p.status} className={PRANCHA_STATUS_STYLE[p.status]} />
                                                             {isPranchaOverdue(p, conjunto) && <StatusBadge label="Atrasada" className="text-red-600 bg-red-50 border-red-200 dark:bg-red-900/30 dark:border-red-800 dark:text-red-400" />}
                                                         </div>
@@ -291,6 +303,19 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
             ))}
 
             {dateAction && <DateActionModal request={dateAction} onClose={() => setDateAction(null)} />}
+
+            {historicoDe && (
+                <RevisionHistoryModal
+                    title={historicoDe.codigoCompleto || historicoDe.papel}
+                    revisions={historicoDe.revisions || []}
+                    readOnly={readOnly}
+                    onSave={(updated) => {
+                        onUpdatePrancha(historicoDe.id, { revisions: updated });
+                        setHistoricoDe({ ...historicoDe, revisions: updated });
+                    }}
+                    onClose={() => setHistoricoDe(null)}
+                />
+            )}
 
             {editingPrancha && (
                 <PranchaEditModal
