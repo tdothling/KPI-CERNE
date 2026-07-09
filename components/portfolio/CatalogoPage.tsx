@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { BookOpen, Plus, Send, BadgeCheck, ThumbsDown, FileEdit, Trash2, Layers, X, ChevronDown, ChevronRight, MapPin, GripVertical, PencilLine, Play, CheckCircle2, Hammer, Timer, CopyPlus, CheckSquare, Square, Loader2, Wand2 } from 'lucide-react';
 import { parseISO, isValid } from 'date-fns';
 import { ClientDoc, Discipline, Period, RevisionReason } from '../../types';
@@ -267,35 +267,35 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
                                         </div>
 
                                         {!readOnly && (
-                                            <div className="flex items-center gap-1.5 flex-wrap">
-                                                {/* Instanciar NÃO exige aprovação: o processo pode seguir sem ela */}
-                                                <button
-                                                    onClick={() => setInstanciando(ref)}
-                                                    className="flex items-center gap-1.5 bg-brand-700 hover:bg-brand-800 text-white px-2.5 py-1.5 rounded-lg text-[11px] font-bold shadow-sm"
-                                                    title="Criar um Conjunto em uma base (KM), pré-gerando as pranchas do gabarito"
-                                                >
-                                                    <MapPin size={12} /> Instanciar em Base
-                                                </button>
+                                            <div className="flex items-center gap-2 flex-wrap">
                                                 {ref.discipline === Discipline.ARCHITECTURE && (
-                                                    <ActionBtn title="Gerar referências das outras disciplinas a partir desta (troca a sigla no código)" tone="text-violet-600" onClick={() => setGerandoDe(ref)}><Wand2 size={13} /></ActionBtn>
+                                                    <ActionBtn title="Gerar referências das outras disciplinas a partir desta (troca a sigla no código)" tone="text-violet-600" onClick={() => setGerandoDe(ref)}><Wand2 size={15} /></ActionBtn>
                                                 )}
                                                 {canRefTransition(ref.statusAprovacao, RefStatus.EM_ELABORACAO) && (
-                                                    <ActionBtn title={ref.statusAprovacao === RefStatus.REPROVADO ? 'Retrabalhar (nova revisão do molde)' : 'Iniciar elaboração (começa a medir o tempo de execução)'} tone="text-amber-600" onClick={() => askMove(ref, RefStatus.EM_ELABORACAO)}><Play size={13} /></ActionBtn>
+                                                    <ActionBtn title={ref.statusAprovacao === RefStatus.REPROVADO ? 'Retrabalhar (nova revisão do molde)' : 'Iniciar elaboração (começa a medir o tempo de execução)'} tone="text-amber-600" onClick={() => askMove(ref, RefStatus.EM_ELABORACAO)}><Play size={15} /></ActionBtn>
                                                 )}
                                                 {canRefTransition(ref.statusAprovacao, RefStatus.ELABORADO) && (
-                                                    <ActionBtn title="Concluir elaboração (fecha o tempo de execução)" tone="text-violet-600" onClick={() => askMove(ref, RefStatus.ELABORADO)}><CheckCircle2 size={13} /></ActionBtn>
+                                                    <ActionBtn title="Concluir elaboração (fecha o tempo de execução)" tone="text-violet-600" onClick={() => askMove(ref, RefStatus.ELABORADO)}><CheckCircle2 size={15} /></ActionBtn>
                                                 )}
                                                 {canRefTransition(ref.statusAprovacao, RefStatus.ENVIADO) && (
-                                                    <ActionBtn title="Registrar envio ao cliente" onClick={() => askMove(ref, RefStatus.ENVIADO)}><Send size={13} /></ActionBtn>
+                                                    <ActionBtn title="Registrar envio ao cliente" onClick={() => askMove(ref, RefStatus.ENVIADO)}><Send size={15} /></ActionBtn>
                                                 )}
                                                 {canRefTransition(ref.statusAprovacao, RefStatus.APROVADO) && (
-                                                    <ActionBtn title="Aprovar" tone="text-emerald-600" onClick={() => askMove(ref, RefStatus.APROVADO)}><BadgeCheck size={13} /></ActionBtn>
+                                                    <ActionBtn title="Aprovar" tone="text-emerald-600" onClick={() => askMove(ref, RefStatus.APROVADO)}><BadgeCheck size={15} /></ActionBtn>
                                                 )}
                                                 {canRefTransition(ref.statusAprovacao, RefStatus.REPROVADO) && (
-                                                    <ActionBtn title="Reprovar" tone="text-rose-600" onClick={() => askMove(ref, RefStatus.REPROVADO)}><ThumbsDown size={13} /></ActionBtn>
+                                                    <ActionBtn title="Reprovar" tone="text-rose-600" onClick={() => askMove(ref, RefStatus.REPROVADO)}><ThumbsDown size={15} /></ActionBtn>
                                                 )}
-                                                <ActionBtn title="Editar referência e gabarito" onClick={() => setEditing(ref)}><PencilLine size={13} /></ActionBtn>
-                                                <ActionBtn title="Excluir" tone="text-rose-600" onClick={() => onDelete(ref.id)}><Trash2 size={13} /></ActionBtn>
+                                                <ActionBtn title="Editar referência e gabarito" onClick={() => setEditing(ref)}><PencilLine size={15} /></ActionBtn>
+                                                <ActionBtn title="Excluir" tone="text-rose-600" onClick={() => onDelete(ref.id)}><Trash2 size={15} /></ActionBtn>
+                                                {/* Instanciar é a ÚLTIMA ação do fluxo (não exige aprovação) — fica mais à direita */}
+                                                <button
+                                                    onClick={() => setInstanciando(ref)}
+                                                    className="flex items-center gap-1.5 bg-brand-700 hover:bg-brand-800 text-white px-3 py-2 rounded-lg text-[11px] font-bold shadow-sm"
+                                                    title="Criar um Conjunto em uma base (KM), pré-gerando as pranchas do gabarito"
+                                                >
+                                                    <MapPin size={13} /> Instanciar em Base
+                                                </button>
                                             </div>
                                         )}
                                     </div>
@@ -388,7 +388,7 @@ function ActionBtn({ children, title, onClick, tone }: { children: React.ReactNo
         <button
             onClick={onClick}
             title={title}
-            className={`p-1.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 hover:border-brand-300 transition-colors ${tone || 'text-slate-500 dark:text-slate-400'}`}
+            className={`p-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 hover:border-brand-300 transition-colors ${tone || 'text-slate-500 dark:text-slate-400'}`}
         >
             {children}
         </button>
@@ -416,8 +416,16 @@ function ReferenciaModal({ referencia, clients, onClose, onSave }: {
         feedbackDate: referencia?.feedbackDate || '', feedbackPeriod: referencia?.feedbackPeriod || 'TARDE',
     });
     const [gabarito, setGabarito] = useState<GabaritoItem[]>(
-        referencia?.gabarito?.length ? referencia.gabarito : [{ id: crypto.randomUUID(), papel: 'Folha 101', sufixoCodigo: '' }]
+        referencia?.gabarito?.length ? referencia.gabarito : [{ id: crypto.randomUUID(), papel: codigoCliente, sufixoCodigo: '' }]
     );
+    // Enquanto a referência é NOVA e o 1º entregável não foi editado à mão, o nome
+    // padrão acompanha a codificação do cliente sendo digitada (evita "Folha 101"
+    // genérico quando o entregável único É o próprio projeto).
+    const [papelAuto, setPapelAuto] = useState(!referencia);
+    useEffect(() => {
+        if (!papelAuto) return;
+        setGabarito(prev => (prev.length === 1 ? [{ ...prev[0], papel: codigoCliente }] : prev));
+    }, [codigoCliente, papelAuto]);
 
     const setItem = (id: string, changes: Partial<GabaritoItem>) =>
         setGabarito(prev => prev.map(g => g.id === id ? { ...g, ...changes } : g));
@@ -428,7 +436,7 @@ function ReferenciaModal({ referencia, clients, onClose, onSave }: {
         const cleanGabarito = gabarito
             .map(g => ({ ...g, papel: g.papel.trim(), sufixoCodigo: g.sufixoCodigo?.trim() || undefined }))
             .filter(g => g.papel.length > 0);
-        if (cleanGabarito.length === 0) { alert('O gabarito precisa de ao menos 1 entregável (ex.: Folha 101).'); return; }
+        if (cleanGabarito.length === 0) { alert('O gabarito precisa de ao menos 1 entregável (ex.: o próprio nome do projeto, Folha 101, Memorial Descritivo...).'); return; }
         if (dates.startDate && dates.endDate && dates.endDate < dates.startDate) {
             alert('A conclusão da execução não pode ser anterior ao início.'); return;
         }
@@ -522,20 +530,21 @@ function ReferenciaModal({ referencia, clients, onClose, onSave }: {
                 <div className="mb-4">
                     <div className="flex items-center justify-between mb-2">
                         <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Gabarito de Entregáveis *</label>
-                        <button onClick={() => setGabarito(prev => [...prev, { id: crypto.randomUUID(), papel: '', sufixoCodigo: '' }])}
+                        <button onClick={() => { setPapelAuto(false); setGabarito(prev => [...prev, { id: crypto.randomUUID(), papel: '', sufixoCodigo: '' }]); }}
                             className="flex items-center gap-1 text-[11px] font-bold text-brand-600 dark:text-brand-400 hover:underline">
                             <Plus size={12} /> Adicionar entregável
                         </button>
                     </div>
                     <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-2">
-                        Ao instanciar em uma base, cada linha vira 1 prancha. O sufixo é opcional e apenas pré-preenche o código
-                        (a codificação final é manual — varia por órgão regulamentador).
+                        Ao instanciar em uma base, cada linha vira 1 prancha. O 1º entregável nasce com o nome da codificação
+                        do cliente (edite se o entregável tiver outro nome); o sufixo é opcional e apenas pré-preenche o
+                        código (a codificação final é manual — varia por órgão regulamentador).
                     </p>
                     <div className="space-y-1.5">
                         {gabarito.map((g, i) => (
                             <div key={g.id} className="flex items-center gap-2">
                                 <span className="text-[10px] font-bold text-slate-400 w-5 text-right">{i + 1}.</span>
-                                <input value={g.papel} onChange={e => setItem(g.id, { papel: e.target.value })} placeholder="Papel (ex: Folha 101, Memorial Descritivo)"
+                                <input value={g.papel} onChange={e => { setItem(g.id, { papel: e.target.value }); if (i === 0) setPapelAuto(false); }} placeholder="Papel (ex: Folha 101, Memorial Descritivo)"
                                     className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-sm rounded-lg p-2" />
                                 <input value={g.sufixoCodigo || ''} onChange={e => setItem(g.id, { sufixoCodigo: e.target.value })} placeholder="Sufixo (ex: DE-P1-101)"
                                     className="w-40 font-mono bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-xs rounded-lg p-2" />
