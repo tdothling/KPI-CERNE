@@ -421,6 +421,23 @@ export const planInstanciacaoLote = (input: InstanciarLoteInput): InstanciarLote
     return plan;
 };
 
+// --- MOVER PRANCHAS EM LOTE (planejador puro) ---
+//
+// Separa o que a máquina de estados PERMITE mover do que será pulado. A UI usa
+// o mesmo plano no preview e na execução: o que aparece é o que acontece, e
+// rodar de novo não move nada duas vezes (o status já terá avançado).
+
+export interface MoverPranchasLotePlan {
+    moviveis: Prancha[];   // transição permitida a partir do status atual
+    puladas: Prancha[];    // status atual não permite ir para o destino
+}
+
+export const planMoverPranchasLote = (pranchas: Prancha[], to: PranchaStatus): MoverPranchasLotePlan => {
+    const plan: MoverPranchasLotePlan = { moviveis: [], puladas: [] };
+    pranchas.forEach(p => (canPranchaTransition(p.status, to) ? plan.moviveis : plan.puladas).push(p));
+    return plan;
+};
+
 // --- ROLLUP (Conjunto deriva das pranchas; nada é gravado) ---
 
 export interface ConjuntoRollup {

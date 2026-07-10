@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
-    RefStatus, PranchaStatus, Referencia, GabaritoItem,
+    RefStatus, PranchaStatus, Referencia, GabaritoItem, Prancha,
     instanciarConjunto, conjuntoIdFor, rollupConjunto,
     canRefTransition, canPranchaTransition,
     inferRefStatusFromDates, inferPranchaStatusFromDates,
-    planInstanciacaoLote,
+    planInstanciacaoLote, planMoverPranchasLote,
     swapDisciplinaSigla, gerarReferenciasDisciplinas, planGerarDisciplinasLote, DISCIPLINA_SIGLA,
     catalogoKpis, carteiraKpis, conjuntosKpis, revisaoStats,
     planPortfolioMigration, inferPapel, execMoldeKey, buildCodigoCompleto,
@@ -324,6 +324,54 @@ describe('planInstanciacaoLote', () => {
         });
         expect(plan.semGabarito).toEqual(['VAZIA-R00']);
         expect(plan.items).toHaveLength(1);
+    });
+});
+
+// --- (c2) Mover pranchas em lote: só o que a máquina de estados permite ---
+
+describe('planMoverPranchasLote', () => {
+    const makePrancha = (id: string, status: PranchaStatus): Prancha => ({
+        id, conjuntoId: 'c1', papel: `Folha ${id}`, codigoCompleto: '', status, revisao: 0,
+    });
+
+    it('separa as pranchas que podem mover das que serão puladas', () => {
+        const alvo = [
+            makePrancha('p1', PranchaStatus.A_FAZER),
+            makePrancha('p2', PranchaStatus.A_FAZER),
+            makePrancha('p3', PranchaStatus.EM_ANDAMENTO),   // não pode "iniciar" de novo
+            makePrancha('p4', PranchaStatus.APROVADO),        // terminal
+        ];
+        const plan = planMoverPranchasLote(alvo, PranchaStatus.EM_ANDAMENTO);
+        expect(plan.moviveis.map(p => p.id)).toEqual(['p1', 'p2']);
+        expect(plan.puladas.map(p => p.id)).toEqual(['p3', 'p4']);
+    });
+
+    it('revisão em lote: reprovadas podem reabrir a execução junto com as a fazer', () => {
+        const alvo = [
+            makePrancha('p1', PranchaStatus.REPROVADO),
+            makePrancha('p2', PranchaStatus.A_FAZER),
+            makePrancha('p3', PranchaStatus.ENVIADO),
+        ];
+        const plan = planMoverPranchasLote(alvo, PranchaStatus.EM_ANDAMENTO);
+        expect(plan.moviveis.map(p => p.id)).toEqual(['p1', 'p2']);
+        expect(plan.puladas.map(p => p.id)).toEqual(['p3']);
+    });
+
+    it('é idempotente: rodar de novo sobre o resultado não move nada', () => {
+        const alvo = [makePrancha('p1', PranchaStatus.A_FAZER)];
+        const plan = planMoverPranchasLote(alvo, PranchaStatus.EM_ANDAMENTO);
+        expect(plan.moviveis).toHaveLength(1);
+        // Depois de movida, a mesma transição deixa de ser permitida
+        const depois = plan.moviveis.map(p => ({ ...p, status: PranchaStatus.EM_ANDAMENTO }));
+        const plan2 = planMoverPranchasLote(depois, PranchaStatus.EM_ANDAMENTO);
+        expect(plan2.moviveis).toHaveLength(0);
+        expect(plan2.puladas).toHaveLength(1);
+    });
+
+    it('lote vazio produz plano vazio', () => {
+        const plan = planMoverPranchasLote([], PranchaStatus.ENVIADO);
+        expect(plan.moviveis).toHaveLength(0);
+        expect(plan.puladas).toHaveLength(0);
     });
 });
 

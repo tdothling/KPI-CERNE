@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { ProjectFile, ClientDoc, Status, RevisionReason, ProjectPhase, Period, ProjectFilterState, SupplyOrder, SupplyStatus, SiteType } from '../types';
-import { subscribeToProjects, addProject, updateProjectInDb, deleteProjectFromDb, subscribeToClients, addClient, updateClientInDb, deleteClientFromDb, countLinkedRecords, subscribeToHolidays, saveHolidaysToDb, batchUpdateProjectsInDb, subscribeToSupplyOrders, addSupplyOrder, updateSupplyOrderInDb, deleteSupplyOrderFromDb, applySupplyStatusChange, patchSupplyOrderInDb, migrateLegacyPurchasesToSupply, subscribeToReferencias, subscribeToConjuntos, subscribeToPranchas, addReferenciaToDb, patchReferenciaInDb, deleteReferenciaFromDb, instanciarConjuntoInDb, instanciarLoteInDb, deleteConjuntoFromDb, patchPranchaInDb, addPranchaToDb, deletePranchaFromDb, migrateProjectsToPortfolio } from '../services/db';
-import { Referencia, Conjunto, Prancha, PranchaStatus, RefStatus, canRefTransition, canPranchaTransition, instanciarConjunto, planInstanciacaoLote } from '../domain/portfolio';
+import { subscribeToProjects, addProject, updateProjectInDb, deleteProjectFromDb, subscribeToClients, addClient, updateClientInDb, deleteClientFromDb, countLinkedRecords, subscribeToHolidays, saveHolidaysToDb, batchUpdateProjectsInDb, subscribeToSupplyOrders, addSupplyOrder, updateSupplyOrderInDb, deleteSupplyOrderFromDb, applySupplyStatusChange, patchSupplyOrderInDb, migrateLegacyPurchasesToSupply, subscribeToReferencias, subscribeToConjuntos, subscribeToPranchas, addReferenciaToDb, patchReferenciaInDb, deleteReferenciaFromDb, instanciarConjuntoInDb, instanciarLoteInDb, deleteConjuntoFromDb, patchPranchaInDb, batchUpdatePranchasInDb, addPranchaToDb, deletePranchaFromDb, migrateProjectsToPortfolio } from '../services/db';
+import { Referencia, Conjunto, Prancha, PranchaStatus, RefStatus, canRefTransition, canPranchaTransition, instanciarConjunto, planInstanciacaoLote, planMoverPranchasLote, slugify } from '../domain/portfolio';
 import { buildStatusChangePatch } from '../components/supply/supplyUtils';
 import { formatUsername } from '../services/auth';
 import { subscribeToAuth } from '../services/auth';
@@ -301,24 +301,39 @@ export function useAppData(projectFilter: ProjectFilterState) {
         }
     };
 
+    // Excluir conjunto: proteção proporcional ao que se perde. Conjunto ainda
+    // 100% "A Fazer" sai com confirm simples; com progresso registrado (status
+    // avançado ou revisões), a confirmação exige DIGITAR o nome da base — mesma
+    // dinâmica do "excluir disciplina" do Catálogo.
     const handleDeleteConjunto = (conjunto: Conjunto) => {
-        const n = pranchas.filter(p => p.conjuntoId === conjunto.id).length;
-        if (!confirm(`Excluir o conjunto da base "${conjunto.base}" e suas ${n} prancha(s)? Esta ação não pode ser desfeita.`)) return;
+        const doConjunto = pranchas.filter(p => p.conjuntoId === conjunto.id);
+        const comProgresso = doConjunto.filter(p => p.status !== PranchaStatus.A_FAZER || (p.revisions?.length ?? 0) > 0);
+        if (comProgresso.length === 0) {
+            if (!confirm(`Excluir o conjunto da base "${conjunto.base}" e suas ${doConjunto.length} prancha(s)? Esta ação não pode ser desfeita.`)) return;
+        } else {
+            const lista = comProgresso.slice(0, 10).map(p => `  • ${p.codigoCompleto || p.papel} — ${p.status}`).join('\n');
+            const digitado = prompt(
+                `O conjunto da base "${conjunto.base}" tem ${doConjunto.length} prancha(s), sendo ${comProgresso.length} com progresso registrado:\n${lista}${comProgresso.length > 10 ? '\n  …' : ''}\n\nTodo o histórico será perdido e esta ação NÃO pode ser desfeita. Para confirmar, digite o nome da base:`
+            );
+            if (digitado === null) return;
+            if (slugify(digitado) !== slugify(conjunto.base)) {
+                alert('Nome da base não confere — exclusão cancelada.');
+                return;
+            }
+        }
         deleteConjuntoFromDb(conjunto.id).catch(e => alert("Erro ao excluir o conjunto: " + (e?.message || e)));
     };
 
-    // Ciclo de execução/entrega da Prancha
-    const handleMovePrancha = (
+    // Monta o patch de uma transição de prancha — usado no movimento unitário e
+    // no lote, para que ambos apliquem EXATAMENTE as mesmas regras de datas,
+    // revisão e dias com o cliente.
+    const buildPranchaMoveChanges = (
         prancha: Prancha,
         to: PranchaStatus,
         date: string,
         period: Period,
         options: { reason?: RevisionReason; comment?: string } = {}
-    ) => {
-        if (!canPranchaTransition(prancha.status, to)) {
-            alert(`Transição inválida: "${prancha.status}" não pode ir para "${to}".`);
-            return;
-        }
+    ): Record<string, any> => {
         const changes: Record<string, any> = { status: to };
         if (to === PranchaStatus.EM_ANDAMENTO) {
             changes.startDate = date;
@@ -352,7 +367,44 @@ export function useAppData(projectFilter: ProjectFilterState) {
                 }
             }
         }
-        patchPranchaInDb(prancha.id, changes).catch(e => alert("Erro ao mover a prancha: " + (e?.message || e)));
+        return changes;
+    };
+
+    // Ciclo de execução/entrega da Prancha
+    const handleMovePrancha = (
+        prancha: Prancha,
+        to: PranchaStatus,
+        date: string,
+        period: Period,
+        options: { reason?: RevisionReason; comment?: string } = {}
+    ) => {
+        if (!canPranchaTransition(prancha.status, to)) {
+            alert(`Transição inválida: "${prancha.status}" não pode ir para "${to}".`);
+            return;
+        }
+        patchPranchaInDb(prancha.id, buildPranchaMoveChanges(prancha, to, date, period, options))
+            .catch(e => alert("Erro ao mover a prancha: " + (e?.message || e)));
+    };
+
+    // Transição em LOTE: o planejador puro separa o que PODE mover (o restante é
+    // pulado, nunca forçado) e a escrita vai em writeBatch. Mesma data/período —
+    // e, nas revisões, mesmo motivo/comentário — para todas as pranchas do lote.
+    const handleMovePranchasLote = async (
+        alvo: Prancha[],
+        to: PranchaStatus,
+        date: string,
+        period: Period,
+        options: { reason?: RevisionReason; comment?: string } = {}
+    ): Promise<{ movidas: number; puladas: number; erros: string[] }> => {
+        const plan = planMoverPranchasLote(alvo, to);
+        if (plan.moviveis.length === 0) return { movidas: 0, puladas: plan.puladas.length, erros: [] };
+        const patches = plan.moviveis.map(p => ({ id: p.id, changes: buildPranchaMoveChanges(p, to, date, period, options) }));
+        try {
+            await batchUpdatePranchasInDb(patches);
+            return { movidas: patches.length, puladas: plan.puladas.length, erros: [] };
+        } catch (e: any) {
+            return { movidas: 0, puladas: plan.puladas.length, erros: [e?.message || String(e)] };
+        }
     };
 
     const handleUpdatePrancha = (id: string, changes: Partial<Prancha>) => {
@@ -534,7 +586,7 @@ export function useAppData(projectFilter: ProjectFilterState) {
         referencias, conjuntos, pranchas,
         handleAddReferencia, handleAddReferencias, handleDeleteReferencias, handleUpdateReferencia, handleDeleteReferencia, handleMoveReferencia,
         handleInstanciar, handleInstanciarLote, handleDeleteConjunto,
-        handleMovePrancha, handleUpdatePrancha, handleAddPrancha, handleDeletePrancha,
+        handleMovePrancha, handleMovePranchasLote, handleUpdatePrancha, handleAddPrancha, handleDeletePrancha,
         handleMigratePortfolio,
         handleAddSupplyOrder, handleUpdateSupplyOrder, handleDeleteSupplyOrder,
         handleMoveSupplyStatus, handleToggleSupplyItem, handleMigrateLegacyPurchases,

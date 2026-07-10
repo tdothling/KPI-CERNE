@@ -1,11 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BookOpen, Plus, Send, BadgeCheck, ThumbsDown, FileEdit, Trash2, Layers, X, ChevronDown, ChevronRight, MapPin, GripVertical, PencilLine, Play, CheckCircle2, Hammer, Timer, CopyPlus, CheckSquare, Square, Loader2, Wand2 } from 'lucide-react';
 import { useObraAtiva, ObraSelectScreen, ObraAtivaBar, ObraCardStat } from '../ObraGate';
-import { parseISO, isValid } from 'date-fns';
 import { ClientDoc, Discipline, Period, RevisionReason } from '../../types';
 import { Referencia, Conjunto, RefStatus, GabaritoItem, canRefTransition, catalogoKpis, buildCodigoCompleto, inferRefStatusFromDates, planInstanciacaoLote, slugify, DISCIPLINA_SIGLA, gerarReferenciasDisciplinas, planGerarDisciplinasLote, swapDisciplinaSigla } from '../../domain/portfolio';
-import { KpiCard, StatusBadge, REF_STATUS_STYLE, DateActionModal, DateActionRequest, TimelineDatesEditor, TimelineDates, REF_TIMELINE_FIELDS, RevisionHistoryModal } from './shared';
-import { formatDateDisplay, calculateBusinessDaysWithHolidays } from '../../utils';
+import { KpiCard, StatusBadge, REF_STATUS_STYLE, DateActionModal, DateActionRequest, TimelineDatesEditor, TimelineDates, REF_TIMELINE_FIELDS, RevisionHistoryModal, execDaysOf } from './shared';
+import { formatDateDisplay } from '../../utils';
 
 interface CatalogoPageProps {
     referencias: Referencia[];
@@ -26,23 +25,6 @@ interface CatalogoPageProps {
     onAddMany: (refs: Omit<Referencia, 'id'>[], onProgress?: (done: number, total: number) => void) => Promise<{ criadas: number; erros: string[] }>;
     onDeleteMany: (ids: string[]) => Promise<{ excluidas: number; erros: string[] }>;
 }
-
-// Tempo de execução do preliminar em dias úteis: início → conclusão da elaboração;
-// se ainda está em elaboração, mede até hoje (contador "correndo").
-const execDaysOf = (ref: Referencia, holidays: string[]): { days: number; running: boolean } | null => {
-    if (!ref.startDate) return null;
-    const start = parseISO(ref.startDate);
-    if (!isValid(start)) return null;
-    if (ref.endDate) {
-        const end = parseISO(ref.endDate);
-        if (!isValid(end) || end < start) return null;
-        return { days: calculateBusinessDaysWithHolidays(start, end, holidays, ref.startPeriod || 'MANHA', ref.endPeriod || 'TARDE'), running: false };
-    }
-    if (ref.statusAprovacao !== RefStatus.EM_ELABORACAO) return null;
-    const today = new Date();
-    if (today < start) return null;
-    return { days: calculateBusinessDaysWithHolidays(start, today, holidays, ref.startPeriod || 'MANHA', 'TARDE'), running: true };
-};
 
 type RefFilter = 'ALL' | RefStatus;
 
@@ -269,7 +251,7 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
                         <div className="divide-y divide-slate-100 dark:divide-slate-700/60">
                             {refs.map(ref => {
                                 const bases = conjuntosByRef.get(ref.id) || [];
-                                const exec = execDaysOf(ref, holidays);
+                                const exec = execDaysOf(ref, ref.statusAprovacao === RefStatus.EM_ELABORACAO, holidays);
                                 return (
                                     <div key={ref.id} className="px-4 py-3 flex flex-col lg:flex-row lg:items-center gap-3">
                                         <div className="flex-1 min-w-0">

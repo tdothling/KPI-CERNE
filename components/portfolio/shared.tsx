@@ -1,8 +1,34 @@
 import React, { useState } from 'react';
 import { X, Clock, History, PencilLine } from 'lucide-react';
+import { parseISO, isValid } from 'date-fns';
 import { Period, Revision, RevisionReason } from '../../types';
 import { PranchaStatus, RefStatus } from '../../domain/portfolio';
-import { formatDateDisplay } from '../../utils';
+import { formatDateDisplay, calculateBusinessDaysWithHolidays } from '../../utils';
+
+// --- Tempo de execução em dias úteis (Referências E Pranchas) ---
+// Início → conclusão da execução; se o item ainda está na etapa de execução
+// (`emExecucao`), mede até hoje — contador "correndo".
+
+export interface ExecDays { days: number; running: boolean }
+
+export const execDaysOf = (
+    item: { startDate?: string; startPeriod?: Period; endDate?: string; endPeriod?: Period },
+    emExecucao: boolean,
+    holidays: string[]
+): ExecDays | null => {
+    if (!item.startDate) return null;
+    const start = parseISO(item.startDate);
+    if (!isValid(start)) return null;
+    if (item.endDate) {
+        const end = parseISO(item.endDate);
+        if (!isValid(end) || end < start) return null;
+        return { days: calculateBusinessDaysWithHolidays(start, end, holidays, item.startPeriod || 'MANHA', item.endPeriod || 'TARDE'), running: false };
+    }
+    if (!emExecucao) return null;
+    const today = new Date();
+    if (today < start) return null;
+    return { days: calculateBusinessDaysWithHolidays(start, today, holidays, item.startPeriod || 'MANHA', 'TARDE'), running: true };
+};
 
 // --- Card de resumo / filtro rápido (mesmo visual da aba Projetos) ---
 

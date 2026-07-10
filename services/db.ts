@@ -353,6 +353,9 @@ export const patchPranchaInDb = async (id: string, changes: Record<string, any>)
   await updateDoc(doc(db, COLL_PRANCHAS, id), sanitizeData(changes));
 };
 
+// Transições/edições em lote de pranchas (mesma mecânica do lote de projetos)
+export const batchUpdatePranchasInDb = (patches: BatchDocPatch[]) => batchUpdateCollection(COLL_PRANCHAS, patches);
+
 export const addPranchaToDb = async (prancha: Omit<Prancha, 'id'>) => {
   if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
   await addDoc(collection(db, COLL_PRANCHAS), sanitizeData(prancha));

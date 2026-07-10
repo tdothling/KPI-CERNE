@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { FolderKanban, Play, Send, BadgeCheck, ThumbsDown, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Layers, ListTodo, MapPin, PencilLine, Trash2, X, RotateCcw, Database } from 'lucide-react';
+import { FolderKanban, Play, Send, BadgeCheck, ThumbsDown, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Layers, ListTodo, MapPin, PencilLine, Trash2, X, RotateCcw, Database, Timer, Plus, CheckSquare, Square } from 'lucide-react';
 import { ClientDoc, Discipline, Period, RevisionReason } from '../../types';
-import { Referencia, Conjunto, Prancha, PranchaStatus, canPranchaTransition, carteiraKpis, conjuntosKpis, rollupConjunto, inferPranchaStatusFromDates } from '../../domain/portfolio';
-import { KpiCard, StatusBadge, PRANCHA_STATUS_STYLE, DateActionModal, DateActionRequest, TimelineDatesEditor, TimelineDates, PRANCHA_TIMELINE_FIELDS, RevisionHistoryModal } from './shared';
+import { Referencia, Conjunto, Prancha, PranchaStatus, canPranchaTransition, planMoverPranchasLote, carteiraKpis, conjuntosKpis, rollupConjunto, inferPranchaStatusFromDates } from '../../domain/portfolio';
+import { KpiCard, StatusBadge, PRANCHA_STATUS_STYLE, DateActionModal, DateActionRequest, TimelineDatesEditor, TimelineDates, PRANCHA_TIMELINE_FIELDS, RevisionHistoryModal, execDaysOf } from './shared';
 import { calculateDeadlineDate, formatDateDisplay } from '../../utils';
 import { format } from 'date-fns';
 import { useObraAtiva, ObraSelectScreen, ObraAtivaBar, ObraCardStat } from '../ObraGate';
@@ -12,12 +12,15 @@ interface CarteiraPageProps {
     conjuntos: Conjunto[];
     pranchas: Prancha[];
     clients: ClientDoc[]; // apenas obras de rodovia
+    holidays: string[];
     readOnly: boolean;
     legacyPendingCount: number;     // projetos antigos de obras de rodovia ainda não migrados
     isMigrationAdmin: boolean;
     onMigrate: () => void;
     onMovePrancha: (p: Prancha, to: PranchaStatus, date: string, period: Period, options?: { reason?: RevisionReason; comment?: string }) => void;
+    onMovePranchasLote: (pranchas: Prancha[], to: PranchaStatus, date: string, period: Period, options?: { reason?: RevisionReason; comment?: string }) => Promise<{ movidas: number; puladas: number; erros: string[] }>;
     onUpdatePrancha: (id: string, changes: Partial<Prancha>) => void;
+    onAddPrancha: (p: Omit<Prancha, 'id'>) => void;
     onDeletePrancha: (p: Prancha) => void;
     onDeleteConjunto: (c: Conjunto) => void;
 }
@@ -25,23 +28,26 @@ interface CarteiraPageProps {
 type PranchaFilter = 'ALL' | 'OVERDUE' | PranchaStatus;
 
 export const CarteiraPage: React.FC<CarteiraPageProps> = ({
-    referencias, conjuntos, pranchas, clients, readOnly,
+    referencias, conjuntos, pranchas, clients, holidays, readOnly,
     legacyPendingCount, isMigrationAdmin, onMigrate,
-    onMovePrancha, onUpdatePrancha, onDeletePrancha, onDeleteConjunto,
+    onMovePrancha, onMovePranchasLote, onUpdatePrancha, onAddPrancha, onDeletePrancha, onDeleteConjunto,
 }) => {
     const [statusFilter, setStatusFilter] = useState<PranchaFilter>('ALL');
     const [expanded, setExpanded] = useState<Set<string>>(new Set());
+    const [collapsed, setCollapsed] = useState<Set<string>>(new Set());   // grupos de disciplina recolhidos
+    const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set()); // pranchas marcadas p/ lote
     const [dateAction, setDateAction] = useState<DateActionRequest | null>(null);
     const [editingPrancha, setEditingPrancha] = useState<Prancha | null>(null);
     const [historicoDe, setHistoricoDe] = useState<Prancha | null>(null);
+    const [addingTo, setAddingTo] = useState<Conjunto | null>(null);      // conjunto recebendo prancha avulsa
 
     // Navegação por obra — MESMA chave do Catálogo: a obra ativa é compartilhada
     // entre as duas abas (trocar em uma reflete na outra).
     const obraNames = useMemo(() => clients.map(c => c.name), [clients]);
     const { obraAtiva, selecionarObra: selecionarObraRaw, trocarObra: trocarObraRaw } =
         useObraAtiva('kpicerne.rodovia.obraAtiva', obraNames, ['kpicerne.catalogo.obraAtiva']);
-    const selecionarObra = (name: string) => { selecionarObraRaw(name); setStatusFilter('ALL'); };
-    const trocarObra = () => { trocarObraRaw(); setStatusFilter('ALL'); };
+    const selecionarObra = (name: string) => { selecionarObraRaw(name); setStatusFilter('ALL'); setSelecionadas(new Set()); };
+    const trocarObra = () => { trocarObraRaw(); setStatusFilter('ALL'); setSelecionadas(new Set()); };
 
     // Toda a carteira abaixo enxerga só a obra ativa
     const conjuntosDaObra = useMemo(() => conjuntos.filter(c => c.client === obraAtiva), [conjuntos, obraAtiva]);
@@ -121,13 +127,43 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
         return next;
     });
 
+    const toggleCollapsed = (d: string) => setCollapsed(prev => {
+        const next = new Set(prev);
+        next.has(d) ? next.delete(d) : next.add(d);
+        return next;
+    });
+
+    // --- Seleção multi-prancha para ações em lote ---
+    const pranchaById = useMemo(() => new Map(pranchasDaObra.map(p => [p.id, p])), [pranchasDaObra]);
+    // Ids de pranchas excluídas/de outra obra caem fora aqui automaticamente
+    const selPranchas = useMemo(
+        () => [...selecionadas].map(id => pranchaById.get(id)).filter((p): p is Prancha => !!p),
+        [selecionadas, pranchaById]
+    );
+
+    const toggleSelecionada = (id: string) => setSelecionadas(prev => {
+        const next = new Set(prev);
+        next.has(id) ? next.delete(id) : next.add(id);
+        return next;
+    });
+
+    const toggleTodasDoConjunto = (list: Prancha[]) => setSelecionadas(prev => {
+        const next = new Set(prev);
+        const all = list.length > 0 && list.every(p => next.has(p.id));
+        list.forEach(p => all ? next.delete(p.id) : next.add(p.id));
+        return next;
+    });
+
+    const countMovable = (list: Prancha[], to: PranchaStatus) =>
+        list.filter(p => canPranchaTransition(p.status, to)).length;
+
     const askMovePrancha = (p: Prancha, to: PranchaStatus) => {
         const isRevisao = to === PranchaStatus.EM_ANDAMENTO && p.status === PranchaStatus.REPROVADO;
         const cfg: Partial<Record<PranchaStatus, { title: string; confirmLabel: string; tone: DateActionRequest['tone']; withComment?: boolean; withReason?: boolean; description?: string }>> = {
             [PranchaStatus.EM_ANDAMENTO]: isRevisao
                 ? { title: `Revisar "${p.codigoCompleto || p.papel}"`, confirmLabel: 'Iniciar Revisão', tone: 'brand', withReason: true, withComment: true, description: 'A prancha reprovada volta para execução como nova revisão. O motivo fica no histórico e as datas de fim/envio/feedback serão reiniciadas.' }
-                : { title: `Iniciar "${p.codigoCompleto || p.papel}"`, confirmLabel: 'Iniciar Execução', tone: 'brand' },
-            [PranchaStatus.CONCLUIDO]: { title: `Concluir execução de "${p.codigoCompleto || p.papel}"`, confirmLabel: 'Concluir', tone: 'violet' },
+                : { title: `Iniciar "${p.codigoCompleto || p.papel}"`, confirmLabel: 'Iniciar Execução', tone: 'brand', description: 'A partir desta data o tempo de execução da prancha passa a ser medido (dias úteis).' },
+            [PranchaStatus.CONCLUIDO]: { title: `Concluir execução de "${p.codigoCompleto || p.papel}"`, confirmLabel: 'Concluir', tone: 'violet', description: 'Fecha a medição do tempo de execução (dias úteis entre início e conclusão).' },
             [PranchaStatus.ENVIADO]: { title: `Enviar "${p.codigoCompleto || p.papel}"`, confirmLabel: 'Registrar Envio', tone: 'blue' },
             [PranchaStatus.APROVADO]: { title: `Aprovar "${p.codigoCompleto || p.papel}"`, confirmLabel: 'Aprovar', tone: 'emerald' },
             [PranchaStatus.REPROVADO]: { title: `Reprovar "${p.codigoCompleto || p.papel}"`, confirmLabel: 'Reprovar', tone: 'rose', withComment: true },
@@ -137,6 +173,43 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
             ...c,
             onConfirm: (date, period, comment, reason) =>
                 onMovePrancha(p, to, date, period, isRevisao ? { reason, comment } : (comment ? { comment } : undefined)),
+        });
+    };
+
+    // --- Ação em LOTE: mesma data/período (e motivo, quando houver revisões) para
+    // todas as pranchas elegíveis; as demais são puladas — o preview do modal diz
+    // exatamente quantas movem e quantas ficam. ---
+    const LOTE_ACTION: Partial<Record<PranchaStatus, { verbo: string; confirmLabel: string; tone: DateActionRequest['tone'] }>> = {
+        [PranchaStatus.EM_ANDAMENTO]: { verbo: 'Iniciar', confirmLabel: 'Iniciar Execução', tone: 'brand' },
+        [PranchaStatus.CONCLUIDO]: { verbo: 'Concluir', confirmLabel: 'Concluir', tone: 'violet' },
+        [PranchaStatus.ENVIADO]: { verbo: 'Enviar', confirmLabel: 'Registrar Envio', tone: 'blue' },
+        [PranchaStatus.APROVADO]: { verbo: 'Aprovar', confirmLabel: 'Aprovar', tone: 'emerald' },
+        [PranchaStatus.REPROVADO]: { verbo: 'Reprovar', confirmLabel: 'Reprovar', tone: 'rose' },
+    };
+
+    const askMoveLote = (alvo: Prancha[], to: PranchaStatus, origem: string, aoConcluir?: () => void) => {
+        const plan = planMoverPranchasLote(alvo, to);
+        const a = LOTE_ACTION[to]!;
+        if (plan.moviveis.length === 0) {
+            alert(`Nenhuma das pranchas ${origem} pode ir para "${to}" (transição não permitida pelo status atual).`);
+            return;
+        }
+        const temRevisao = to === PranchaStatus.EM_ANDAMENTO && plan.moviveis.some(p => p.status === PranchaStatus.REPROVADO);
+        setDateAction({
+            title: `${a.verbo} ${plan.moviveis.length} prancha(s)`,
+            confirmLabel: a.confirmLabel,
+            tone: a.tone,
+            withReason: temRevisao,
+            withComment: temRevisao || to === PranchaStatus.REPROVADO,
+            description:
+                `${plan.moviveis.length} de ${alvo.length} prancha(s) ${origem} será(ão) movida(s) para "${to}".` +
+                (plan.puladas.length > 0 ? ` ${plan.puladas.length} será(ão) pulada(s) por status incompatível.` : '') +
+                (temRevisao ? ' As reprovadas reabrem como nova revisão — o mesmo motivo/comentário vale para todas.' : ''),
+            onConfirm: async (date, period, comment, reason) => {
+                const r = await onMovePranchasLote(plan.moviveis, to, date, period, temRevisao ? { reason, comment } : (comment ? { comment } : undefined));
+                if (r.erros.length > 0) alert(`Falha ao mover as pranchas:\n${r.erros.join('\n')}`);
+                aoConcluir?.();
+            },
         });
     };
 
@@ -228,12 +301,17 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
 
             {grouped.map(([discipline, items]) => (
                 <div key={discipline} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-                    <div className="flex items-center gap-2 px-4 py-3 bg-slate-50/60 dark:bg-slate-900/30 text-sm font-bold text-slate-700 dark:text-slate-200">
+                    <button
+                        onClick={() => toggleCollapsed(discipline)}
+                        className="w-full flex items-center gap-2 px-4 py-3 bg-slate-50/60 dark:bg-slate-900/30 hover:bg-slate-100 dark:hover:bg-slate-700/40 transition-colors text-sm font-bold text-slate-700 dark:text-slate-200"
+                    >
+                        {collapsed.has(discipline) ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
                         <Layers size={15} className="text-brand-600 dark:text-brand-400" />
                         {discipline}
                         <span className="text-[10px] font-bold text-slate-400 uppercase ml-auto">{items.length} conjunto(s)</span>
-                    </div>
+                    </button>
 
+                    {!collapsed.has(discipline) && (
                     <div className="divide-y divide-slate-100 dark:divide-slate-700/60">
                         {items.map(({ conjunto, ref, visiveis }) => {
                             const todas = pranchasByConjunto.get(conjunto.id) || [];
@@ -273,13 +351,28 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
                                             </div>
                                             <span className="text-xs font-bold text-slate-500 dark:text-slate-400 w-9 text-right">{rollup.pctExecutado}%</span>
                                             {!readOnly && (
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); onDeleteConjunto(conjunto); }}
-                                                    className="p-1.5 rounded-lg text-slate-300 hover:text-rose-600 dark:text-slate-600 dark:hover:text-rose-400 transition-colors"
-                                                    title="Excluir conjunto e suas pranchas"
-                                                >
-                                                    <Trash2 size={14} />
-                                                </button>
+                                                /* Ações em LOTE do conjunto: movem todas as pranchas elegíveis de uma vez */
+                                                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                                    {countMovable(todas, PranchaStatus.EM_ANDAMENTO) > 0 && (
+                                                        <PranchaBtn title={`Iniciar todas as elegíveis (${countMovable(todas, PranchaStatus.EM_ANDAMENTO)})`} onClick={() => askMoveLote(todas, PranchaStatus.EM_ANDAMENTO, `do conjunto "${conjunto.base}"`)}><Play size={13} /></PranchaBtn>
+                                                    )}
+                                                    {countMovable(todas, PranchaStatus.CONCLUIDO) > 0 && (
+                                                        <PranchaBtn title={`Concluir todas as elegíveis (${countMovable(todas, PranchaStatus.CONCLUIDO)})`} tone="text-violet-600" onClick={() => askMoveLote(todas, PranchaStatus.CONCLUIDO, `do conjunto "${conjunto.base}"`)}><CheckCircle2 size={13} /></PranchaBtn>
+                                                    )}
+                                                    {countMovable(todas, PranchaStatus.ENVIADO) > 0 && (
+                                                        <PranchaBtn title={`Enviar todas as elegíveis (${countMovable(todas, PranchaStatus.ENVIADO)})`} tone="text-blue-600" onClick={() => askMoveLote(todas, PranchaStatus.ENVIADO, `do conjunto "${conjunto.base}"`)}><Send size={13} /></PranchaBtn>
+                                                    )}
+                                                    {countMovable(todas, PranchaStatus.APROVADO) > 0 && (
+                                                        <PranchaBtn title={`Aprovar todas as elegíveis (${countMovable(todas, PranchaStatus.APROVADO)})`} tone="text-emerald-600" onClick={() => askMoveLote(todas, PranchaStatus.APROVADO, `do conjunto "${conjunto.base}"`)}><BadgeCheck size={13} /></PranchaBtn>
+                                                    )}
+                                                    <button
+                                                        onClick={() => onDeleteConjunto(conjunto)}
+                                                        className="p-1.5 rounded-lg text-slate-300 hover:text-rose-600 dark:text-slate-600 dark:hover:text-rose-400 transition-colors"
+                                                        title="Excluir conjunto e suas pranchas"
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                </div>
                                             )}
                                         </div>
                                     </div>
@@ -287,15 +380,45 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
                                     {/* Pranchas filhas */}
                                     {isOpen && (
                                         <div className="bg-slate-50/50 dark:bg-slate-900/30 border-t border-slate-100 dark:border-slate-700/60">
+                                            {!readOnly && (
+                                                <div className="pl-12 pr-4 py-1.5 flex items-center justify-between border-b border-slate-100 dark:border-slate-700/40">
+                                                    <button
+                                                        onClick={() => toggleTodasDoConjunto(visiveis)}
+                                                        disabled={visiveis.length === 0}
+                                                        className="text-[11px] font-bold text-violet-600 dark:text-violet-400 hover:underline disabled:opacity-40"
+                                                    >
+                                                        {visiveis.length > 0 && visiveis.every(p => selecionadas.has(p.id)) ? 'Desmarcar todas' : 'Selecionar todas'} ({visiveis.length})
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setAddingTo(conjunto)}
+                                                        className="flex items-center gap-1 text-[11px] font-bold text-brand-600 dark:text-brand-400 hover:underline"
+                                                        title="Adicionar uma prancha extra, fora do gabarito (ex.: detalhe específico desta base)"
+                                                    >
+                                                        <Plus size={12} /> Prancha avulsa
+                                                    </button>
+                                                </div>
+                                            )}
                                             {visiveis.length === 0 && (
                                                 <p className="px-12 py-3 text-xs text-slate-400 italic">Nenhuma prancha corresponde ao filtro atual.</p>
                                             )}
-                                            {visiveis.map(p => (
+                                            {visiveis.map(p => {
+                                                const exec = execDaysOf(p, p.status === PranchaStatus.EM_ANDAMENTO, holidays);
+                                                return (
                                                 <div key={p.id} className="pl-12 pr-4 py-2 flex items-center gap-3 border-b border-slate-100 dark:border-slate-700/40 last:border-b-0">
+                                                    {!readOnly && (
+                                                        <button
+                                                            onClick={() => toggleSelecionada(p.id)}
+                                                            className="flex-shrink-0"
+                                                            title="Selecionar para ação em lote"
+                                                            aria-label={`Selecionar ${p.codigoCompleto || p.papel}`}
+                                                        >
+                                                            {selecionadas.has(p.id) ? <CheckSquare size={15} className="text-violet-600" /> : <Square size={15} className="text-slate-300 dark:text-slate-600" />}
+                                                        </button>
+                                                    )}
                                                     <div className="flex-1 min-w-0">
                                                         <div className="flex items-center gap-2 flex-wrap">
                                                             <span className="text-xs font-bold text-slate-600 dark:text-slate-300">{p.papel}</span>
-                                                            {(p.revisao > 0 || (p.revisions?.length ?? 0) > 0) && (
+                                                            {(p.revisao > 0 || (p.revisions?.length ?? 0) > 0) ? (
                                                                 <button
                                                                     onClick={() => setHistoricoDe(p)}
                                                                     className="text-[10px] font-bold bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 rounded px-1 py-0.5 hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors"
@@ -304,6 +427,8 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
                                                                 >
                                                                     R{String(p.revisao).padStart(2, '0')}
                                                                 </button>
+                                                            ) : (
+                                                                <span className="text-[10px] font-bold text-slate-400 border border-slate-200 dark:border-slate-600 rounded px-1 py-0.5">R00</span>
                                                             )}
                                                             <StatusBadge label={p.status} className={PRANCHA_STATUS_STYLE[p.status]} />
                                                             {isPranchaOverdue(p, conjunto) && <StatusBadge label="Atrasada" className="text-red-600 bg-red-50 border-red-200 dark:bg-red-900/30 dark:border-red-800 dark:text-red-400" />}
@@ -311,11 +436,16 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
                                                         <div className="flex items-center gap-3 text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 font-mono truncate">
                                                             <span className="truncate">{p.codigoCompleto || '(sem código — edite para preencher)'}</span>
                                                         </div>
-                                                        <div className="flex items-center gap-3 text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                                                        <div className="flex items-center gap-3 text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 flex-wrap">
                                                             {p.startDate && <span>Início: {formatDateDisplay(p.startDate)}</span>}
                                                             {p.endDate && <span>Fim: {formatDateDisplay(p.endDate)}</span>}
                                                             {p.sendDate && <span>Envio: {formatDateDisplay(p.sendDate)}</span>}
                                                             {p.feedbackDate && <span>Feedback: {formatDateDisplay(p.feedbackDate)}</span>}
+                                                            {exec && (
+                                                                <span className={`flex items-center gap-1 font-semibold ${exec.running ? 'text-amber-600 dark:text-amber-400' : 'text-violet-600 dark:text-violet-400'}`}>
+                                                                    <Timer size={10} /> {exec.running ? `Em execução há ${exec.days}d úteis` : `Execução: ${exec.days}d úteis`}
+                                                                </span>
+                                                            )}
                                                             {(p.blockedDays || 0) > 0 && <span className="text-amber-600 dark:text-amber-400">{p.blockedDays}d com o cliente</span>}
                                                         </div>
                                                     </div>
@@ -344,17 +474,49 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
                                                         </div>
                                                     )}
                                                 </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     )}
                                 </div>
                             );
                         })}
                     </div>
+                    )}
                 </div>
             ))}
 
+            {/* Barra flutuante da seleção: transições em lote das pranchas marcadas
+                (pode misturar conjuntos/disciplinas — cada prancha só move se puder) */}
+            {!readOnly && selPranchas.length > 0 && (
+                <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-white dark:bg-slate-800 border border-violet-300 dark:border-violet-700 rounded-xl shadow-2xl px-4 py-2.5 flex items-center gap-2 flex-wrap justify-center animate-in fade-in slide-in-from-bottom-2 print:hidden">
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{selPranchas.length} selecionada(s)</span>
+                    <span className="w-px h-4 bg-slate-200 dark:bg-slate-700"></span>
+                    <LoteBtn label="Iniciar" count={countMovable(selPranchas, PranchaStatus.EM_ANDAMENTO)} tone="text-brand-700 dark:text-brand-400" onClick={() => askMoveLote(selPranchas, PranchaStatus.EM_ANDAMENTO, 'selecionada(s)', () => setSelecionadas(new Set()))} />
+                    <LoteBtn label="Concluir" count={countMovable(selPranchas, PranchaStatus.CONCLUIDO)} tone="text-violet-600 dark:text-violet-400" onClick={() => askMoveLote(selPranchas, PranchaStatus.CONCLUIDO, 'selecionada(s)', () => setSelecionadas(new Set()))} />
+                    <LoteBtn label="Enviar" count={countMovable(selPranchas, PranchaStatus.ENVIADO)} tone="text-blue-600 dark:text-blue-400" onClick={() => askMoveLote(selPranchas, PranchaStatus.ENVIADO, 'selecionada(s)', () => setSelecionadas(new Set()))} />
+                    <LoteBtn label="Aprovar" count={countMovable(selPranchas, PranchaStatus.APROVADO)} tone="text-emerald-600 dark:text-emerald-400" onClick={() => askMoveLote(selPranchas, PranchaStatus.APROVADO, 'selecionada(s)', () => setSelecionadas(new Set()))} />
+                    <LoteBtn label="Reprovar" count={countMovable(selPranchas, PranchaStatus.REPROVADO)} tone="text-rose-600 dark:text-rose-400" onClick={() => askMoveLote(selPranchas, PranchaStatus.REPROVADO, 'selecionada(s)', () => setSelecionadas(new Set()))} />
+                    <span className="w-px h-4 bg-slate-200 dark:bg-slate-700"></span>
+                    <button
+                        onClick={() => setSelecionadas(new Set())}
+                        className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                        title="Limpar seleção"
+                    >
+                        <X size={13} /> Limpar
+                    </button>
+                </div>
+            )}
+
             {dateAction && <DateActionModal request={dateAction} onClose={() => setDateAction(null)} />}
+
+            {addingTo && (
+                <AddPranchaModal
+                    conjunto={addingTo}
+                    onClose={() => setAddingTo(null)}
+                    onConfirm={(p) => { onAddPrancha(p); setAddingTo(null); }}
+                />
+            )}
 
             {historicoDe && (
                 <RevisionHistoryModal
@@ -383,12 +545,86 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
 function PranchaBtn({ children, title, onClick, tone }: { children: React.ReactNode; title: string; onClick: () => void; tone?: string }) {
     return (
         <button
-            onClick={onClick}
+            onClick={(e) => { e.stopPropagation(); onClick(); }}
             title={title}
             className={`p-1 rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 hover:border-brand-300 transition-colors ${tone || 'text-slate-500 dark:text-slate-400'}`}
         >
             {children}
         </button>
+    );
+}
+
+// Botão da barra de seleção: mostra quantas das selecionadas PODEM ir ao destino
+function LoteBtn({ label, count, tone, onClick }: { label: string; count: number; tone?: string; onClick: () => void }) {
+    return (
+        <button
+            onClick={onClick}
+            disabled={count === 0}
+            title={count === 0 ? `Nenhuma selecionada pode "${label}"` : `${label} ${count} prancha(s)`}
+            className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 dark:border-slate-600 hover:border-brand-300 transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${tone || 'text-slate-600 dark:text-slate-300'}`}
+        >
+            {label} ({count})
+        </button>
+    );
+}
+
+// Prancha avulsa: entregável extra fora do gabarito (ex.: detalhe específico de
+// uma base). Nasce "A Fazer" com codificação manual — mesma regra das demais.
+function AddPranchaModal({ conjunto, onClose, onConfirm }: {
+    conjunto: Conjunto;
+    onClose: () => void;
+    onConfirm: (p: Omit<Prancha, 'id'>) => void;
+}) {
+    const [papel, setPapel] = useState('');
+    const [codigo, setCodigo] = useState('');
+    const [observacao, setObservacao] = useState('');
+
+    const save = () => {
+        if (!papel.trim()) { alert('Informe o papel da prancha (ex.: Folha 105, Detalhe de Fundação).'); return; }
+        onConfirm({
+            conjuntoId: conjunto.id,
+            papel: papel.trim(),
+            codigoCompleto: codigo.trim(),
+            status: PranchaStatus.A_FAZER,
+            revisao: 0,
+            ...(observacao.trim() ? { observacao: observacao.trim() } : {}),
+        });
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/60 dark:bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-lg w-full p-6 border dark:border-slate-700 max-h-[90vh] overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex justify-between items-center mb-2">
+                    <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                        <Plus size={18} className="text-brand-600 dark:text-brand-400" /> Prancha Avulsa
+                    </h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" aria-label="Fechar"><X size={20} /></button>
+                </div>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+                    Adiciona uma prancha extra ao conjunto da base <span className="font-mono font-bold text-slate-700 dark:text-slate-200">{conjunto.base}</span>,
+                    fora do gabarito da referência. Ela nasce em "A Fazer" e segue o mesmo ciclo das demais.
+                </p>
+
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Papel *</label>
+                <input value={papel} onChange={e => setPapel(e.target.value)} placeholder="Ex: Folha 105, Detalhe de Fundação" autoFocus
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-sm rounded-lg p-2.5 mb-4" />
+
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Código Completo (manual, opcional)</label>
+                <input value={codigo} onChange={e => setCodigo(e.target.value)} placeholder={conjunto.codigoRodovia ? `Ex: ${conjunto.codigoRodovia}-...` : 'Ex: ELO-040RJ-104+000-BSO-EXE-DE-P1-105'}
+                    className="w-full font-mono bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-sm rounded-lg p-2.5 mb-4" />
+
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Observações</label>
+                <textarea value={observacao} onChange={e => setObservacao(e.target.value)}
+                    className="w-full h-16 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-sm rounded-lg p-2.5 mb-5 resize-none" />
+
+                <div className="flex justify-end gap-2">
+                    <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg font-medium">Cancelar</button>
+                    <button onClick={save} className="px-5 py-2 text-sm bg-brand-700 hover:bg-brand-800 text-white rounded-lg font-semibold shadow-sm">
+                        Adicionar Prancha
+                    </button>
+                </div>
+            </div>
+        </div>
     );
 }
 
