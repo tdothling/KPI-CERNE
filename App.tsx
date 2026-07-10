@@ -94,25 +94,12 @@ export default function App() {
     dateFilterType, setDateFilterType,
     referenceDate, setReferenceDate,
     customRange, setCustomRange,
-    filteredProjects, filteredSupplyOrders,
+    filteredProjects, filteredSupplyOrders, dateFilteredProjects,
     uniqueClients
   } = useAppFilters(legacyProjects, supplyOrders, clients);
 
-  // Filtros globais de cliente/disciplina aplicados também à carteira de rodovia
-  const filteredReferencias = useMemo(() => referencias.filter(r =>
-    (selectedClients.length === 0 || selectedClients.includes(r.client)) &&
-    (selectedDisciplines.length === 0 || selectedDisciplines.includes(r.discipline))
-  ), [referencias, selectedClients, selectedDisciplines]);
-
-  const filteredConjuntos = useMemo(() => {
-    const refIds = new Set(filteredReferencias.map(r => r.id));
-    return conjuntos.filter(c => refIds.has(c.referenciaId));
-  }, [conjuntos, filteredReferencias]);
-
-  const filteredPranchas = useMemo(() => {
-    const conjIds = new Set(filteredConjuntos.map(c => c.id));
-    return pranchas.filter(p => conjIds.has(p.conjuntoId));
-  }, [pranchas, filteredConjuntos]);
+  // O filtro antigo (Clientes/Disciplinas/Lupa) vive APENAS nos Indicadores. As demais
+  // abas são navegadas por obra (cards) — recebem os dados sem esse filtro global.
 
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
@@ -428,16 +415,18 @@ export default function App() {
           </nav>
 
           <div className="flex items-center gap-2 flex-shrink-0 pl-2">
-            {/* Filters Group */}
+            {/* Filtro antigo (Clientes/Disciplinas/Lupa): só nos Indicadores — nas demais
+                abas a navegação é por obra (cards), então este grupo some para não conflitar. */}
+            {activeTab === 'dashboard' && (
             <div className="flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-0.5 overflow-hidden">
                <FilterButton active={selectedClients.length > 0} onClick={() => { setIsClientFilterOpen(!isClientFilterOpen); setIsDisciplineFilterOpen(false); }}>
                  <Filter size={14} />
                  <span className="max-w-[80px] truncate">{selectedClients.length === 0 ? 'Clientes' : `${selectedClients.length}`}</span>
                  <ChevronDown size={12} className="opacity-40" />
                </FilterButton>
-               
+
                <div className="w-px h-6 bg-slate-100 dark:bg-slate-700 mx-0.5"></div>
-               
+
                <FilterButton active={selectedDisciplines.length > 0} onClick={() => { setIsDisciplineFilterOpen(!isDisciplineFilterOpen); setIsClientFilterOpen(false); }}>
                  <Layers size={14} />
                  <span className="max-w-[80px] truncate">{selectedDisciplines.length === 0 ? 'Disciplinas' : `${selectedDisciplines.length}`}</span>
@@ -450,6 +439,7 @@ export default function App() {
                  <Search size={14} />
                </button>
             </div>
+            )}
 
             {/* Actions Group */}
             <div className="flex items-center gap-2 ml-2">
@@ -512,19 +502,19 @@ export default function App() {
 
         {/* Dropdowns logic (Clientes/Disciplinas) relocated for better layering */}
         <div className="relative">
-          {isClientFilterOpen && (
+          {activeTab === 'dashboard' && isClientFilterOpen && (
             <div className="absolute right-40 top-0 mt-2 z-50">
                {/* Client Filter Content (unchanged) */}
-               <FilterDropdown 
-                 title="Filtrar Clientes" 
-                 onClear={() => setSelectedClients([])} 
-                 items={uniqueClients} 
-                 selectedItems={selectedClients} 
-                 onToggle={toggleClientSelection} 
+               <FilterDropdown
+                 title="Filtrar Clientes"
+                 onClear={() => setSelectedClients([])}
+                 items={uniqueClients}
+                 selectedItems={selectedClients}
+                 onToggle={toggleClientSelection}
                />
             </div>
           )}
-          {isDisciplineFilterOpen && (
+          {activeTab === 'dashboard' && isDisciplineFilterOpen && (
             <div className="absolute right-20 top-0 mt-2 z-50">
                <FilterDropdown 
                  title="Filtrar Disciplinas" 
@@ -539,7 +529,9 @@ export default function App() {
       </header>
 
       <main className="w-full px-4 sm:px-6 lg:px-8 py-6 print:p-0 print:w-full print:max-w-none">
-        {activeTab !== 'obras' && (
+        {/* Janela de data: Indicadores (analítico) e Cronograma (linha do tempo). As
+            abas operacionais são navegadas por obra, sem esse recorte temporal global. */}
+        {(activeTab === 'dashboard' || activeTab === 'timeline') && (
           <div className="mb-6 flex flex-col sm:flex-row gap-4 justify-between items-end print:hidden">
               <div className="w-full lg:w-auto">
                  <DateRangeFilter filterType={dateFilterType} setFilterType={setDateFilterType} referenceDate={referenceDate} setReferenceDate={setReferenceDate} customRange={customRange} setCustomRange={setCustomRange} />
@@ -551,12 +543,12 @@ export default function App() {
           <Suspense fallback={<TabLoading />}>
             {isAdmin && activeTab === 'dashboard' && <DataMigration projects={projects} onUpdateProject={updateProject} />}
             {activeTab === 'dashboard' && <div className="animate-in fade-in zoom-in-95 duration-200"><Dashboard data={filteredProjects} supplyOrders={filteredSupplyOrders} clients={clients} isDarkMode={isDarkMode} holidays={holidays} /></div>}
-            {activeTab === 'timeline' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectTimeline projects={filteredProjects} holidays={holidays} clients={clients} /></div>}
+            {activeTab === 'timeline' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectTimeline projects={dateFilteredProjects} holidays={holidays} clients={clients} /></div>}
             {activeTab === 'obras' && <div className="animate-in fade-in zoom-in-95 duration-200"><ObrasPage clients={clients} projectCount={(name) => projects.filter(p => p.client === name).length} onAddClient={handleAddClient} onUpdateClient={handleUpdateClient} onDeleteClient={handleDeleteClient} /></div>}
-            {activeTab === 'projects' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectList projects={filteredProjects} clients={clients} onUpdate={updateProject} onDelete={deleteProject} onAddRevision={addProjectRevision} onPromote={promoteProjectToExecutive} holidays={holidays} readOnly={isReadOnly} /></div>}
-            {activeTab === 'catalogo' && <div className="animate-in fade-in zoom-in-95 duration-200"><CatalogoPage referencias={filteredReferencias} conjuntos={conjuntos} clients={rodoviaClients} holidays={holidays} readOnly={isReadOnly} onAdd={handleAddReferencia} onUpdate={handleUpdateReferencia} onDelete={handleDeleteReferencia} onMove={handleMoveReferencia} onInstanciar={handleInstanciar} onInstanciarLote={handleInstanciarLote} onAddMany={handleAddReferencias} onDeleteMany={handleDeleteReferencias} /></div>}
-            {activeTab === 'carteira' && <div className="animate-in fade-in zoom-in-95 duration-200"><CarteiraPage referencias={referencias} conjuntos={filteredConjuntos} pranchas={filteredPranchas} clients={rodoviaClients} readOnly={isReadOnly} legacyPendingCount={legacyPendingCount} isMigrationAdmin={isMigrationAdmin} onMigrate={handleMigratePortfolio} onMovePrancha={handleMovePrancha} onUpdatePrancha={handleUpdatePrancha} onDeletePrancha={handleDeletePrancha} onDeleteConjunto={handleDeleteConjunto} /></div>}
-            {activeTab === 'suprimentos' && <div className="animate-in fade-in zoom-in-95 duration-200"><SupplyPage orders={filteredSupplyOrders} clients={clients} holidays={holidays} currentUser={currentUser ? formatUsername(currentUser.email) : ''} isAdmin={isMigrationAdmin} readOnly={isReadOnly} onAdd={handleAddSupplyOrder} onUpdate={handleUpdateSupplyOrder} onDelete={handleDeleteSupplyOrder} onMoveStatus={handleMoveSupplyStatus} onToggleItem={handleToggleSupplyItem} onMigrateLegacy={handleMigrateLegacyPurchases} /></div>}
+            {activeTab === 'projects' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectList projects={legacyProjects} clients={clients} onUpdate={updateProject} onDelete={deleteProject} onAddRevision={addProjectRevision} onPromote={promoteProjectToExecutive} holidays={holidays} readOnly={isReadOnly} /></div>}
+            {activeTab === 'catalogo' && <div className="animate-in fade-in zoom-in-95 duration-200"><CatalogoPage referencias={referencias} conjuntos={conjuntos} clients={rodoviaClients} holidays={holidays} readOnly={isReadOnly} onAdd={handleAddReferencia} onUpdate={handleUpdateReferencia} onDelete={handleDeleteReferencia} onMove={handleMoveReferencia} onInstanciar={handleInstanciar} onInstanciarLote={handleInstanciarLote} onAddMany={handleAddReferencias} onDeleteMany={handleDeleteReferencias} /></div>}
+            {activeTab === 'carteira' && <div className="animate-in fade-in zoom-in-95 duration-200"><CarteiraPage referencias={referencias} conjuntos={conjuntos} pranchas={pranchas} clients={rodoviaClients} readOnly={isReadOnly} legacyPendingCount={legacyPendingCount} isMigrationAdmin={isMigrationAdmin} onMigrate={handleMigratePortfolio} onMovePrancha={handleMovePrancha} onUpdatePrancha={handleUpdatePrancha} onDeletePrancha={handleDeletePrancha} onDeleteConjunto={handleDeleteConjunto} /></div>}
+            {activeTab === 'suprimentos' && <div className="animate-in fade-in zoom-in-95 duration-200"><SupplyPage orders={supplyOrders} clients={clients} holidays={holidays} currentUser={currentUser ? formatUsername(currentUser.email) : ''} isAdmin={isMigrationAdmin} readOnly={isReadOnly} onAdd={handleAddSupplyOrder} onUpdate={handleUpdateSupplyOrder} onDelete={handleDeleteSupplyOrder} onMoveStatus={handleMoveSupplyStatus} onToggleItem={handleToggleSupplyItem} onMigrateLegacy={handleMigrateLegacyPurchases} /></div>}
           </Suspense>
         </div>
       </main>

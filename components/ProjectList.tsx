@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect, memo } from 'react';
 import { ProjectFile, Status, Discipline, RevisionReason, Period, ProjectPhase, ClientDoc, SiteType } from '../types';
 import { useObraAtiva, ObraSelectScreen, ObraAtivaBar, ObraCardStat } from './ObraGate';
 import { format, parseISO, isValid } from 'date-fns';
-import { Trash2, GitBranch, History, CornerDownRight, AlertTriangle, Edit2, Save, X, Eye, ArrowUpDown, ArrowUp, ArrowDown, BadgeCheck, Send, CheckSquare, ThumbsDown, List, Search, ArrowUpCircle, ChevronRight, ChevronDown, Play, Pause, ListTree, LayoutList, ClipboardList, Minimize2, Maximize2, CheckCircle2 } from 'lucide-react';
+import { Trash2, GitBranch, History, CornerDownRight, AlertTriangle, Edit2, Save, X, Eye, ArrowUpDown, ArrowUp, ArrowDown, BadgeCheck, Send, CheckSquare, ThumbsDown, List, Search, ArrowUpCircle, ChevronRight, ChevronDown, Play, Pause, ListTree, LayoutList, ClipboardList, Minimize2, Maximize2, CheckCircle2, Layers } from 'lucide-react';
 import { getProjectBaseName, getRevisionNumber, formatDateDisplay, calculateBusinessDaysWithHolidays, getStatusColor, inferStatusFromDates, calculateDeadlineDate, canTransitionTo, getExecutiveMatchKey } from '../utils';
 
 interface ProjectListProps {
@@ -260,6 +260,14 @@ const ProjectListInner: React.FC<ProjectListProps> = ({ projects, clients, onUpd
     const ITEMS_PER_PAGE = 100;
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
     const [statusFilter, setStatusFilter] = useState<Status | 'ALL' | 'OVERDUE'>('ALL');
+    const [disciplineFilter, setDisciplineFilter] = useState<Discipline | 'ALL'>('ALL');
+
+    // Disciplinas presentes nos projetos da obra ativa (o filtro de disciplina mora
+    // AQUI na aba, já que o filtro global saiu para os Indicadores)
+    const disciplinasDisponiveis = useMemo(
+        () => [...new Set(projects.map(p => p.discipline))].sort() as Discipline[],
+        [projects]
+    );
 
     // Preferências de visualização persistidas entre sessões
     const [viewMode, setViewMode] = useState<ViewMode>(() => {
@@ -356,6 +364,7 @@ const ProjectListInner: React.FC<ProjectListProps> = ({ projects, clients, onUpd
     const projectGroups = useMemo((): ProjectGroup[] => {
         const term = normalizeText(search);
         const filtered = projects.filter(p => {
+            if (disciplineFilter !== 'ALL' && p.discipline !== disciplineFilter) return false;
             const matchesSearch = normalizeText(p.filename).includes(term) || normalizeText(p.client).includes(term) || normalizeText(p.discipline).includes(term) || (p.base && normalizeText(p.base).includes(term));
             if (!matchesSearch) return false;
             if (statusFilter === 'ALL') return true;
@@ -392,7 +401,7 @@ const ProjectListInner: React.FC<ProjectListProps> = ({ projects, clients, onUpd
             const groupKey = `${baseName}|${phase}`;
             return { baseName: groupKey, discipline: latest.discipline, latestProject: latest, children, allProjects: group };
         });
-    }, [projects, sortConfig, search, statusFilter, clientsMap]);
+    }, [projects, sortConfig, search, statusFilter, disciplineFilter, clientsMap]);
 
     const disciplineGroups = useMemo((): DisciplineGroup[] => {
         const disciplineMap: Partial<Record<Discipline, Partial<Record<ProjectPhase, ProjectGroup[]>>>> = {};
@@ -750,6 +759,21 @@ const ProjectListInner: React.FC<ProjectListProps> = ({ projects, clients, onUpd
                         <div className="relative flex-1 min-w-[200px] max-w-sm">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                             <input type="text" placeholder="Buscar por cliente, arquivo ou disciplina..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-9 pr-4 py-1.5 text-sm border border-slate-200 dark:border-slate-600 rounded-lg focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 bg-white dark:bg-slate-800 text-slate-900 dark:text-white transition-all duration-150" />
+                        </div>
+
+                        {/* Filtro de disciplina (dentro da aba — o filtro global saiu para os Indicadores) */}
+                        <div className="relative">
+                            <Layers className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
+                            <select
+                                value={disciplineFilter}
+                                onChange={(e) => setDisciplineFilter(e.target.value as Discipline | 'ALL')}
+                                title="Filtrar por disciplina"
+                                className={`pl-8 pr-7 py-1.5 text-sm rounded-lg border appearance-none cursor-pointer transition-colors ${disciplineFilter !== 'ALL' ? 'text-brand-700 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/20 border-brand-200 dark:border-brand-800 font-bold' : 'text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600'}`}
+                            >
+                                <option value="ALL">Todas as disciplinas</option>
+                                {disciplinasDisponiveis.map(d => <option key={d} value={d}>{d}</option>)}
+                            </select>
+                            <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                         </div>
 
                         <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">{sortedProjects.length} registros ({projectGroups.length} projetos)</span>

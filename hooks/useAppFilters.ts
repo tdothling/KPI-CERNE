@@ -64,6 +64,20 @@ export function useAppFilters(
         return result;
     }, [projects, selectedClients, selectedDisciplines, dateFilterType, referenceDate, customRange]);
 
+    // Só a janela de data (sem cliente/disciplina) — o Cronograma usa isto, já que
+    // os filtros de cliente/disciplina passaram a viver apenas nos Indicadores.
+    const dateFilteredProjects = useMemo(() => {
+        const dateRange = getFilterDateRange();
+        if (!dateRange) return projects;
+        const { start: filterStart, end: filterEnd } = dateRange;
+        return projects.filter(p => {
+            if (!p.startDate) return false;
+            const projectStart = parseISO(p.startDate);
+            const projectEnd = (p.endDate && isValid(parseISO(p.endDate))) ? parseISO(p.endDate) : new Date();
+            return projectStart <= filterEnd && projectEnd >= filterStart;
+        });
+    }, [projects, dateFilterType, referenceDate, customRange]);
+
     const filteredSupplyOrders = useMemo(() => {
         let result = supplyOrders;
         if (selectedClients.length > 0) {
@@ -129,7 +143,7 @@ export function useAppFilters(
         dateFilterType, setDateFilterType,
         referenceDate, setReferenceDate,
         customRange, setCustomRange,
-        filteredProjects, filteredSupplyOrders,
+        filteredProjects, filteredSupplyOrders, dateFilteredProjects,
         uniqueClients
     };
 }
