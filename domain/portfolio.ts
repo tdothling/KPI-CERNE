@@ -35,6 +35,10 @@ export enum RefStatus {
     ENVIADO = 'Enviado ao Cliente',
     APROVADO = 'Aprovado',
     REPROVADO = 'Reprovado',
+    // Instanciada na Carteira antes de fechar o ciclo: o trabalho seguiu para o
+    // executivo (pranchas) e o que faltava do preliminar é desconsiderado.
+    // Mesmo conceito (e mesma string) do Status.SUPERSEDED da aba Projetos.
+    SUPERSEDED = 'Executivo Gerado',
 }
 
 // --- CICLO DA PRANCHA (execução/entrega) ---
@@ -123,7 +127,17 @@ const REF_TRANSITIONS: Record<RefStatus, RefStatus[]> = {
     // o tempo de retrabalho também é medido antes do reenvio
     [RefStatus.REPROVADO]: [RefStatus.EM_ELABORACAO],
     [RefStatus.APROVADO]: [],
+    // Terminal absoluto: só nasce ao instanciar (nunca pelos botões de fluxo)
+    [RefStatus.SUPERSEDED]: [],
 };
+
+// Encerramento do preliminar ao instanciar: quem já fechou o ciclo (Aprovado)
+// mantém o veredito; qualquer etapa pendente é desconsiderada e a referência
+// encerra como 'Executivo Gerado' — o trabalho continua nas pranchas da Carteira.
+export const refStatusAposInstanciar = (current: RefStatus): RefStatus =>
+    current === RefStatus.APROVADO || current === RefStatus.SUPERSEDED
+        ? current
+        : RefStatus.SUPERSEDED;
 
 const PRANCHA_TRANSITIONS: Record<PranchaStatus, PranchaStatus[]> = {
     [PranchaStatus.A_FAZER]: [PranchaStatus.EM_ANDAMENTO],
@@ -169,6 +183,9 @@ export interface CycleDates {
 }
 
 export const inferRefStatusFromDates = (dates: CycleDates, current: RefStatus): RefStatus => {
+    // 'Executivo Gerado' não deriva de datas: nasceu da instanciação e o ciclo
+    // preliminar está encerrado — editar datas não o reabre.
+    if (current === RefStatus.SUPERSEDED) return current;
     const { startDate, endDate, sendDate, feedbackDate } = dates;
     if (sendDate && feedbackDate) {
         return current === RefStatus.APROVADO || current === RefStatus.REPROVADO ? current : RefStatus.ENVIADO;
@@ -485,7 +502,7 @@ export const rollupConjunto = (pranchas: Pick<Prancha, 'status'>[]): ConjuntoRol
 
 // Nível Referência: elaboração + validação dos tipos com o cliente
 export const catalogoKpis = (referencias: Pick<Referencia, 'statusAprovacao'>[]) => {
-    const k = { total: referencias.length, rascunho: 0, emElaboracao: 0, elaborado: 0, enviado: 0, aprovado: 0, reprovado: 0 };
+    const k = { total: referencias.length, rascunho: 0, emElaboracao: 0, elaborado: 0, enviado: 0, aprovado: 0, reprovado: 0, executivoGerado: 0 };
     referencias.forEach(r => {
         if (r.statusAprovacao === RefStatus.RASCUNHO) k.rascunho++;
         else if (r.statusAprovacao === RefStatus.EM_ELABORACAO) k.emElaboracao++;
@@ -493,6 +510,7 @@ export const catalogoKpis = (referencias: Pick<Referencia, 'statusAprovacao'>[])
         else if (r.statusAprovacao === RefStatus.ENVIADO) k.enviado++;
         else if (r.statusAprovacao === RefStatus.APROVADO) k.aprovado++;
         else if (r.statusAprovacao === RefStatus.REPROVADO) k.reprovado++;
+        else if (r.statusAprovacao === RefStatus.SUPERSEDED) k.executivoGerado++;
     });
     return k;
 };
@@ -811,6 +829,9 @@ const REF_STATUS_TO_LEGACY: Record<RefStatus, Status | null> = {
     [RefStatus.ENVIADO]: Status.WAITING_APPROVAL,
     [RefStatus.APROVADO]: Status.APPROVED,
     [RefStatus.REPROVADO]: Status.REJECTED,
+    // Ciclo encerrado pela instanciação: terminal que não penaliza OTD/IAPR
+    // (tratamento idêntico ao SUPERSEDED da aba Projetos nos Indicadores)
+    [RefStatus.SUPERSEDED]: Status.SUPERSEDED,
 };
 
 const PRANCHA_STATUS_TO_LEGACY: Record<PranchaStatus, Status | null> = {

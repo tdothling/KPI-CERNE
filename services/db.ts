@@ -2,7 +2,7 @@
 import { db, auth } from "../firebase";
 import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc, query, orderBy, limit, QuerySnapshot, DocumentData, getDoc, getDocs, where, writeBatch, arrayUnion, deleteField, runTransaction } from "firebase/firestore";
 import { ProjectFile, PurchaseDoc, ClientDoc, ProjectFilterState, SupplyOrder, SupplyStatus, SupplyStatusEvent, PurchaseStatus } from "../types";
-import { Referencia, Conjunto, Prancha, planPortfolioMigration } from "../domain/portfolio";
+import { Referencia, Conjunto, Prancha, planPortfolioMigration, RefStatus, refStatusAposInstanciar } from "../domain/portfolio";
 
 const COLL_PROJECTS = "projects";
 const COLL_MATERIALS = "materials";
@@ -441,11 +441,15 @@ export const deletePranchaFromDb = async (id: string) => {
 // Instanciar: grava o Conjunto (ID determinístico referência+base) e as pranchas
 // pré-geradas em UMA transação. Se o conjunto já existir — inclusive criado por
 // outro usuário um segundo antes — a transação falha e nada é gravado parcial.
+// Instanciar também ENCERRA o ciclo preliminar da referência: qualquer etapa
+// pendente é desconsiderada e ela vira 'Executivo Gerado' (Aprovado é mantido) —
+// o trabalho segue apenas no executivo (pranchas da Carteira).
 export const instanciarConjuntoInDb = async (conjunto: Conjunto, pranchas: Omit<Prancha, 'id'>[]) => {
   if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
   await runTransaction(db, async (tx) => {
     const conjuntoRef = doc(db, COLL_CONJUNTOS, conjunto.id);
-    const existing = await tx.get(conjuntoRef);
+    const refRef = doc(db, COLL_REFERENCIAS, conjunto.referenciaId);
+    const [existing, refSnap] = await Promise.all([tx.get(conjuntoRef), tx.get(refRef)]);
     if (existing.exists()) {
       throw new Error(`Esta referência já foi instanciada na base "${conjunto.base}".`);
     }
@@ -454,6 +458,11 @@ export const instanciarConjuntoInDb = async (conjunto: Conjunto, pranchas: Omit<
     pranchas.forEach(p => {
       tx.set(doc(collection(db, COLL_PRANCHAS)), sanitizeData(p));
     });
+    if (refSnap.exists()) {
+      const atual = (refSnap.data() as any).statusAprovacao as RefStatus;
+      const fechado = refStatusAposInstanciar(atual);
+      if (fechado !== atual) tx.update(refRef, { statusAprovacao: fechado });
+    }
   });
 };
 

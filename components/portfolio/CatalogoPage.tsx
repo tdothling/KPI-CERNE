@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BookOpen, Plus, Send, BadgeCheck, ThumbsDown, FileEdit, Trash2, Layers, X, ChevronDown, ChevronRight, MapPin, GripVertical, PencilLine, Play, CheckCircle2, Hammer, Timer, CopyPlus, CheckSquare, Square, Loader2, Wand2 } from 'lucide-react';
+import { BookOpen, Plus, Send, BadgeCheck, ThumbsDown, FileEdit, Trash2, Layers, X, ChevronDown, ChevronRight, MapPin, GripVertical, PencilLine, Play, CheckCircle2, Hammer, Timer, CopyPlus, CheckSquare, Square, Loader2, Wand2, FastForward } from 'lucide-react';
 import { useObraAtiva, ObraSelectScreen, ObraAtivaBar, ObraCardStat } from '../ObraGate';
 import { ClientDoc, Discipline, Period, RevisionReason } from '../../types';
 import { Referencia, Conjunto, RefStatus, GabaritoItem, canRefTransition, catalogoKpis, buildCodigoCompleto, inferRefStatusFromDates, planInstanciacaoLote, slugify, DISCIPLINA_SIGLA, gerarReferenciasDisciplinas, planGerarDisciplinasLote, swapDisciplinaSigla } from '../../domain/portfolio';
@@ -172,7 +172,7 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
             <ObraAtivaBar obra={obraAtiva} canTrocar={clients.length > 1} onTrocar={trocarObra} />
 
             {/* KPIs nível Referência: elaboração + validação dos TIPOS (nunca mistura com pranchas) */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
                 <KpiCard color="slate" icon={<BookOpen size={16} />} label="Todos os Tipos" value={kpis.total} active={statusFilter === 'ALL'} onClick={() => setStatusFilter('ALL')} />
                 <KpiCard color="slate" icon={<FileEdit size={16} />} label="Rascunho" value={kpis.rascunho} active={statusFilter === RefStatus.RASCUNHO} onClick={() => setStatusFilter(f => f === RefStatus.RASCUNHO ? 'ALL' : RefStatus.RASCUNHO)} />
                 <KpiCard color="amber" icon={<Hammer size={16} />} label="Em Elaboração" value={kpis.emElaboracao} active={statusFilter === RefStatus.EM_ELABORACAO} onClick={() => setStatusFilter(f => f === RefStatus.EM_ELABORACAO ? 'ALL' : RefStatus.EM_ELABORACAO)} />
@@ -180,6 +180,7 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
                 <KpiCard color="blue" icon={<Send size={16} />} label="Com o Cliente" value={kpis.enviado} active={statusFilter === RefStatus.ENVIADO} onClick={() => setStatusFilter(f => f === RefStatus.ENVIADO ? 'ALL' : RefStatus.ENVIADO)} />
                 <KpiCard color="emerald" icon={<BadgeCheck size={16} />} label="Tipos Aprovados" value={kpis.aprovado} active={statusFilter === RefStatus.APROVADO} onClick={() => setStatusFilter(f => f === RefStatus.APROVADO ? 'ALL' : RefStatus.APROVADO)} />
                 <KpiCard color="rose" icon={<ThumbsDown size={16} />} label="Reprovados" value={kpis.reprovado} active={statusFilter === RefStatus.REPROVADO} onClick={() => setStatusFilter(f => f === RefStatus.REPROVADO ? 'ALL' : RefStatus.REPROVADO)} />
+                <KpiCard color="cyan" icon={<FastForward size={16} />} label="Executivo Gerado" value={kpis.executivoGerado} active={statusFilter === RefStatus.SUPERSEDED} onClick={() => setStatusFilter(f => f === RefStatus.SUPERSEDED ? 'ALL' : RefStatus.SUPERSEDED)} />
             </div>
 
             <div className="flex items-center justify-between">
@@ -696,6 +697,14 @@ function InstanciarModal({ referencia, existingBases, basesRegistradas, onClose,
                     </ul>
                 </div>
 
+                {/* Nova regra: instanciar encerra o preliminar — etapas pendentes são desconsideradas */}
+                {referencia.statusAprovacao !== RefStatus.APROVADO && referencia.statusAprovacao !== RefStatus.SUPERSEDED && (
+                    <p className="text-[11px] text-cyan-700 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-900/20 border border-cyan-100 dark:border-cyan-900/40 rounded-lg px-3 py-2 mb-4">
+                        Ao instanciar, o ciclo preliminar desta referência será encerrado como <b>Executivo Gerado</b> —
+                        as etapas pendentes ({referencia.statusAprovacao}) são desconsideradas e o trabalho segue nas pranchas da Carteira.
+                    </p>
+                )}
+
                 <div className="flex justify-end gap-2">
                     <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg font-medium">Cancelar</button>
                     <button
@@ -778,6 +787,7 @@ function InstanciarLoteModal({ referencias, conjuntos, clients, onClose, onConfi
                 <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
                     Selecione as referências e as bases: cada combinação vira 1 conjunto com as pranchas do gabarito.
                     Combinações já instanciadas são <strong>puladas automaticamente</strong> — rodar de novo não duplica nada.
+                    Ao instanciar, o ciclo preliminar de cada referência é encerrado como <strong>Executivo Gerado</strong> (etapas pendentes são desconsideradas; referências já Aprovadas mantêm o veredito).
                 </p>
 
                 {/* Resultado da execução */}

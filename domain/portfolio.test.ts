@@ -9,6 +9,7 @@ import {
     catalogoKpis, carteiraKpis, conjuntosKpis, revisaoStats,
     planPortfolioMigration, inferPapel, execMoldeKey, buildCodigoCompleto,
     portfolioToProjectFiles, PROJECAO_REF_PREFIX, PROJECAO_PRANCHA_PREFIX,
+    refStatusAposInstanciar,
 } from './portfolio';
 import { Discipline, ProjectFile, ProjectPhase, RevisionReason, Status } from '../types';
 
@@ -427,7 +428,7 @@ describe('ciclos de vida independentes', () => {
             { statusAprovacao: RefStatus.ENVIADO },
             { statusAprovacao: RefStatus.APROVADO },
         ]);
-        expect(k).toEqual({ total: 6, rascunho: 1, emElaboracao: 2, elaborado: 1, enviado: 1, aprovado: 1, reprovado: 0 });
+        expect(k).toEqual({ total: 6, rascunho: 1, emElaboracao: 2, elaborado: 1, enviado: 1, aprovado: 1, reprovado: 0, executivoGerado: 0 });
     });
 
     it('status da referência retroage/avança conforme as datas editadas', () => {
@@ -760,5 +761,55 @@ describe('portfolioToProjectFiles', () => {
         const out = portfolioToProjectFiles([], [conjunto104], [prancha({})]);
         expect(out).toHaveLength(1);
         expect(out[0].discipline).toBe(Discipline.OTHER);
+    });
+});
+
+// --- Encerramento do preliminar ao instanciar (Executivo Gerado) ---
+
+describe('refStatusAposInstanciar', () => {
+    it('encerra qualquer etapa pendente como Executivo Gerado', () => {
+        [RefStatus.RASCUNHO, RefStatus.EM_ELABORACAO, RefStatus.ELABORADO, RefStatus.ENVIADO, RefStatus.REPROVADO]
+            .forEach(s => expect(refStatusAposInstanciar(s)).toBe(RefStatus.SUPERSEDED));
+    });
+
+    it('preserva o veredito de referência já Aprovada', () => {
+        expect(refStatusAposInstanciar(RefStatus.APROVADO)).toBe(RefStatus.APROVADO);
+    });
+
+    it('é idempotente para referência já encerrada', () => {
+        expect(refStatusAposInstanciar(RefStatus.SUPERSEDED)).toBe(RefStatus.SUPERSEDED);
+    });
+});
+
+describe('RefStatus.SUPERSEDED — integração com o restante do domínio', () => {
+    it('é terminal absoluto: nenhuma transição sai dele', () => {
+        Object.values(RefStatus).forEach(to => {
+            expect(canRefTransition(RefStatus.SUPERSEDED, to)).toBe(false);
+        });
+    });
+
+    it('editar datas não reabre o ciclo encerrado', () => {
+        expect(inferRefStatusFromDates({ startDate: '2026-01-05' }, RefStatus.SUPERSEDED)).toBe(RefStatus.SUPERSEDED);
+        expect(inferRefStatusFromDates({}, RefStatus.SUPERSEDED)).toBe(RefStatus.SUPERSEDED);
+        expect(inferRefStatusFromDates({ startDate: '2026-01-05', endDate: '2026-01-08', sendDate: '2026-01-09' }, RefStatus.SUPERSEDED)).toBe(RefStatus.SUPERSEDED);
+    });
+
+    it('conta no KPI executivoGerado do Catálogo', () => {
+        const k = catalogoKpis([
+            { statusAprovacao: RefStatus.SUPERSEDED },
+            { statusAprovacao: RefStatus.SUPERSEDED },
+            { statusAprovacao: RefStatus.APROVADO },
+        ]);
+        expect(k.executivoGerado).toBe(2);
+        expect(k.aprovado).toBe(1);
+        expect(k.total).toBe(3);
+    });
+
+    it('projeta para os Indicadores como Status.SUPERSEDED (não penaliza OTD/IAPR)', () => {
+        const ref: Referencia = { ...refBSO, statusAprovacao: RefStatus.SUPERSEDED, startDate: '2026-01-05', endDate: '2026-01-08' };
+        const out = portfolioToProjectFiles([ref], [], []);
+        expect(out).toHaveLength(1);
+        expect(out[0].status).toBe(Status.SUPERSEDED);
+        expect(out[0].phase).toBe(ProjectPhase.PRELIMINARY);
     });
 });

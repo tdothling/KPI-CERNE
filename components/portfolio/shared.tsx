@@ -32,7 +32,7 @@ export const execDaysOf = (
 
 // --- Card de resumo / filtro rápido (mesmo visual da aba Projetos) ---
 
-export type CardColor = 'slate' | 'blue' | 'amber' | 'emerald' | 'rose' | 'red' | 'violet';
+export type CardColor = 'slate' | 'blue' | 'amber' | 'emerald' | 'rose' | 'red' | 'violet' | 'cyan';
 
 const CARD_STYLES: Record<CardColor, { active: string; iconActive: string; iconIdle: string; value: string }> = {
     slate:   { active: 'border-slate-400 bg-slate-100 dark:bg-slate-700/60 dark:border-slate-400 ring-1 ring-slate-300 dark:ring-slate-500', iconActive: 'bg-slate-200 text-slate-700 dark:bg-slate-600 dark:text-slate-200', iconIdle: 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400', value: 'text-slate-800 dark:text-slate-100' },
@@ -42,6 +42,7 @@ const CARD_STYLES: Record<CardColor, { active: string; iconActive: string; iconI
     rose:    { active: 'border-rose-400 bg-rose-50 dark:bg-rose-900/30 dark:border-rose-500 ring-1 ring-rose-300 dark:ring-rose-600', iconActive: 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300', iconIdle: 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400', value: 'text-rose-700 dark:text-rose-400' },
     red:     { active: 'border-red-500 bg-red-50 dark:bg-red-900/30 dark:border-red-500 ring-1 ring-red-300 dark:ring-red-600', iconActive: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300', iconIdle: 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400', value: 'text-red-600 dark:text-red-400' },
     violet:  { active: 'border-violet-400 bg-violet-50 dark:bg-violet-900/30 dark:border-violet-500 ring-1 ring-violet-300 dark:ring-violet-600', iconActive: 'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300', iconIdle: 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400', value: 'text-violet-700 dark:text-violet-400' },
+    cyan:    { active: 'border-cyan-400 bg-cyan-50 dark:bg-cyan-900/30 dark:border-cyan-500 ring-1 ring-cyan-300 dark:ring-cyan-600', iconActive: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/50 dark:text-cyan-300', iconIdle: 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400', value: 'text-cyan-700 dark:text-cyan-400' },
 };
 
 export function KpiCard({ color, icon, label, value, active, onClick }: { color: CardColor; icon: React.ReactNode; label: string; value: number; active: boolean; onClick: () => void }) {
@@ -70,6 +71,8 @@ export const REF_STATUS_STYLE: Record<RefStatus, string> = {
     [RefStatus.ENVIADO]: 'text-blue-700 bg-blue-100 border-blue-300 dark:bg-blue-900/40 dark:border-blue-700 dark:text-blue-400',
     [RefStatus.APROVADO]: 'text-emerald-700 bg-emerald-100 border-emerald-300 dark:bg-emerald-900/40 dark:border-emerald-700 dark:text-emerald-400',
     [RefStatus.REPROVADO]: 'text-rose-700 bg-rose-100 border-rose-300 dark:bg-rose-900/40 dark:border-rose-700 dark:text-rose-400',
+    // Ciclo preliminar encerrado pela instanciação (trabalho segue nas pranchas)
+    [RefStatus.SUPERSEDED]: 'text-cyan-700 bg-cyan-100 border-cyan-300 dark:bg-cyan-900/40 dark:border-cyan-700 dark:text-cyan-400',
 };
 
 export const PRANCHA_STATUS_STYLE: Record<PranchaStatus, string> = {

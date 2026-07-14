@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { ProjectFile, ClientDoc, Status, RevisionReason, ProjectPhase, Period, ProjectFilterState, SupplyOrder, SupplyStatus, SiteType, TrashEntry } from '../types';
 import { subscribeToProjects, addProject, updateProjectInDb, deleteProjectFromDb, subscribeToClients, addClient, updateClientInDb, deleteClientFromDb, countLinkedRecords, subscribeToHolidays, saveHolidaysToDb, batchUpdateProjectsInDb, subscribeToSupplyOrders, addSupplyOrder, updateSupplyOrderInDb, deleteSupplyOrderFromDb, applySupplyStatusChange, patchSupplyOrderInDb, migrateLegacyPurchasesToSupply, subscribeToReferencias, subscribeToConjuntos, subscribeToPranchas, addReferenciaToDb, patchReferenciaInDb, deleteReferenciaFromDb, instanciarConjuntoInDb, instanciarLoteInDb, deleteConjuntoFromDb, patchPranchaInDb, batchUpdatePranchasInDb, addPranchaToDb, deletePranchaFromDb, migrateProjectsToPortfolio, subscribeToTrash, restoreFromTrash, purgeTrashEntries } from '../services/db';
-import { Referencia, Conjunto, Prancha, PranchaStatus, RefStatus, canRefTransition, canPranchaTransition, instanciarConjunto, planInstanciacaoLote, planMoverPranchasLote, slugify } from '../domain/portfolio';
+import { Referencia, Conjunto, Prancha, PranchaStatus, RefStatus, canRefTransition, canPranchaTransition, instanciarConjunto, planInstanciacaoLote, planMoverPranchasLote, slugify, refStatusAposInstanciar } from '../domain/portfolio';
 import { buildStatusChangePatch } from '../components/supply/supplyUtils';
 import { formatUsername } from '../services/auth';
 import { subscribeToAuth } from '../services/auth';
@@ -80,6 +80,24 @@ export function useAppData(projectFilter: ProjectFilterState) {
             updateProjectInDb({ ...p, status: Status.SUPERSEDED });
         });
     }, [projects]);
+
+    // Regularização retroativa do Catálogo: referência JÁ instanciada (tem
+    // conjunto na Carteira) com etapa preliminar pendente é encerrada como
+    // 'Executivo Gerado' — mesma regra aplicada na instanciação a partir de
+    // agora. Corrige registros antigos que avançaram de fase sem fechar o fluxo.
+    const refSupersededSynced = useRef<Set<string>>(new Set());
+    useEffect(() => {
+        if (conjuntos.length === 0 || referencias.length === 0) return;
+        const instanciadas = new Set(conjuntos.map(c => c.referenciaId));
+        referencias.forEach(r => {
+            if (!instanciadas.has(r.id)) return;
+            const fechado = refStatusAposInstanciar(r.statusAprovacao);
+            if (fechado === r.statusAprovacao) return;
+            if (refSupersededSynced.current.has(r.id)) return;
+            refSupersededSynced.current.add(r.id);
+            patchReferenciaInDb(r.id, { statusAprovacao: fechado });
+        });
+    }, [referencias, conjuntos]);
 
     const updateProject = (updated: ProjectFile) => updateProjectInDb(updated);
     const deleteProject = (id: string) => { deleteProjectFromDb(id); };
