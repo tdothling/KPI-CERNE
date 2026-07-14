@@ -5,7 +5,11 @@ import { parseISO, isValid, startOfMonth, endOfMonth, startOfQuarter, endOfQuart
 export function useAppFilters(
     projects: ProjectFile[],
     supplyOrders: SupplyOrder[],
-    clients: ClientDoc[]
+    clients: ClientDoc[],
+    // Canal extra dos Indicadores (somente leitura): projeção da Carteira/Catálogo
+    // + projetos de rodovia ainda não migrados. Recebe os MESMOS filtros de
+    // cliente/disciplina/janela de data e alimenta só o Dashboard.
+    portfolioProjects: ProjectFile[] = []
 ) {
     const [selectedClients, setSelectedClients] = useState<string[]>([]);
     const [selectedDisciplines, setSelectedDisciplines] = useState<Discipline[]>([]);
@@ -37,8 +41,10 @@ export function useAppFilters(
         return { start, end };
     };
 
-    const filteredProjects = useMemo(() => {
-        let result = projects;
+    // Mesmos filtros (cliente, disciplina e janela de data) aplicados a qualquer
+    // lista de ProjectFile — projetos legados e projeção da carteira.
+    const applyProjectFilters = (list: ProjectFile[]) => {
+        let result = list;
         if (selectedClients.length > 0) {
             result = result.filter(p => selectedClients.includes(p.client));
         }
@@ -62,7 +68,17 @@ export function useAppFilters(
             });
         }
         return result;
-    }, [projects, selectedClients, selectedDisciplines, dateFilterType, referenceDate, customRange]);
+    };
+
+    const filteredProjects = useMemo(
+        () => applyProjectFilters(projects),
+        [projects, selectedClients, selectedDisciplines, dateFilterType, referenceDate, customRange]
+    );
+
+    const filteredPortfolioProjects = useMemo(
+        () => applyProjectFilters(portfolioProjects),
+        [portfolioProjects, selectedClients, selectedDisciplines, dateFilterType, referenceDate, customRange]
+    );
 
     // Só a janela de data (sem cliente/disciplina) — o Cronograma usa isto, já que
     // os filtros de cliente/disciplina passaram a viver apenas nos Indicadores.
@@ -143,7 +159,7 @@ export function useAppFilters(
         dateFilterType, setDateFilterType,
         referenceDate, setReferenceDate,
         customRange, setCustomRange,
-        filteredProjects, filteredSupplyOrders, dateFilteredProjects,
+        filteredProjects, filteredPortfolioProjects, filteredSupplyOrders, dateFilteredProjects,
         uniqueClients
     };
 }

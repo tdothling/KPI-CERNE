@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    RefStatus, PranchaStatus, Referencia, GabaritoItem, Prancha,
+    RefStatus, PranchaStatus, Referencia, GabaritoItem, Prancha, Conjunto,
     instanciarConjunto, conjuntoIdFor, rollupConjunto,
     canRefTransition, canPranchaTransition,
     inferRefStatusFromDates, inferPranchaStatusFromDates,
@@ -8,6 +8,7 @@ import {
     swapDisciplinaSigla, gerarReferenciasDisciplinas, planGerarDisciplinasLote, DISCIPLINA_SIGLA,
     catalogoKpis, carteiraKpis, conjuntosKpis, revisaoStats,
     planPortfolioMigration, inferPapel, execMoldeKey, buildCodigoCompleto,
+    portfolioToProjectFiles, PROJECAO_REF_PREFIX, PROJECAO_PRANCHA_PREFIX,
 } from './portfolio';
 import { Discipline, ProjectFile, ProjectPhase, RevisionReason, Status } from '../types';
 
@@ -657,5 +658,107 @@ describe('heurísticas de nome', () => {
         expect(inferPapel('ELO-040RJ-104+000-BSO-EXE-DE-P1-101', 0)).toBe('Folha 101');
         expect(inferPapel('BSO-EXE-MD', 0)).toBe('Memorial Descritivo');
         expect(inferPapel('PLANTA BAIXA GERAL', 4)).toBe('Folha 05');
+    });
+});
+
+// --- Projeção para os Indicadores (Dashboard) ---
+
+describe('portfolioToProjectFiles', () => {
+    const conjunto104: Conjunto = {
+        id: conjuntoIdFor(refBSO.id, '104+000'),
+        referenciaId: refBSO.id,
+        client: refBSO.client,
+        base: '104+000',
+        createdAt: '2026-07-01',
+    };
+
+    const prancha = (over: Partial<Prancha>): Prancha => ({
+        id: over.id || crypto.randomUUID(),
+        conjuntoId: conjunto104.id,
+        papel: 'Folha 101',
+        codigoCompleto: '',
+        status: PranchaStatus.EM_ANDAMENTO,
+        revisao: 0,
+        ...over,
+    });
+
+    it('exclui Rascunho e A Fazer (nada iniciado, nada a medir)', () => {
+        const out = portfolioToProjectFiles(
+            [refBSO], // RASCUNHO
+            [conjunto104],
+            [prancha({ status: PranchaStatus.A_FAZER })]
+        );
+        expect(out).toHaveLength(0);
+    });
+
+    it('projeta referência como Preliminar com status/datas equivalentes', () => {
+        const ref: Referencia = {
+            ...refBSO,
+            statusAprovacao: RefStatus.ENVIADO,
+            startDate: '2026-06-01', endDate: '2026-06-10', sendDate: '2026-06-11',
+            blockedDays: 3,
+            revisions: [{ id: 'r1', date: '2026-06-05', reason: RevisionReason.CLIENT_REQUEST, comment: '' }],
+            revisao: 1,
+        };
+        const out = portfolioToProjectFiles([ref], [], []);
+        expect(out).toHaveLength(1);
+        const p = out[0];
+        expect(p.phase).toBe(ProjectPhase.PRELIMINARY);
+        expect(p.status).toBe(Status.WAITING_APPROVAL);
+        expect(p.filename).toBe(ref.codigoCliente);
+        expect(p.client).toBe(ref.client);
+        expect(p.revision).toBe(1);
+        expect(p.revisions).toHaveLength(1);
+        expect(p.startDate).toBe('2026-06-01');
+        expect(p.sendDate).toBe('2026-06-11');
+        expect(p.blockedDays).toBe(3);
+        expect(p.id.startsWith(PROJECAO_REF_PREFIX)).toBe(true);
+    });
+
+    it('projeta prancha como Executivo herdando obra/base/disciplina do conjunto e da referência', () => {
+        const p1 = prancha({ status: PranchaStatus.APROVADO, startDate: '2026-06-01', endDate: '2026-06-05', sendDate: '2026-06-06', feedbackDate: '2026-06-09', blockedDays: 2, codigoCompleto: 'ELO-040RJ-104+000-BSO-EXE-DE-P1-101' });
+        const out = portfolioToProjectFiles([refBSO], [conjunto104], [p1]);
+        expect(out).toHaveLength(1);
+        const p = out[0];
+        expect(p.phase).toBe(ProjectPhase.EXECUTIVE);
+        expect(p.status).toBe(Status.APPROVED);
+        expect(p.filename).toBe('ELO-040RJ-104+000-BSO-EXE-DE-P1-101');
+        expect(p.client).toBe('Construcap 040RJ');
+        expect(p.base).toBe('104+000');
+        expect(p.discipline).toBe(refBSO.discipline);
+        expect(p.blockedDays).toBe(2);
+        expect(p.id.startsWith(PROJECAO_PRANCHA_PREFIX)).toBe(true);
+    });
+
+    it('pranchas homônimas sem código, de conjuntos diferentes, não se fundem no mesmo entregável', () => {
+        const conjunto090: Conjunto = { ...conjunto104, id: conjuntoIdFor(refBSO.id, '090+500'), base: '090+500' };
+        const out = portfolioToProjectFiles(
+            [refBSO],
+            [conjunto104, conjunto090],
+            [
+                prancha({ id: 'a', conjuntoId: conjunto104.id }),
+                prancha({ id: 'b', conjuntoId: conjunto090.id }),
+            ]
+        );
+        expect(out).toHaveLength(2);
+        expect(out[0].filename).not.toBe(out[1].filename);
+    });
+
+    it('prancha órfã (conjunto excluído) e status sem equivalente ficam de fora', () => {
+        const out = portfolioToProjectFiles(
+            [],
+            [conjunto104],
+            [
+                prancha({ conjuntoId: 'conjunto-inexistente' }),
+                prancha({ status: PranchaStatus.A_FAZER }),
+            ]
+        );
+        expect(out).toHaveLength(0);
+    });
+
+    it('prancha de referência removida cai em Outros (não some do indicador)', () => {
+        const out = portfolioToProjectFiles([], [conjunto104], [prancha({})]);
+        expect(out).toHaveLength(1);
+        expect(out[0].discipline).toBe(Discipline.OTHER);
     });
 });

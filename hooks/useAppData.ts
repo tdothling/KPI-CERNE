@@ -227,6 +227,7 @@ export function useAppData(projectFilter: ProjectFilterState) {
             if (ref.statusAprovacao === RefStatus.REPROVADO) {
                 changes.revisao = (ref.revisao || 0) + 1;
                 changes.endDate = ''; changes.sendDate = ''; changes.feedbackDate = '';
+                changes.blockedDays = 0; // o ciclo com o cliente recomeça na nova revisão
                 changes.revisions = [
                     ...(ref.revisions || []),
                     { id: crypto.randomUUID(), date, reason: options.reason || RevisionReason.CLIENT_REQUEST, comment: options.comment || '' }
@@ -342,6 +343,7 @@ export function useAppData(projectFilter: ProjectFilterState) {
             if (prancha.status === PranchaStatus.REPROVADO) {
                 changes.revisao = (prancha.revisao || 0) + 1;
                 changes.endDate = ''; changes.sendDate = ''; changes.feedbackDate = '';
+                changes.blockedDays = 0; // o ciclo com o cliente recomeça na nova revisão
                 changes.revisions = [
                     ...(prancha.revisions || []),
                     { id: crypto.randomUUID(), date, reason: options.reason || RevisionReason.CLIENT_REQUEST, comment: options.comment || '' }

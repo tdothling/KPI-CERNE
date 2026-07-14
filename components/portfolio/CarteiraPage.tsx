@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { FolderKanban, Play, Send, BadgeCheck, ThumbsDown, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Layers, ListTodo, MapPin, PencilLine, Trash2, X, RotateCcw, Database, Timer, Plus, CheckSquare, Square } from 'lucide-react';
-import { ClientDoc, Discipline, Period, RevisionReason } from '../../types';
+import { ClientDoc, Discipline, ObraStatus, Period, RevisionReason } from '../../types';
 import { Referencia, Conjunto, Prancha, PranchaStatus, canPranchaTransition, planMoverPranchasLote, carteiraKpis, conjuntosKpis, rollupConjunto, inferPranchaStatusFromDates } from '../../domain/portfolio';
 import { KpiCard, StatusBadge, PRANCHA_STATUS_STYLE, DateActionModal, DateActionRequest, TimelineDatesEditor, TimelineDates, PRANCHA_TIMELINE_FIELDS, RevisionHistoryModal, execDaysOf } from './shared';
-import { calculateDeadlineDate, formatDateDisplay } from '../../utils';
+import { calculateDeadlineDate, formatDateDisplay, getEffectiveStatus } from '../../utils';
 import { format } from 'date-fns';
 import { useObraAtiva, ObraSelectScreen, ObraAtivaBar, ObraCardStat } from '../ObraGate';
 
@@ -73,10 +73,12 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
         return map;
     }, [pranchas]);
 
-    // Atraso pelo SLA da obra (mesma régua da aba Projetos)
+    // Atraso pelo SLA da obra (mesma régua dos Indicadores: obra pausada,
+    // concluída ou cancelada não gera atraso)
     const isPranchaOverdue = (p: Prancha, conjunto: Conjunto): boolean => {
         const obra = clientsMap[conjunto.client];
-        if (!obra?.contractDate || obra.deadlineDays === undefined || obra.completedAt) return false;
+        if (!obra?.contractDate || obra.deadlineDays === undefined) return false;
+        if (getEffectiveStatus(obra) !== ObraStatus.ACTIVE) return false;
         const deadline = calculateDeadlineDate(obra.contractDate, obra.deadlineDays);
         if (!deadline) return false;
         const deadlineStr = format(deadline, 'yyyy-MM-dd');

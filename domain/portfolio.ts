@@ -18,6 +18,12 @@
 import { Discipline, Period, ProjectFile, ProjectPhase, Revision, Status } from '../types';
 import { getProjectBaseName } from '../utils';
 
+// Prefixos dos IDs sintéticos da projeção para os Indicadores (ver
+// portfolioToProjectFiles no fim do arquivo). Nunca colidem com IDs reais da
+// coleção `projects` e nunca devem ser gravados de volta no banco.
+export const PROJECAO_REF_PREFIX = 'catalogo__';
+export const PROJECAO_PRANCHA_PREFIX = 'carteira__';
+
 // --- CICLO DA REFERÊNCIA (elaboração do preliminar + validação com o cliente) ---
 // Os valores são strings DISTINTAS das do ciclo da prancha ("Em Elaboração" ≠
 // "Em Andamento") para que uma máquina de estado rejeite status da outra.
@@ -784,4 +790,106 @@ export const planPortfolioMigration = (input: MigrationInput): MigrationPlan => 
     plan.skippedExisting = before - (plan.referencias.length + plan.conjuntos.length + plan.pranchas.length);
 
     return plan;
+};
+
+// --- PROJEÇÃO PARA OS INDICADORES (Dashboard) ---
+//
+// Os Indicadores foram construídos sobre ProjectFile (aba Projetos). Para que as
+// obras de rodovia apareçam nos dashboards SEM duplicar a lógica dos KPIs,
+// referências e pranchas são projetadas como ProjectFile somente-leitura:
+//   Referência (elaboração do preliminar) → fase Preliminar
+//   Prancha (execução/entrega)            → fase Executivo
+// Itens ainda não iniciados (Rascunho / A Fazer) ficam de fora: não têm ciclo a
+// medir e inflariam "Em Execução". Como cada referência/prancha guarda as suas
+// revisões NO PRÓPRIO documento (revisao + revisions[]), cada uma vira 1 família
+// de revisão (groupId próprio) — o IAPR conta certo sem docs duplicados.
+
+const REF_STATUS_TO_LEGACY: Record<RefStatus, Status | null> = {
+    [RefStatus.RASCUNHO]: null,                       // não iniciada — fora dos KPIs
+    [RefStatus.EM_ELABORACAO]: Status.IN_PROGRESS,
+    [RefStatus.ELABORADO]: Status.DONE,
+    [RefStatus.ENVIADO]: Status.WAITING_APPROVAL,
+    [RefStatus.APROVADO]: Status.APPROVED,
+    [RefStatus.REPROVADO]: Status.REJECTED,
+};
+
+const PRANCHA_STATUS_TO_LEGACY: Record<PranchaStatus, Status | null> = {
+    [PranchaStatus.A_FAZER]: null,                    // backlog — fora dos KPIs
+    [PranchaStatus.EM_ANDAMENTO]: Status.IN_PROGRESS,
+    [PranchaStatus.CONCLUIDO]: Status.DONE,
+    [PranchaStatus.ENVIADO]: Status.WAITING_APPROVAL,
+    [PranchaStatus.APROVADO]: Status.APPROVED,
+    [PranchaStatus.REPROVADO]: Status.REJECTED,
+};
+
+const cycleDatesToLegacy = (item: {
+    startDate?: string; startPeriod?: Period;
+    endDate?: string; endPeriod?: Period;
+    sendDate?: string; sendPeriod?: Period;
+    feedbackDate?: string; feedbackPeriod?: Period;
+    blockedDays?: number; revisions?: Revision[];
+}) => ({
+    startDate: item.startDate || '',
+    ...(item.startPeriod ? { startPeriod: item.startPeriod } : {}),
+    endDate: item.endDate || '',
+    ...(item.endPeriod ? { endPeriod: item.endPeriod } : {}),
+    sendDate: item.sendDate || '',
+    ...(item.sendPeriod ? { sendPeriod: item.sendPeriod } : {}),
+    feedbackDate: item.feedbackDate || '',
+    ...(item.feedbackPeriod ? { feedbackPeriod: item.feedbackPeriod } : {}),
+    blockedDays: item.blockedDays || 0,
+    revisions: item.revisions || [],
+});
+
+export const portfolioToProjectFiles = (
+    referencias: Referencia[],
+    conjuntos: Conjunto[],
+    pranchas: Prancha[]
+): ProjectFile[] => {
+    const out: ProjectFile[] = [];
+    const conjuntoById = new Map(conjuntos.map(c => [c.id, c]));
+    const refById = new Map(referencias.map(r => [r.id, r]));
+
+    referencias.forEach(r => {
+        const status = REF_STATUS_TO_LEGACY[r.statusAprovacao];
+        if (!status) return;
+        out.push({
+            id: `${PROJECAO_REF_PREFIX}${r.id}`,
+            groupId: `${PROJECAO_REF_PREFIX}${r.id}`,
+            revision: r.revisao || 0,
+            filename: r.codigoCliente,
+            client: r.client,
+            base: 'Catálogo',
+            discipline: r.discipline,
+            phase: ProjectPhase.PRELIMINARY,
+            status,
+            ...cycleDatesToLegacy(r),
+        });
+    });
+
+    pranchas.forEach(p => {
+        const status = PRANCHA_STATUS_TO_LEGACY[p.status];
+        if (!status) return;
+        const conjunto = conjuntoById.get(p.conjuntoId);
+        if (!conjunto) return; // órfã (conjunto excluído) — nada a medir
+        const ref = refById.get(conjunto.referenciaId);
+        // Sem codificação manual, o nome precisa distinguir molde+papel+base para
+        // pranchas homônimas de conjuntos diferentes não se fundirem no mesmo grupo.
+        const filename = (p.codigoCompleto || '').trim()
+            || [ref?.codigoCliente, p.papel, conjunto.base].filter(Boolean).join(' · ');
+        out.push({
+            id: `${PROJECAO_PRANCHA_PREFIX}${p.id}`,
+            groupId: `${PROJECAO_PRANCHA_PREFIX}${p.id}`,
+            revision: p.revisao || 0,
+            filename,
+            client: conjunto.client,
+            base: conjunto.base,
+            discipline: ref?.discipline || Discipline.OTHER,
+            phase: ProjectPhase.EXECUTIVE,
+            status,
+            ...cycleDatesToLegacy(p),
+        });
+    });
+
+    return out;
 };

@@ -32,6 +32,7 @@ import { detectDiscipline, validateFile } from './utils';
 import { useAppData } from './hooks/useAppData';
 import { useAppFilters } from './hooks/useAppFilters';
 import { addProject } from './services/db';
+import { portfolioToProjectFiles } from './domain/portfolio';
 
 type Tab = 'dashboard' | 'timeline' | 'obras' | 'projects' | 'catalogo' | 'carteira' | 'suprimentos';
 type EntryMode = 'FILES' | 'PASTE';
@@ -66,27 +67,49 @@ export default function App() {
   // obras de rodovia: após a migração eles vivem na Carteira e apareceriam em dobro.
   const legacyProjects = useMemo(() => projects.filter(p => !isRodoviaProject(p.client)), [projects, rodoviaNames]);
 
-  // Projetos de rodovia ainda não migrados (banner na Carteira). Uma família
-  // (groupId) é considerada migrada se QUALQUER doc dela virou referência/prancha.
-  const legacyPendingCount = useMemo(() => {
+  // Projetos de rodovia ainda não migrados. Uma família (groupId) é considerada
+  // migrada se QUALQUER doc dela virou referência/prancha/conjunto. Enquanto a
+  // migração não acontece, esses docs continuam nos Indicadores (decisão do
+  // usuário: sem perda de informação) — via canal somente-leitura do Dashboard,
+  // nunca em dobro com a projeção da carteira.
+  const unmigratedRodoviaProjects = useMemo(() => {
     const rodoviaProjects = projects.filter(p => isRodoviaProject(p.client));
-    if (rodoviaProjects.length === 0) return 0;
+    if (rodoviaProjects.length === 0) return [] as ProjectFile[];
     const migratedIds = new Set<string>();
     referencias.forEach(r => r.legacy?.originalId && migratedIds.add(r.legacy.originalId));
     pranchas.forEach(p => p.legacy?.originalId && migratedIds.add(p.legacy.originalId));
     conjuntos.forEach(c => c.legacy?.originalId && migratedIds.add(c.legacy.originalId));
-    const families = new Map<string, { ids: string[] }>();
+    const families = new Map<string, ProjectFile[]>();
     rodoviaProjects.forEach(p => {
       const key = p.groupId || p.id;
-      if (!families.has(key)) families.set(key, { ids: [] });
-      families.get(key)!.ids.push(p.id);
+      if (!families.has(key)) families.set(key, []);
+      families.get(key)!.push(p);
     });
-    let pending = 0;
+    const pending: ProjectFile[] = [];
     families.forEach(fam => {
-      if (!fam.ids.some(id => migratedIds.has(id))) pending += fam.ids.length;
+      if (!fam.some(p => migratedIds.has(p.id))) pending.push(...fam);
     });
     return pending;
   }, [projects, rodoviaNames, referencias, conjuntos, pranchas]);
+
+  // Banner de migração pendente na Carteira
+  const legacyPendingCount = unmigratedRodoviaProjects.length;
+
+  // Projeção da Carteira/Catálogo como ProjectFile SOMENTE-LEITURA: alimenta os
+  // Indicadores (OTD, IAPR, tempos, WIP, alertas) sem duplicar a lógica dos KPIs.
+  // Nunca entra na Edição em Lote nem no export de Projetos (IDs são sintéticos).
+  const portfolioProjects = useMemo(
+    () => portfolioToProjectFiles(referencias, conjuntos, pranchas),
+    [referencias, conjuntos, pranchas]
+  );
+
+  // Canal extra dos Indicadores: projeção da carteira + rodovia ainda não migrada.
+  // Recebe os mesmos filtros e alimenta APENAS o Dashboard (não entra na aba
+  // Projetos, na Edição em Lote, no export CSV nem no Cronograma).
+  const dashboardOnlyProjects = useMemo(
+    () => [...portfolioProjects, ...unmigratedRodoviaProjects],
+    [portfolioProjects, unmigratedRodoviaProjects]
+  );
 
   const {
     selectedClients, setSelectedClients, toggleClientSelection,
@@ -94,9 +117,15 @@ export default function App() {
     dateFilterType, setDateFilterType,
     referenceDate, setReferenceDate,
     customRange, setCustomRange,
-    filteredProjects, filteredSupplyOrders, dateFilteredProjects,
+    filteredProjects, filteredPortfolioProjects, filteredSupplyOrders, dateFilteredProjects,
     uniqueClients
-  } = useAppFilters(legacyProjects, supplyOrders, clients);
+  } = useAppFilters(legacyProjects, supplyOrders, clients, dashboardOnlyProjects);
+
+  // Indicadores enxergam projetos legados + carteira + rodovia não migrada, já filtrados
+  const dashboardData = useMemo(
+    () => [...filteredProjects, ...filteredPortfolioProjects],
+    [filteredProjects, filteredPortfolioProjects]
+  );
 
   // O filtro antigo (Clientes/Disciplinas/Lupa) vive APENAS nos Indicadores. As demais
   // abas são navegadas por obra (cards) — recebem os dados sem esse filtro global.
@@ -542,7 +571,7 @@ export default function App() {
         <div className="mt-6 print:mt-0">
           <Suspense fallback={<TabLoading />}>
             {isAdmin && activeTab === 'dashboard' && <DataMigration projects={projects} onUpdateProject={updateProject} />}
-            {activeTab === 'dashboard' && <div className="animate-in fade-in zoom-in-95 duration-200"><Dashboard data={filteredProjects} supplyOrders={filteredSupplyOrders} clients={clients} isDarkMode={isDarkMode} holidays={holidays} /></div>}
+            {activeTab === 'dashboard' && <div className="animate-in fade-in zoom-in-95 duration-200"><Dashboard data={dashboardData} supplyOrders={filteredSupplyOrders} clients={clients} isDarkMode={isDarkMode} holidays={holidays} /></div>}
             {activeTab === 'timeline' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectTimeline projects={dateFilteredProjects} holidays={holidays} clients={clients} /></div>}
             {activeTab === 'obras' && <div className="animate-in fade-in zoom-in-95 duration-200"><ObrasPage clients={clients} projectCount={(name) => projects.filter(p => p.client === name).length} onAddClient={handleAddClient} onUpdateClient={handleUpdateClient} onDeleteClient={handleDeleteClient} /></div>}
             {activeTab === 'projects' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectList projects={legacyProjects} clients={clients} onUpdate={updateProject} onDelete={deleteProject} onAddRevision={addProjectRevision} onPromote={promoteProjectToExecutive} holidays={holidays} readOnly={isReadOnly} /></div>}
