@@ -161,12 +161,21 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
         return next;
     });
 
+    // Marca/desmarca uma lista inteira de pranchas (conjunto, base ou obra toda)
     const toggleTodasDoConjunto = (list: Prancha[]) => setSelecionadas(prev => {
         const next = new Set(prev);
         const all = list.length > 0 && list.every(p => next.has(p.id));
         list.forEach(p => all ? next.delete(p.id) : next.add(p.id));
         return next;
     });
+
+    const allSelected = (list: Prancha[]) => list.length > 0 && list.every(p => selecionadas.has(p.id));
+
+    // Todas as pranchas visíveis da obra (respeitando o filtro de status ativo)
+    const todasVisiveis = useMemo(
+        () => grouped.flatMap(g => g.disciplinas.flatMap(([, items]) => items.flatMap(i => i.visiveis))),
+        [grouped]
+    );
 
     const countMovable = (list: Prancha[], to: PranchaStatus) =>
         list.filter(p => canPranchaTransition(p.status, to)).length;
@@ -313,18 +322,46 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
                 </div>
             )}
 
-            {grouped.map(({ base, disciplinas, totalConjuntos }) => (
+            {/* Seleção da OBRA inteira: marca todas as pranchas visíveis de uma vez */}
+            {!readOnly && todasVisiveis.length > 0 && (
+                <div className="flex justify-end -mb-2">
+                    <button
+                        onClick={() => toggleTodasDoConjunto(todasVisiveis)}
+                        className="flex items-center gap-1.5 text-[11px] font-bold text-violet-600 dark:text-violet-400 hover:underline"
+                    >
+                        {allSelected(todasVisiveis) ? <CheckSquare size={14} /> : <Square size={14} />}
+                        {allSelected(todasVisiveis) ? 'Desmarcar' : 'Selecionar'} a obra inteira ({todasVisiveis.length} pranchas)
+                    </button>
+                </div>
+            )}
+
+            {grouped.map(({ base, disciplinas, totalConjuntos }) => {
+                const pranchasDaBase = disciplinas.flatMap(([, items]) => items.flatMap(i => i.visiveis));
+                return (
                 <div key={base} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
                     {/* A BASE é o grupo de topo: tudo abaixo é só desta base */}
-                    <button
+                    <div
+                        role="button"
+                        tabIndex={0}
                         onClick={() => toggleCollapsed(base)}
-                        className="w-full flex items-center gap-2 px-4 py-3 bg-brand-50/60 dark:bg-brand-900/20 hover:bg-brand-100/60 dark:hover:bg-brand-900/30 transition-colors text-sm font-bold text-slate-700 dark:text-slate-200 border-b border-brand-100/60 dark:border-brand-900/30"
+                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCollapsed(base); } }}
+                        className="w-full flex items-center gap-2 px-4 py-3 bg-brand-50/60 dark:bg-brand-900/20 hover:bg-brand-100/60 dark:hover:bg-brand-900/30 transition-colors text-sm font-bold text-slate-700 dark:text-slate-200 border-b border-brand-100/60 dark:border-brand-900/30 cursor-pointer"
                     >
                         {collapsed.has(base) ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                        {!readOnly && (
+                            <button
+                                onClick={e => { e.stopPropagation(); toggleTodasDoConjunto(pranchasDaBase); }}
+                                disabled={pranchasDaBase.length === 0}
+                                className="flex-shrink-0 disabled:opacity-30"
+                                title={`${allSelected(pranchasDaBase) ? 'Desmarcar' : 'Selecionar'} todas as pranchas da base (${pranchasDaBase.length})`}
+                            >
+                                {allSelected(pranchasDaBase) ? <CheckSquare size={15} className="text-violet-600" /> : <Square size={15} className="text-slate-300 dark:text-slate-600" />}
+                            </button>
+                        )}
                         <MapPin size={15} className="text-brand-600 dark:text-brand-400" />
                         <span className="uppercase tracking-wide">{base}</span>
                         <span className="text-[10px] font-bold text-slate-400 uppercase ml-auto">{totalConjuntos} conjunto(s)</span>
-                    </button>
+                    </div>
 
                     {!collapsed.has(base) && disciplinas.map(([discipline, items]) => (
                     <div key={discipline}>
@@ -347,6 +384,17 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
                                         onClick={() => toggleExpanded(conjunto.id)}
                                     >
                                         {isOpen ? <ChevronDown size={16} className="text-slate-400 flex-shrink-0" /> : <ChevronRight size={16} className="text-slate-400 flex-shrink-0" />}
+                                        {/* Seleciona o conjunto INTEIRO sem precisar abri-lo */}
+                                        {!readOnly && (
+                                            <button
+                                                onClick={e => { e.stopPropagation(); toggleTodasDoConjunto(visiveis); }}
+                                                disabled={visiveis.length === 0}
+                                                className="flex-shrink-0 disabled:opacity-30"
+                                                title={`${allSelected(visiveis) ? 'Desmarcar' : 'Selecionar'} todas as pranchas do conjunto (${visiveis.length})`}
+                                            >
+                                                {allSelected(visiveis) ? <CheckSquare size={15} className="text-violet-600" /> : <Square size={15} className="text-slate-300 dark:text-slate-600" />}
+                                            </button>
+                                        )}
                                         <div className="flex-1 min-w-0">
                                             {/* Destaque = nome da referência que originou o conjunto (identificação);
                                                 o código da rodovia desce para a linha de apoio */}
@@ -510,7 +558,8 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
                     </div>
                     ))}
                 </div>
-            ))}
+                );
+            })}
 
             {/* Barra flutuante da seleção: transições em lote das pranchas marcadas
                 (pode misturar conjuntos/disciplinas — cada prancha só move se puder) */}

@@ -543,9 +543,9 @@ export function useAppData(projectFilter: ProjectFilterState) {
             return;
         }
 
-        const total = counts.projects + counts.materials + counts.purchases + counts.supplyOrders + counts.referencias + counts.conjuntos;
+        const total = counts.projects + counts.supplyOrders + counts.referencias + counts.conjuntos;
         if (total > 0) {
-            alert(`Não é possível excluir a obra "${clientToDelete.name}".\n\nExistem registros vinculados:\n- ${counts.projects} Projetos\n- ${counts.referencias} Referências (Catálogo)\n- ${counts.conjuntos} Conjuntos (Carteira)\n- ${counts.supplyOrders} Pedidos de Suprimentos\n- ${counts.materials} Listas de Materiais (arquivo)\n- ${counts.purchases} Compras (arquivo)\n\nPor favor, exclua ou reatribua esses registros antes de remover a obra.`);
+            alert(`Não é possível excluir a obra "${clientToDelete.name}".\n\nExistem registros vinculados:\n- ${counts.projects} Projetos\n- ${counts.referencias} Referências (Catálogo)\n- ${counts.conjuntos} Conjuntos (Carteira)\n- ${counts.supplyOrders} Pedidos de Suprimentos\n\nPor favor, exclua ou reatribua esses registros antes de remover a obra.`);
             return;
         }
 

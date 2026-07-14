@@ -662,20 +662,22 @@ export const updateClientInDb = async (client: ClientDoc) => {
 // Conta registros vinculados a uma obra lendo DIRETO do banco (não do cache local, que é
 // limitado a 1000 docs e pode estar filtrado pelo servidor). Casa por nome normalizado.
 // Usado para bloquear a exclusão de obras que ainda possuem projetos/materiais/compras.
-export const countLinkedRecords = async (clientName: string): Promise<{ projects: number; materials: number; purchases: number; supplyOrders: number; referencias: number; conjuntos: number }> => {
-  if (!isDbActive()) return { projects: 0, materials: 0, purchases: 0, supplyOrders: 0, referencias: 0, conjuntos: 0 };
+// Vínculos que BLOQUEIAM a exclusão de uma obra. As coleções arquivadas dos
+// módulos desativados (materials/purchases) ficam de fora: o app não tem mais
+// telas para gerenciá-las, então bloquear por elas travaria a exclusão para
+// sempre sem o usuário conseguir agir.
+export const countLinkedRecords = async (clientName: string): Promise<{ projects: number; supplyOrders: number; referencias: number; conjuntos: number }> => {
+  if (!isDbActive()) return { projects: 0, supplyOrders: 0, referencias: 0, conjuntos: 0 };
   const target = normalizeName(clientName);
-  const [pSnap, mSnap, cSnap, sSnap, rSnap, cjSnap] = await Promise.all([
+  const [pSnap, sSnap, rSnap, cjSnap] = await Promise.all([
     getDocs(collection(db, COLL_PROJECTS)),
-    getDocs(collection(db, COLL_MATERIALS)),
-    getDocs(collection(db, COLL_PURCHASES)),
     getDocs(collection(db, COLL_SUPPLY)),
     getDocs(collection(db, COLL_REFERENCIAS)),
     getDocs(collection(db, COLL_CONJUNTOS))
   ]);
   const count = (snap: QuerySnapshot<DocumentData>) =>
     snap.docs.filter(d => normalizeName((d.data() as any).client) === target).length;
-  return { projects: count(pSnap), materials: count(mSnap), purchases: count(cSnap), supplyOrders: count(sSnap), referencias: count(rSnap), conjuntos: count(cjSnap) };
+  return { projects: count(pSnap), supplyOrders: count(sSnap), referencias: count(rSnap), conjuntos: count(cjSnap) };
 };
 
 export const deleteClientFromDb = async (id: string) => {
