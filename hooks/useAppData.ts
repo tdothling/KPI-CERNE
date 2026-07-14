@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { ProjectFile, ClientDoc, Status, RevisionReason, ProjectPhase, Period, ProjectFilterState, SupplyOrder, SupplyStatus, SiteType } from '../types';
-import { subscribeToProjects, addProject, updateProjectInDb, deleteProjectFromDb, subscribeToClients, addClient, updateClientInDb, deleteClientFromDb, countLinkedRecords, subscribeToHolidays, saveHolidaysToDb, batchUpdateProjectsInDb, subscribeToSupplyOrders, addSupplyOrder, updateSupplyOrderInDb, deleteSupplyOrderFromDb, applySupplyStatusChange, patchSupplyOrderInDb, migrateLegacyPurchasesToSupply, subscribeToReferencias, subscribeToConjuntos, subscribeToPranchas, addReferenciaToDb, patchReferenciaInDb, deleteReferenciaFromDb, instanciarConjuntoInDb, instanciarLoteInDb, deleteConjuntoFromDb, patchPranchaInDb, batchUpdatePranchasInDb, addPranchaToDb, deletePranchaFromDb, migrateProjectsToPortfolio } from '../services/db';
+import { ProjectFile, ClientDoc, Status, RevisionReason, ProjectPhase, Period, ProjectFilterState, SupplyOrder, SupplyStatus, SiteType, TrashEntry } from '../types';
+import { subscribeToProjects, addProject, updateProjectInDb, deleteProjectFromDb, subscribeToClients, addClient, updateClientInDb, deleteClientFromDb, countLinkedRecords, subscribeToHolidays, saveHolidaysToDb, batchUpdateProjectsInDb, subscribeToSupplyOrders, addSupplyOrder, updateSupplyOrderInDb, deleteSupplyOrderFromDb, applySupplyStatusChange, patchSupplyOrderInDb, migrateLegacyPurchasesToSupply, subscribeToReferencias, subscribeToConjuntos, subscribeToPranchas, addReferenciaToDb, patchReferenciaInDb, deleteReferenciaFromDb, instanciarConjuntoInDb, instanciarLoteInDb, deleteConjuntoFromDb, patchPranchaInDb, batchUpdatePranchasInDb, addPranchaToDb, deletePranchaFromDb, migrateProjectsToPortfolio, subscribeToTrash, restoreFromTrash, purgeTrashEntries } from '../services/db';
 import { Referencia, Conjunto, Prancha, PranchaStatus, RefStatus, canRefTransition, canPranchaTransition, instanciarConjunto, planInstanciacaoLote, planMoverPranchasLote, slugify } from '../domain/portfolio';
 import { buildStatusChangePatch } from '../components/supply/supplyUtils';
 import { formatUsername } from '../services/auth';
@@ -25,6 +25,9 @@ export function useAppData(projectFilter: ProjectFilterState) {
     const [conjuntos, setConjuntos] = useState<Conjunto[]>([]);
     const [pranchas, setPranchas] = useState<Prancha[]>([]);
 
+    // Lixeira: cópias de tudo que foi excluído, restauráveis pela tela Lixeira
+    const [trashItems, setTrashItems] = useState<TrashEntry[]>([]);
+
     useEffect(() => {
         if (!db) {
             setDbConnected(false);
@@ -39,6 +42,7 @@ export function useAppData(projectFilter: ProjectFilterState) {
         const unsubReferencias = subscribeToReferencias(setReferencias);
         const unsubConjuntos = subscribeToConjuntos(setConjuntos);
         const unsubPranchas = subscribeToPranchas(setPranchas);
+        const unsubTrash = subscribeToTrash(setTrashItems);
         const unsubAuth = subscribeToAuth((user) => {
             setCurrentUser(user);
         });
@@ -51,6 +55,7 @@ export function useAppData(projectFilter: ProjectFilterState) {
             unsubReferencias();
             unsubConjuntos();
             unsubPranchas();
+            unsubTrash();
             unsubAuth();
         };
     }, [projectFilter]);
@@ -584,6 +589,7 @@ export function useAppData(projectFilter: ProjectFilterState) {
 
     return {
         projects, supplyOrders, clients, holidays, dbConnected, currentUser,
+        trashItems, handleRestoreTrash: restoreFromTrash, handlePurgeTrash: purgeTrashEntries,
         updateProject, deleteProject, addProjectRevision, promoteProjectToExecutive,
         referencias, conjuntos, pranchas,
         handleAddReferencia, handleAddReferencias, handleDeleteReferencias, handleUpdateReferencia, handleDeleteReferencia, handleMoveReferencia,

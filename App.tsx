@@ -2,13 +2,14 @@ import React, { useState, useRef, useEffect, useMemo, Suspense, lazy } from 'rea
 import { ProjectFile, Discipline, Status, RevisionReason, DateFilterType, ClientDoc, SiteType, ProjectFilterState, ProjectPhase, Period } from './types';
 import { BatchEditModal } from './components/BatchEditModal';
 import { HolidayManagerModal } from './components/HolidayManagerModal';
+import { TrashModal } from './components/TrashModal';
 import { DateRangeFilter } from './components/DateRangeFilter';
 import { LoginModal } from './components/LoginModal';
 import { AdvancedFilter } from './components/AdvancedFilter';
 import { DataMigration } from './components/DataMigration';
 import { ImportReviewModal, StagingRow } from './components/ImportReviewModal';
 import { CerneLogo } from './components/CerneLogo';
-import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Database, LogIn, LogOut, Truck, HardHat, Search, ChevronDown, CheckSquare, Square, FileText, MoreHorizontal, BookOpen, FolderKanban } from 'lucide-react';
+import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Database, LogIn, LogOut, Truck, HardHat, Search, ChevronDown, CheckSquare, Square, FileText, MoreHorizontal, BookOpen, FolderKanban, Trash2 } from 'lucide-react';
 
 // Code-splitting por aba: cada tela pesada vira um chunk próprio (o Dashboard carrega
 // o recharts, por exemplo) e só é baixada quando o usuário abre a aba correspondente.
@@ -44,6 +45,7 @@ export default function App() {
 
   const {
     projects, supplyOrders, clients, holidays, dbConnected, currentUser,
+    trashItems, handleRestoreTrash, handlePurgeTrash,
     updateProject, deleteProject, addProjectRevision, promoteProjectToExecutive,
     referencias, conjuntos, pranchas,
     handleAddReferencia, handleAddReferencias, handleDeleteReferencias, handleUpdateReferencia, handleDeleteReferencia, handleMoveReferencia,
@@ -138,6 +140,7 @@ export default function App() {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isBatchEditOpen, setIsBatchEditOpen] = useState(false);
   const [isHolidayManagerOpen, setIsHolidayManagerOpen] = useState(false);
+  const [isTrashOpen, setIsTrashOpen] = useState(false);
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
 
   const [uploadDiscipline, setUploadDiscipline] = useState<Discipline>(Discipline.ARCHITECTURE);
@@ -500,7 +503,14 @@ export default function App() {
                       {activeTab !== 'dashboard' && (
                         <ActionMenuItem icon={<Download size={16} />} label="Exportar Dados" onClick={handleExportCSV} />
                       )}
-                      
+
+                      {/* Lixeira: disponível em TODAS as abas — restaura qualquer exclusão */}
+                      <ActionMenuItem
+                        icon={<Trash2 size={16} />}
+                        label={`Lixeira${trashItems.length > 0 ? ` (${trashItems.length})` : ''}`}
+                        onClick={() => { setIsTrashOpen(true); setIsActionsMenuOpen(false); }}
+                      />
+
                       {!isReadOnly && (
                         <>
                           {activeTab === 'projects' && (
@@ -782,6 +792,16 @@ export default function App() {
 
       {isHolidayManagerOpen && (
         <HolidayManagerModal holidays={holidays} onUpdateHolidays={handleUpdateHolidays} onClose={() => setIsHolidayManagerOpen(false)} />
+      )}
+
+      {isTrashOpen && (
+        <TrashModal
+          items={trashItems}
+          onRestore={handleRestoreTrash}
+          onPurge={handlePurgeTrash}
+          onClose={() => setIsTrashOpen(false)}
+          readOnly={isReadOnly}
+        />
       )}
 
       {isLoginModalOpen && (

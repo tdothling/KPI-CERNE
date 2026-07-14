@@ -14,6 +14,7 @@ const COLL_SUPPLY = "supplyOrders";
 const COLL_REFERENCIAS = "references";
 const COLL_CONJUNTOS = "conjuntos";
 const COLL_PRANCHAS = "pranchas";
+const COLL_TRASH = "trash";
 
 const isDbActive = () => {
   if (!db) return false;
@@ -57,6 +58,77 @@ const sanitizeData = (data: any): any => {
     return clean;
   }
   return data;
+};
+
+// --- LIXEIRA (proteção contra exclusão acidental, todas as abas) ---
+//
+// TODA exclusão do app passa por aqui: a cópia do documento vai para a coleção
+// `trash` no MESMO batch que o apaga (atômico — ou os dois acontecem, ou nenhum).
+// A tela Lixeira permite restaurar (recria o doc com o MESMO id) ou excluir de vez.
+
+const trashLabelOf = (data: any, docId: string) =>
+  data.filename || data.codigoCliente || data.codigoCompleto || data.title || data.name || data.papel || docId;
+
+const buildTrashEntry = (coll: string, docId: string, data: any, opId: string) => sanitizeData({
+  coll,
+  docId,
+  data,
+  label: String(trashLabelOf(data, docId)),
+  client: String(data.client || (coll === COLL_CLIENTS ? data.name : '') || ''),
+  deletedAt: new Date().toISOString(),
+  deletedBy: auth?.currentUser?.email || 'desconhecido',
+  opId,
+});
+
+// Exclusão de 1 doc com passagem pela lixeira. Doc inexistente = nada a fazer.
+const deleteWithTrash = async (coll: string, id: string) => {
+  const ref = doc(db, coll, id);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+  const batch = writeBatch(db);
+  batch.set(doc(collection(db, COLL_TRASH)), buildTrashEntry(coll, id, snap.data(), crypto.randomUUID()));
+  batch.delete(ref);
+  await batch.commit();
+};
+
+export const subscribeToTrash = (callback: (items: any[]) => void) => {
+  if (!isDbActive()) return () => { };
+  const q = query(collection(db, COLL_TRASH), orderBy('deletedAt', 'desc'), limit(500));
+  return onSnapshot(q, (snapshot) => {
+    callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+  }, (e) => console.error("Erro no listener da lixeira:", e));
+};
+
+// Restaura entradas da lixeira: recria cada doc no lugar original (mesmo ID) e
+// remove a entrada. Se o doc já existir de novo (foi recriado manualmente), a
+// entrada é preservada e o item reportado em `skipped` — nada é sobrescrito.
+export const restoreFromTrash = async (trashIds: string[]): Promise<{ restored: string[]; skipped: string[] }> => {
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+  const restored: string[] = [];
+  const skipped: string[] = [];
+  for (const tid of trashIds) {
+    const tRef = doc(db, COLL_TRASH, tid);
+    const tSnap = await getDoc(tRef);
+    if (!tSnap.exists()) continue;
+    const t = tSnap.data() as any;
+    const target = doc(db, t.coll, t.docId);
+    const cur = await getDoc(target);
+    if (cur.exists()) { skipped.push(t.label || t.docId); continue; }
+    const batch = writeBatch(db);
+    batch.set(target, t.data);
+    batch.delete(tRef);
+    await batch.commit();
+    restored.push(t.label || t.docId);
+  }
+  return { restored, skipped };
+};
+
+// Exclusão definitiva de entradas da lixeira (irreversível)
+export const purgeTrashEntries = async (trashIds: string[]) => {
+  if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
+  const batch = writeBatch(db);
+  trashIds.forEach(tid => batch.delete(doc(db, COLL_TRASH, tid)));
+  await batch.commit();
 };
 
 export const subscribeToProjects = (callback: (data: ProjectFile[]) => void, filter?: ProjectFilterState) => {
@@ -155,7 +227,7 @@ export const batchUpdateProjectsInDb = (patches: BatchDocPatch[]) => batchUpdate
 
 export const deleteProjectFromDb = async (id: string) => {
   if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
-  try { await deleteDoc(doc(db, COLL_PROJECTS, id)); } catch (e) { console.error("Erro ao excluir projeto:", e); throw e; }
+  try { await deleteWithTrash(COLL_PROJECTS, id); } catch (e) { console.error("Erro ao excluir projeto:", e); throw e; }
 };
 
 // --- SUPRIMENTOS ---
@@ -214,7 +286,7 @@ export const patchSupplyOrderInDb = async (id: string, changes: Record<string, a
 
 export const deleteSupplyOrderFromDb = async (id: string) => {
   if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
-  try { await deleteDoc(doc(db, COLL_SUPPLY, id)); } catch (e) { console.error("Erro ao excluir pedido de suprimentos:", e); throw e; }
+  try { await deleteWithTrash(COLL_SUPPLY, id); } catch (e) { console.error("Erro ao excluir pedido de suprimentos:", e); throw e; }
 };
 
 // Grava uma movimentação de status: aplica o patch parcial e anexa o evento ao
@@ -345,7 +417,7 @@ export const deleteReferenciaFromDb = async (id: string) => {
   if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
   const linked = await getDocs(query(collection(db, COLL_CONJUNTOS), where("referenciaId", "==", id), limit(1)));
   if (!linked.empty) throw new Error("Esta referência possui conjuntos instanciados. Exclua os conjuntos antes.");
-  await deleteDoc(doc(db, COLL_REFERENCIAS, id));
+  await deleteWithTrash(COLL_REFERENCIAS, id);
 };
 
 export const patchPranchaInDb = async (id: string, changes: Record<string, any>) => {
@@ -363,7 +435,7 @@ export const addPranchaToDb = async (prancha: Omit<Prancha, 'id'>) => {
 
 export const deletePranchaFromDb = async (id: string) => {
   if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
-  await deleteDoc(doc(db, COLL_PRANCHAS, id));
+  await deleteWithTrash(COLL_PRANCHAS, id);
 };
 
 // Instanciar: grava o Conjunto (ID determinístico referência+base) e as pranchas
@@ -411,8 +483,18 @@ export const instanciarLoteInDb = async (
 export const deleteConjuntoFromDb = async (conjuntoId: string) => {
   if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
   const pranchasSnap = await getDocs(query(collection(db, COLL_PRANCHAS), where("conjuntoId", "==", conjuntoId)));
+  // Conjunto + pranchas compartilham o mesmo opId: na Lixeira a operação inteira
+  // aparece agrupada e é restaurada de uma vez.
+  const opId = crypto.randomUUID();
+  const conjuntoSnap = await getDoc(doc(db, COLL_CONJUNTOS, conjuntoId));
   const batch = writeBatch(db);
-  pranchasSnap.docs.forEach(d => batch.delete(d.ref));
+  pranchasSnap.docs.forEach(d => {
+    batch.set(doc(collection(db, COLL_TRASH)), buildTrashEntry(COLL_PRANCHAS, d.id, d.data(), opId));
+    batch.delete(d.ref);
+  });
+  if (conjuntoSnap.exists()) {
+    batch.set(doc(collection(db, COLL_TRASH)), buildTrashEntry(COLL_CONJUNTOS, conjuntoId, conjuntoSnap.data(), opId));
+  }
   batch.delete(doc(db, COLL_CONJUNTOS, conjuntoId));
   await batch.commit();
 };
@@ -569,7 +651,7 @@ export const countLinkedRecords = async (clientName: string): Promise<{ projects
 
 export const deleteClientFromDb = async (id: string) => {
   if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
-  try { await deleteDoc(doc(db, COLL_CLIENTS, id)); } catch (e) { console.error("Erro ao excluir cliente:", e); throw e; }
+  try { await deleteWithTrash(COLL_CLIENTS, id); } catch (e) { console.error("Erro ao excluir cliente:", e); throw e; }
 };
 
 export const subscribeToHolidays = (callback: (holidays: string[]) => void) => {

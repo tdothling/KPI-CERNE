@@ -241,3 +241,19 @@ export interface KPISummary {
   totalBlockedDays: number;
   revisionRate: number;
 }
+
+// Entrada da Lixeira: cópia de segurança gravada ANTES de qualquer exclusão no
+// app (todas as abas). `data` é o documento original intacto; restaurar = 
+// recriar o doc em `coll/docId` e remover a entrada. `opId` agrupa exclusões
+// feitas numa mesma ação (ex.: conjunto + suas pranchas, lote de referências).
+export interface TrashEntry {
+  id: string;
+  coll: string;
+  docId: string;
+  data: Record<string, any>;
+  label: string;      // nome legível do que foi excluído (filename/name/título)
+  client: string;     // obra, quando o doc tem esse vínculo
+  deletedAt: string;  // ISO datetime
+  deletedBy: string;  // e-mail de quem excluiu
+  opId: string;
+}

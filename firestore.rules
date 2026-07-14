@@ -99,6 +99,18 @@ service cloud.firestore {
       allow delete: if isCerneInternalUser();
     }
 
+    // Lixeira: cópia de segurança de TODO documento excluído no app.
+    // Escrita/leitura por usuários internos; a restauração recria o doc original.
+    match /trash/{trashId} {
+      allow read: if isCerneInternalUser();
+      allow create: if isCerneInternalUser()
+                    && request.resource.data.keys().hasAll(['coll', 'docId', 'data', 'deletedAt', 'deletedBy'])
+                    && request.resource.data.coll is string
+                    && request.resource.data.docId is string;
+      allow update: if isCerneInternalUser();
+      allow delete: if isCerneInternalUser();
+    }
+
     // Configurações e Feriados: Mesma regra de autenticação
     match /settings/{document=**} {
       allow read, write: if isCerneInternalUser();
