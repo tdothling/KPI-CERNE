@@ -179,6 +179,19 @@ export const refStatusAposInstanciar = (current: RefStatus): RefStatus =>
         ? current
         : RefStatus.SUPERSEDED;
 
+// Caminho inverso: excluído o ÚLTIMO conjunto da referência, o encerramento por
+// instanciação perde a razão de ser e o status recua para o que a linha do tempo
+// indica. O veredito terminal (Aprovado/Reprovado) foi perdido no encerramento,
+// então com envio+feedback o status para em Enviado — a decisão é re-registrada
+// pelos botões. Referência que não estava 'Executivo Gerado' passa intacta.
+export const refStatusAposDesinstanciar = (ref: Pick<Referencia, 'statusAprovacao' | 'startDate' | 'endDate' | 'sendDate' | 'feedbackDate'>): RefStatus => {
+    if (ref.statusAprovacao !== RefStatus.SUPERSEDED) return ref.statusAprovacao;
+    return inferRefStatusFromDates(
+        { startDate: ref.startDate, endDate: ref.endDate, sendDate: ref.sendDate, feedbackDate: ref.feedbackDate },
+        RefStatus.ENVIADO,
+    );
+};
+
 const PRANCHA_TRANSITIONS: Record<PranchaStatus, PranchaStatus[]> = {
     [PranchaStatus.A_FAZER]: [PranchaStatus.EM_ANDAMENTO],
     [PranchaStatus.EM_ANDAMENTO]: [PranchaStatus.CONCLUIDO],
@@ -442,6 +455,10 @@ export interface InstanciarLoteInput {
     bases: string[];
     existingConjuntos: Pick<Conjunto, 'id'>[];
     today: string;
+    // Prefixo manual da codificação POR BASE (ex.: 'WRS-153MG-081+430-SAU-EXE').
+    // Cada conjunto/prancha da base recebe o seu; base sem prefixo fica só com o
+    // sufixo do gabarito (mesmo comportamento da instanciação unitária).
+    codigoPorBase?: Record<string, string>;
 }
 
 export interface InstanciarLotePlan {
@@ -475,7 +492,10 @@ export const planInstanciacaoLote = (input: InstanciarLoteInput): InstanciarLote
                 return;
             }
             existing.add(id); // também protege contra repetição DENTRO do próprio lote
-            const item = instanciarConjunto({ referencia: ref, base, existingConjuntos: [], today: input.today });
+            const item = instanciarConjunto({
+                referencia: ref, base, existingConjuntos: [], today: input.today,
+                codigoRodovia: input.codigoPorBase?.[base],
+            });
             plan.items.push(item);
             plan.totalPranchas += item.pranchas.length;
         });

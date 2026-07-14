@@ -20,7 +20,8 @@ interface CatalogoPageProps {
     onInstanciarLote: (
         refs: Referencia[],
         bases: string[],
-        onProgress?: (done: number, total: number) => void
+        onProgress?: (done: number, total: number) => void,
+        codigoPorBase?: Record<string, string>
     ) => Promise<{ criados: number; puladas: number; semGabarito: string[]; erros: string[] } | null>;
     onAddMany: (refs: Omit<Referencia, 'id'>[], onProgress?: (done: number, total: number) => void) => Promise<{ criadas: number; erros: string[] }>;
     onDeleteMany: (ids: string[]) => Promise<{ excluidas: number; erros: string[] }>;
@@ -748,6 +749,8 @@ function InstanciarLoteModal({ referencias, conjuntos, clients, onClose, onConfi
     const [obra, setObra] = useState(obrasComRefs[0]?.name || '');
     const [selRefs, setSelRefs] = useState<Set<string>>(new Set());
     const [selBases, setSelBases] = useState<Set<string>>(new Set());
+    // Prefixo manual da codificação POR BASE (opcional; pré-preenche o código das pranchas)
+    const [prefixos, setPrefixos] = useState<Record<string, string>>({});
     const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
     const [result, setResult] = useState<{ criados: number; puladas: number; semGabarito: string[]; erros: string[] } | null>(null);
 
@@ -755,7 +758,7 @@ function InstanciarLoteModal({ referencias, conjuntos, clients, onClose, onConfi
     const refsDaObra = useMemo(() => referencias.filter(r => r.client === obra), [referencias, obra]);
     const basesRegistradas = obraDoc?.bases || [];
 
-    const trocarObra = (nome: string) => { setObra(nome); setSelRefs(new Set()); setSelBases(new Set()); setResult(null); };
+    const trocarObra = (nome: string) => { setObra(nome); setSelRefs(new Set()); setSelBases(new Set()); setPrefixos({}); setResult(null); };
 
     const toggle = (set: Set<string>, setter: (s: Set<string>) => void, value: string) => {
         const next = new Set(set);
@@ -772,11 +775,12 @@ function InstanciarLoteModal({ referencias, conjuntos, clients, onClose, onConfi
         bases: basesEscolhidas,
         existingConjuntos: conjuntos,
         today: new Date().toISOString().split('T')[0],
-    }), [refsEscolhidas, basesEscolhidas, conjuntos]);
+        codigoPorBase: prefixos,
+    }), [refsEscolhidas, basesEscolhidas, conjuntos, prefixos]);
 
     const executar = async () => {
         setProgress({ done: 0, total: preview.items.length });
-        const r = await onConfirm(refsEscolhidas, basesEscolhidas, (done, total) => setProgress({ done, total }));
+        const r = await onConfirm(refsEscolhidas, basesEscolhidas, (done, total) => setProgress({ done, total }), prefixos);
         setProgress(null);
         if (r) setResult(r);
     };
@@ -891,6 +895,34 @@ function InstanciarLoteModal({ referencias, conjuntos, clients, onClose, onConfi
                                 </div>
                             </div>
                         </div>
+
+                        {/* Prefixo da codificação POR BASE: cada base instanciada pode ter o seu
+                            (prefixo + sufixo do gabarito pré-preenchem o código de cada prancha) */}
+                        {basesEscolhidas.length > 0 && (
+                            <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-3 mb-4">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Prefixo da codificação por base (manual, opcional)</p>
+                                <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-2">
+                                    O prefixo de cada base + o sufixo do gabarito pré-preenchem o código das pranchas daquela base
+                                    (ex.: <span className="font-mono">WRS-153MG-081+430-SAU-EXE</span>). Base sem prefixo fica só com o sufixo — tudo editável depois, na Carteira.
+                                </p>
+                                <div className="space-y-1.5 max-h-40 overflow-y-auto custom-scrollbar">
+                                    {basesEscolhidas.map(b => (
+                                        <div key={b} className="flex items-center gap-2">
+                                            <span className="flex items-center gap-1 w-32 flex-shrink-0 font-mono text-xs font-bold text-slate-600 dark:text-slate-300 truncate">
+                                                <MapPin size={11} className="text-brand-600 dark:text-brand-400 flex-shrink-0" /> {b}
+                                            </span>
+                                            <input
+                                                value={prefixos[b] || ''}
+                                                disabled={rodando}
+                                                onChange={e => setPrefixos(prev => ({ ...prev, [b]: e.target.value }))}
+                                                placeholder="Ex: WRS-153MG-081+430-SAU-EXE"
+                                                className="flex-1 font-mono bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-xs rounded-lg p-2"
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Preview: exatamente o que o planejador vai criar/pular */}
                         {(refsEscolhidas.length > 0 && basesEscolhidas.length > 0) && (

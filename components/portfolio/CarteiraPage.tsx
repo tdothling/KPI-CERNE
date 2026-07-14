@@ -418,8 +418,10 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
                                                         </button>
                                                     )}
                                                     <div className="flex-1 min-w-0">
+                                                        {/* Com o código preenchido, ELE é o destaque (identidade oficial da
+                                                            prancha) e a referência ao molde desce para a linha de apoio. */}
                                                         <div className="flex items-center gap-2 flex-wrap">
-                                                            <span className="text-xs font-bold text-slate-600 dark:text-slate-300">{p.papel}</span>
+                                                            <span className={`text-xs font-bold text-slate-600 dark:text-slate-300 ${p.codigoCompleto?.trim() ? 'font-mono' : ''}`}>{p.codigoCompleto?.trim() || p.papel}</span>
                                                             {(p.revisao > 0 || (p.revisions?.length ?? 0) > 0) ? (
                                                                 <button
                                                                     onClick={() => setHistoricoDe(p)}
@@ -435,8 +437,8 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
                                                             <StatusBadge label={p.status} className={PRANCHA_STATUS_STYLE[p.status]} />
                                                             {isPranchaOverdue(p, conjunto) && <StatusBadge label="Atrasada" className="text-red-600 bg-red-50 border-red-200 dark:bg-red-900/30 dark:border-red-800 dark:text-red-400" />}
                                                         </div>
-                                                        <div className="flex items-center gap-3 text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 font-mono truncate">
-                                                            <span className="truncate">{p.codigoCompleto || '(sem código — edite para preencher)'}</span>
+                                                        <div className={`flex items-center gap-3 text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate ${p.codigoCompleto?.trim() ? '' : 'font-mono'}`}>
+                                                            <span className="truncate">{p.codigoCompleto?.trim() ? p.papel : '(sem código — edite para preencher)'}</span>
                                                         </div>
                                                         <div className="flex items-center gap-3 text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 flex-wrap">
                                                             {p.startDate && <span>Início: {formatDateDisplay(p.startDate)}</span>}

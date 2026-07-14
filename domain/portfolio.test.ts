@@ -9,7 +9,7 @@ import {
     catalogoKpis, carteiraKpis, conjuntosKpis, revisaoStats,
     planPortfolioMigration, inferPapel, execMoldeKey, buildCodigoCompleto,
     portfolioToProjectFiles, PROJECAO_REF_PREFIX, PROJECAO_PRANCHA_PREFIX,
-    refStatusAposInstanciar, papelFolha, nextFolhaNumber, renomearPapeisAuto,
+    refStatusAposInstanciar, refStatusAposDesinstanciar, papelFolha, nextFolhaNumber, renomearPapeisAuto,
 } from './portfolio';
 import { Discipline, ProjectFile, ProjectPhase, RevisionReason, Status } from '../types';
 
@@ -862,5 +862,63 @@ describe('papelFolha / nextFolhaNumber / renomearPapeisAuto', () => {
     it('codificação inalterada não mexe em nada', () => {
         const gab = [{ papel: `${COD}-F01` }];
         expect(renomearPapeisAuto(gab, COD, COD)).toBe(gab);
+    });
+});
+
+// --- Prefixo de codificação POR BASE na instanciação em lote ---
+
+describe('planInstanciacaoLote com codigoPorBase', () => {
+    it('cada base recebe seu prefixo nas pranchas e no conjunto', () => {
+        const plan = planInstanciacaoLote({
+            referencias: [refBSO],
+            bases: ['081+430', '104+000'],
+            existingConjuntos: [],
+            today: '2026-07-14',
+            codigoPorBase: {
+                '081+430': 'WRS-153MG-081+430-SAU-EXE',
+                '104+000': 'ELO-040RJ-104+000-BSO-EXE',
+            },
+        });
+        expect(plan.items).toHaveLength(2);
+        const por = Object.fromEntries(plan.items.map(i => [i.conjunto.base, i]));
+        expect(por['081+430'].conjunto.codigoRodovia).toBe('WRS-153MG-081+430-SAU-EXE');
+        expect(por['081+430'].pranchas[0].codigoCompleto).toBe('WRS-153MG-081+430-SAU-EXE-DE-P1-101');
+        expect(por['104+000'].conjunto.codigoRodovia).toBe('ELO-040RJ-104+000-BSO-EXE');
+        expect(por['104+000'].pranchas[0].codigoCompleto).toBe('ELO-040RJ-104+000-BSO-EXE-DE-P1-101');
+    });
+
+    it('base sem prefixo fica só com o sufixo do gabarito (comportamento unitário)', () => {
+        const plan = planInstanciacaoLote({
+            referencias: [refBSO],
+            bases: ['081+430', '104+000'],
+            existingConjuntos: [],
+            today: '2026-07-14',
+            codigoPorBase: { '081+430': 'WRS-153MG-081+430-SAU-EXE' },
+        });
+        const semPrefixo = plan.items.find(i => i.conjunto.base === '104+000')!;
+        expect(semPrefixo.conjunto.codigoRodovia).toBeUndefined();
+        expect(semPrefixo.pranchas[0].codigoCompleto).toBe('DE-P1-101');
+    });
+});
+
+// --- Recuo do status ao excluir o último conjunto (desinstanciar) ---
+
+describe('refStatusAposDesinstanciar', () => {
+    const base = { statusAprovacao: RefStatus.SUPERSEDED };
+
+    it('recua para a etapa que a linha do tempo indica', () => {
+        expect(refStatusAposDesinstanciar({ ...base })).toBe(RefStatus.RASCUNHO);
+        expect(refStatusAposDesinstanciar({ ...base, startDate: '2026-01-05' })).toBe(RefStatus.EM_ELABORACAO);
+        expect(refStatusAposDesinstanciar({ ...base, startDate: '2026-01-05', endDate: '2026-01-08' })).toBe(RefStatus.ELABORADO);
+        expect(refStatusAposDesinstanciar({ ...base, startDate: '2026-01-05', endDate: '2026-01-08', sendDate: '2026-01-09' })).toBe(RefStatus.ENVIADO);
+    });
+
+    it('com envio+feedback para em Enviado (o veredito é re-registrado pelos botões)', () => {
+        expect(refStatusAposDesinstanciar({ ...base, sendDate: '2026-01-09', feedbackDate: '2026-01-15' })).toBe(RefStatus.ENVIADO);
+    });
+
+    it('referência que não estava Executivo Gerado passa intacta', () => {
+        expect(refStatusAposDesinstanciar({ statusAprovacao: RefStatus.APROVADO })).toBe(RefStatus.APROVADO);
+        expect(refStatusAposDesinstanciar({ statusAprovacao: RefStatus.EM_ELABORACAO, startDate: '2026-01-05' })).toBe(RefStatus.EM_ELABORACAO);
     });
 });

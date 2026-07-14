@@ -92,7 +92,9 @@ export function useAppData(projectFilter: ProjectFilterState) {
         referencias.forEach(r => {
             if (!instanciadas.has(r.id)) return;
             const fechado = refStatusAposInstanciar(r.statusAprovacao);
-            if (fechado === r.statusAprovacao) return;
+            // Patch confirmado no snapshot: libera o guard (permite re-encerrar se
+            // a referência recuar e for instanciada de novo, ex.: restauração da Lixeira)
+            if (fechado === r.statusAprovacao) { refSupersededSynced.current.delete(r.id); return; }
             if (refSupersededSynced.current.has(r.id)) return;
             refSupersededSynced.current.add(r.id);
             patchReferenciaInDb(r.id, { statusAprovacao: fechado });
@@ -305,7 +307,8 @@ export function useAppData(projectFilter: ProjectFilterState) {
     const handleInstanciarLote = async (
         refs: Referencia[],
         bases: string[],
-        onProgress?: (done: number, total: number) => void
+        onProgress?: (done: number, total: number) => void,
+        codigoPorBase?: Record<string, string>
     ): Promise<{ criados: number; puladas: number; semGabarito: string[]; erros: string[] } | null> => {
         try {
             const plan = planInstanciacaoLote({
@@ -313,6 +316,7 @@ export function useAppData(projectFilter: ProjectFilterState) {
                 bases,
                 existingConjuntos: conjuntos,
                 today: new Date().toISOString().split('T')[0],
+                codigoPorBase,
             });
             if (plan.items.length === 0) {
                 return { criados: 0, puladas: plan.puladas.length, semGabarito: plan.semGabarito, erros: [] };

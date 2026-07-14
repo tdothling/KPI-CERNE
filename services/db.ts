@@ -2,7 +2,7 @@
 import { db, auth } from "../firebase";
 import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc, query, orderBy, limit, QuerySnapshot, DocumentData, getDoc, getDocs, where, writeBatch, arrayUnion, deleteField, runTransaction } from "firebase/firestore";
 import { ProjectFile, PurchaseDoc, ClientDoc, ProjectFilterState, SupplyOrder, SupplyStatus, SupplyStatusEvent, PurchaseStatus } from "../types";
-import { Referencia, Conjunto, Prancha, planPortfolioMigration, RefStatus, refStatusAposInstanciar } from "../domain/portfolio";
+import { Referencia, Conjunto, Prancha, planPortfolioMigration, RefStatus, refStatusAposInstanciar, refStatusAposDesinstanciar } from "../domain/portfolio";
 
 const COLL_PROJECTS = "projects";
 const COLL_MATERIALS = "materials";
@@ -489,6 +489,9 @@ export const instanciarLoteInDb = async (
 };
 
 // Exclui o conjunto e TODAS as suas pranchas em lote (nada fica órfão).
+// Se este era o ÚLTIMO conjunto da referência, o encerramento 'Executivo Gerado'
+// perde a razão de ser: o status recua para o que a linha do tempo indica —
+// tudo no MESMO batch da exclusão.
 export const deleteConjuntoFromDb = async (conjuntoId: string) => {
   if (!isDbActive() || !checkAuth()) throw new Error("Acesso negado.");
   const pranchasSnap = await getDocs(query(collection(db, COLL_PRANCHAS), where("conjuntoId", "==", conjuntoId)));
@@ -505,6 +508,23 @@ export const deleteConjuntoFromDb = async (conjuntoId: string) => {
     batch.set(doc(collection(db, COLL_TRASH)), buildTrashEntry(COLL_CONJUNTOS, conjuntoId, conjuntoSnap.data(), opId));
   }
   batch.delete(doc(db, COLL_CONJUNTOS, conjuntoId));
+
+  const referenciaId = conjuntoSnap.exists() ? (conjuntoSnap.data() as any).referenciaId as string : undefined;
+  if (referenciaId) {
+    const irmaosSnap = await getDocs(query(collection(db, COLL_CONJUNTOS), where("referenciaId", "==", referenciaId)));
+    const restantes = irmaosSnap.docs.filter(d => d.id !== conjuntoId).length;
+    if (restantes === 0) {
+      const refSnap = await getDoc(doc(db, COLL_REFERENCIAS, referenciaId));
+      if (refSnap.exists()) {
+        const ref = refSnap.data() as any;
+        const recuado = refStatusAposDesinstanciar(ref);
+        if (recuado !== ref.statusAprovacao) {
+          batch.update(doc(db, COLL_REFERENCIAS, referenciaId), { statusAprovacao: recuado });
+        }
+      }
+    }
+  }
+
   await batch.commit();
 };
 
