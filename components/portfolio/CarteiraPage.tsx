@@ -105,22 +105,34 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
         return p.status === statusFilter;
     };
 
-    // Disciplina (da referência) → conjuntos com pranchas visíveis
+    // Base (KM) → Disciplina → conjuntos com pranchas visíveis. A BASE é o eixo
+    // de trabalho no campo (uma obra pode ter muitas), então ela agrupa no topo
+    // — nada de Base 06 misturada com Base 08 na mesma lista.
+    type ConjuntoItem = { conjunto: Conjunto; ref: Referencia | undefined; visiveis: Prancha[] };
     const grouped = useMemo(() => {
-        const byDiscipline = new Map<Discipline, { conjunto: Conjunto; ref: Referencia | undefined; visiveis: Prancha[] }[]>();
+        const byBase = new Map<string, Map<Discipline, ConjuntoItem[]>>();
         conjuntosDaObra.forEach(conjunto => {
             const ref = refById.get(conjunto.referenciaId);
             const todas = pranchasByConjunto.get(conjunto.id) || [];
             const visiveis = todas.filter(p => matchesFilter(p, conjunto));
             if (statusFilter !== 'ALL' && visiveis.length === 0) return;
             const d = ref?.discipline || Discipline.OTHER;
-            if (!byDiscipline.has(d)) byDiscipline.set(d, []);
-            byDiscipline.get(d)!.push({ conjunto, ref, visiveis });
+            if (!byBase.has(conjunto.base)) byBase.set(conjunto.base, new Map());
+            const byDisc = byBase.get(conjunto.base)!;
+            if (!byDisc.has(d)) byDisc.set(d, []);
+            byDisc.get(d)!.push({ conjunto, ref, visiveis });
         });
-        byDiscipline.forEach(list => list.sort((a, b) =>
-            `${a.ref?.codigoCliente || ''}|${a.conjunto.base}`.localeCompare(`${b.ref?.codigoCliente || ''}|${b.conjunto.base}`)
-        ));
-        return [...byDiscipline.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+        byBase.forEach(byDisc => byDisc.forEach(list => list.sort((a, b) =>
+            (a.ref?.codigoCliente || '').localeCompare(b.ref?.codigoCliente || '')
+        )));
+        // numeric: true ordena "Base 2" antes de "Base 10"
+        return [...byBase.entries()]
+            .map(([base, byDisc]) => ({
+                base,
+                disciplinas: [...byDisc.entries()].sort((a, b) => a[0].localeCompare(b[0])),
+                totalConjuntos: [...byDisc.values()].reduce((n, l) => n + l.length, 0),
+            }))
+            .sort((a, b) => a.base.localeCompare(b.base, undefined, { numeric: true }));
     }, [conjuntosDaObra, refById, pranchasByConjunto, statusFilter, clientsMap]);
 
     const toggleExpanded = (id: string) => setExpanded(prev => {
@@ -301,19 +313,27 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
                 </div>
             )}
 
-            {grouped.map(([discipline, items]) => (
-                <div key={discipline} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+            {grouped.map(({ base, disciplinas, totalConjuntos }) => (
+                <div key={base} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                    {/* A BASE é o grupo de topo: tudo abaixo é só desta base */}
                     <button
-                        onClick={() => toggleCollapsed(discipline)}
-                        className="w-full flex items-center gap-2 px-4 py-3 bg-slate-50/60 dark:bg-slate-900/30 hover:bg-slate-100 dark:hover:bg-slate-700/40 transition-colors text-sm font-bold text-slate-700 dark:text-slate-200"
+                        onClick={() => toggleCollapsed(base)}
+                        className="w-full flex items-center gap-2 px-4 py-3 bg-brand-50/60 dark:bg-brand-900/20 hover:bg-brand-100/60 dark:hover:bg-brand-900/30 transition-colors text-sm font-bold text-slate-700 dark:text-slate-200 border-b border-brand-100/60 dark:border-brand-900/30"
                     >
-                        {collapsed.has(discipline) ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-                        <Layers size={15} className="text-brand-600 dark:text-brand-400" />
-                        {discipline}
-                        <span className="text-[10px] font-bold text-slate-400 uppercase ml-auto">{items.length} conjunto(s)</span>
+                        {collapsed.has(base) ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                        <MapPin size={15} className="text-brand-600 dark:text-brand-400" />
+                        <span className="uppercase tracking-wide">{base}</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase ml-auto">{totalConjuntos} conjunto(s)</span>
                     </button>
 
-                    {!collapsed.has(discipline) && (
+                    {!collapsed.has(base) && disciplinas.map(([discipline, items]) => (
+                    <div key={discipline}>
+                        {/* Sub-cabeçalho de disciplina dentro da base */}
+                        <div className="flex items-center gap-2 px-4 py-1.5 bg-slate-50/60 dark:bg-slate-900/30 border-b border-slate-100 dark:border-slate-700/60 text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            <Layers size={12} className="text-slate-400" />
+                            {discipline}
+                            <span className="text-[10px] font-semibold text-slate-400 normal-case ml-auto">{items.length} conjunto(s)</span>
+                        </div>
                     <div className="divide-y divide-slate-100 dark:divide-slate-700/60">
                         {items.map(({ conjunto, ref, visiveis }) => {
                             const todas = pranchasByConjunto.get(conjunto.id) || [];
@@ -328,14 +348,15 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
                                     >
                                         {isOpen ? <ChevronDown size={16} className="text-slate-400 flex-shrink-0" /> : <ChevronRight size={16} className="text-slate-400 flex-shrink-0" />}
                                         <div className="flex-1 min-w-0">
+                                            {/* Destaque = nome da referência que originou o conjunto (identificação);
+                                                o código da rodovia desce para a linha de apoio */}
                                             <div className="flex items-center gap-2 flex-wrap">
-                                                <span className="flex items-center gap-1 text-xs font-bold text-brand-700 dark:text-brand-400"><MapPin size={12} /> {conjunto.base}</span>
-                                                <span className="font-mono text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{conjunto.codigoRodovia || ref?.codigoCliente || '—'}</span>
+                                                <span className="font-mono text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{ref?.codigoCliente || conjunto.codigoRodovia || '—'}</span>
                                                 {rollup.isConcluido && <StatusBadge label="Conjunto concluído" className="text-emerald-700 bg-emerald-100 border-emerald-300 dark:bg-emerald-900/40 dark:border-emerald-700 dark:text-emerald-400" />}
                                                 {rollup.reprovado > 0 && <StatusBadge label={`${rollup.reprovado} reprovada(s)`} className="text-rose-700 bg-rose-100 border-rose-300 dark:bg-rose-900/40 dark:border-rose-700 dark:text-rose-400" />}
                                             </div>
-                                            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                                                {conjunto.client} · Molde: <span className="font-mono">{ref?.codigoCliente || 'referência removida'}</span> · Criado em {formatDateDisplay(conjunto.createdAt)}
+                                            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                                                {conjunto.client}{conjunto.codigoRodovia ? <> · Código: <span className="font-mono">{conjunto.codigoRodovia}</span></> : null} · Criado em {formatDateDisplay(conjunto.createdAt)}
                                             </div>
                                         </div>
 
@@ -486,7 +507,8 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
                             );
                         })}
                     </div>
-                    )}
+                    </div>
+                    ))}
                 </div>
             ))}
 
