@@ -131,6 +131,46 @@ const REF_TRANSITIONS: Record<RefStatus, RefStatus[]> = {
     [RefStatus.SUPERSEDED]: [],
 };
 
+// --- NOMES AUTOMÁTICOS DO GABARITO (codificação + F01, F02, ...) ---
+//
+// A 1ª coluna do gabarito é preenchida automaticamente repetindo a codificação
+// do cliente e variando o número da folha (BSO116-WAY262-ARQ-F01, -F02...).
+// Linhas que seguem o padrão acompanham mudanças na codificação; linha editada
+// à mão sai do padrão e nunca mais é tocada.
+
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+export const papelFolha = (codigo: string, n: number) =>
+    `${codigo.trim()}-F${String(n).padStart(2, '0')}`;
+
+// Próximo número de folha: maior F existente no padrão + 1 (não repete número
+// depois de uma exclusão no meio); sem nenhuma linha no padrão, segue a posição.
+export const nextFolhaNumber = (codigo: string, papeis: string[]): number => {
+    const re = new RegExp(`^${escapeRegExp(codigo.trim())}-F(\\d+)$`);
+    let max = 0;
+    papeis.forEach(p => {
+        const m = (p || '').trim().match(re);
+        if (m) max = Math.max(max, parseInt(m[1], 10));
+    });
+    return max > 0 ? max + 1 : papeis.length + 1;
+};
+
+// Renomeia para a nova codificação APENAS as linhas que seguem o padrão da
+// codificação antiga (preserva o número da folha). Linhas fora do padrão
+// (editadas à mão) passam intactas.
+export const renomearPapeisAuto = <T extends { papel: string }>(
+    gabarito: T[],
+    oldCodigo: string,
+    newCodigo: string
+): T[] => {
+    if (oldCodigo.trim() === newCodigo.trim()) return gabarito;
+    const re = new RegExp(`^${escapeRegExp(oldCodigo.trim())}-F(\\d+)$`);
+    return gabarito.map(g => {
+        const m = (g.papel || '').trim().match(re);
+        return m ? { ...g, papel: `${newCodigo.trim()}-F${m[1]}` } : g;
+    });
+};
+
 // Encerramento do preliminar ao instanciar: quem já fechou o ciclo (Aprovado)
 // mantém o veredito; qualquer etapa pendente é desconsiderada e a referência
 // encerra como 'Executivo Gerado' — o trabalho continua nas pranchas da Carteira.

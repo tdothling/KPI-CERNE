@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { BookOpen, Plus, Send, BadgeCheck, ThumbsDown, FileEdit, Trash2, Layers, X, ChevronDown, ChevronRight, MapPin, GripVertical, PencilLine, Play, CheckCircle2, Hammer, Timer, CopyPlus, CheckSquare, Square, Loader2, Wand2, FastForward } from 'lucide-react';
 import { useObraAtiva, ObraSelectScreen, ObraAtivaBar, ObraCardStat } from '../ObraGate';
 import { ClientDoc, Discipline, Period, RevisionReason } from '../../types';
-import { Referencia, Conjunto, RefStatus, GabaritoItem, canRefTransition, catalogoKpis, buildCodigoCompleto, inferRefStatusFromDates, planInstanciacaoLote, slugify, DISCIPLINA_SIGLA, gerarReferenciasDisciplinas, planGerarDisciplinasLote, swapDisciplinaSigla } from '../../domain/portfolio';
+import { Referencia, Conjunto, RefStatus, GabaritoItem, canRefTransition, catalogoKpis, buildCodigoCompleto, inferRefStatusFromDates, planInstanciacaoLote, slugify, DISCIPLINA_SIGLA, gerarReferenciasDisciplinas, planGerarDisciplinasLote, swapDisciplinaSigla, papelFolha, nextFolhaNumber, renomearPapeisAuto } from '../../domain/portfolio';
 import { KpiCard, StatusBadge, REF_STATUS_STYLE, DateActionModal, DateActionRequest, TimelineDatesEditor, TimelineDates, REF_TIMELINE_FIELDS, RevisionHistoryModal, execDaysOf } from './shared';
 import { formatDateDisplay } from '../../utils';
 
@@ -441,16 +441,23 @@ function ReferenciaModal({ referencia, clients, defaultClient, onClose, onSave }
         feedbackDate: referencia?.feedbackDate || '', feedbackPeriod: referencia?.feedbackPeriod || 'TARDE',
     });
     const [gabarito, setGabarito] = useState<GabaritoItem[]>(
-        referencia?.gabarito?.length ? referencia.gabarito : [{ id: crypto.randomUUID(), papel: codigoCliente, sufixoCodigo: '' }]
+        referencia?.gabarito?.length ? referencia.gabarito : [{ id: crypto.randomUUID(), papel: papelFolha(codigoCliente, 1), sufixoCodigo: '' }]
     );
-    // Enquanto a referência é NOVA e o 1º entregável não foi editado à mão, o nome
-    // padrão acompanha a codificação do cliente sendo digitada (evita "Folha 101"
-    // genérico quando o entregável único É o próprio projeto).
-    const [papelAuto, setPapelAuto] = useState(!referencia);
+    // Nome automático dos entregáveis: codificação + F01, F02... As linhas que
+    // seguem o padrão acompanham a codificação sendo digitada/corrigida; linha
+    // renomeada à mão sai do padrão e nunca mais é tocada.
+    const prevCodigo = useRef(codigoCliente);
     useEffect(() => {
-        if (!papelAuto) return;
-        setGabarito(prev => (prev.length === 1 ? [{ ...prev[0], papel: codigoCliente }] : prev));
-    }, [codigoCliente, papelAuto]);
+        const old = prevCodigo.current;
+        if (old === codigoCliente) return;
+        prevCodigo.current = codigoCliente;
+        setGabarito(prev => renomearPapeisAuto(prev, old, codigoCliente));
+    }, [codigoCliente]);
+
+    const addEntregavel = () => setGabarito(prev => [
+        ...prev,
+        { id: crypto.randomUUID(), papel: papelFolha(codigoCliente, nextFolhaNumber(codigoCliente, prev.map(g => g.papel))), sufixoCodigo: '' },
+    ]);
 
     const setItem = (id: string, changes: Partial<GabaritoItem>) =>
         setGabarito(prev => prev.map(g => g.id === id ? { ...g, ...changes } : g));
@@ -555,21 +562,22 @@ function ReferenciaModal({ referencia, clients, defaultClient, onClose, onSave }
                 <div className="mb-4">
                     <div className="flex items-center justify-between mb-2">
                         <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Gabarito de Entregáveis *</label>
-                        <button onClick={() => { setPapelAuto(false); setGabarito(prev => [...prev, { id: crypto.randomUUID(), papel: '', sufixoCodigo: '' }]); }}
+                        <button onClick={addEntregavel}
                             className="flex items-center gap-1 text-[11px] font-bold text-brand-600 dark:text-brand-400 hover:underline">
                             <Plus size={12} /> Adicionar entregável
                         </button>
                     </div>
                     <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-2">
-                        Ao instanciar em uma base, cada linha vira 1 prancha. O 1º entregável nasce com o nome da codificação
-                        do cliente (edite se o entregável tiver outro nome); o sufixo é opcional e apenas pré-preenche o
+                        Ao instanciar em uma base, cada linha vira 1 prancha. O nome de cada entregável é preenchido
+                        automaticamente com a codificação + F01, F02... e acompanha a codificação enquanto seguir esse
+                        padrão (edite à vontade se a folha tiver outro nome). O sufixo é opcional e apenas pré-preenche o
                         código (a codificação final é manual — varia por órgão regulamentador).
                     </p>
                     <div className="space-y-1.5">
                         {gabarito.map((g, i) => (
                             <div key={g.id} className="flex items-center gap-2">
                                 <span className="text-[10px] font-bold text-slate-400 w-5 text-right">{i + 1}.</span>
-                                <input value={g.papel} onChange={e => { setItem(g.id, { papel: e.target.value }); if (i === 0) setPapelAuto(false); }} placeholder="Papel (ex: Folha 101, Memorial Descritivo)"
+                                <input value={g.papel} onChange={e => setItem(g.id, { papel: e.target.value })} placeholder="Papel (ex: Folha 101, Memorial Descritivo)"
                                     className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-sm rounded-lg p-2" />
                                 <input value={g.sufixoCodigo || ''} onChange={e => setItem(g.id, { sufixoCodigo: e.target.value })} placeholder="Sufixo (ex: DE-P1-101)"
                                     className="w-40 font-mono bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-xs rounded-lg p-2" />

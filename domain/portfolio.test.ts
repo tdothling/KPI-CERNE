@@ -9,7 +9,7 @@ import {
     catalogoKpis, carteiraKpis, conjuntosKpis, revisaoStats,
     planPortfolioMigration, inferPapel, execMoldeKey, buildCodigoCompleto,
     portfolioToProjectFiles, PROJECAO_REF_PREFIX, PROJECAO_PRANCHA_PREFIX,
-    refStatusAposInstanciar,
+    refStatusAposInstanciar, papelFolha, nextFolhaNumber, renomearPapeisAuto,
 } from './portfolio';
 import { Discipline, ProjectFile, ProjectPhase, RevisionReason, Status } from '../types';
 
@@ -811,5 +811,56 @@ describe('RefStatus.SUPERSEDED — integração com o restante do domínio', () 
         expect(out).toHaveLength(1);
         expect(out[0].status).toBe(Status.SUPERSEDED);
         expect(out[0].phase).toBe(ProjectPhase.PRELIMINARY);
+    });
+});
+
+// --- Nomes automáticos do gabarito (codificação + F01, F02...) ---
+
+describe('papelFolha / nextFolhaNumber / renomearPapeisAuto', () => {
+    const COD = 'BSO116-WAY262-ARQ';
+
+    it('gera o nome repetindo a codificação e variando a folha com 2 dígitos', () => {
+        expect(papelFolha(COD, 1)).toBe('BSO116-WAY262-ARQ-F01');
+        expect(papelFolha(COD, 12)).toBe('BSO116-WAY262-ARQ-F12');
+        expect(papelFolha('  X  ', 3)).toBe('X-F03');
+    });
+
+    it('próximo número segue o maior F existente (não repete após exclusão no meio)', () => {
+        expect(nextFolhaNumber(COD, [`${COD}-F01`, `${COD}-F02`, `${COD}-F03`])).toBe(4);
+        expect(nextFolhaNumber(COD, [`${COD}-F01`, `${COD}-F05`])).toBe(6);
+        // linhas fora do padrão não contam para o número
+        expect(nextFolhaNumber(COD, [`${COD}-F02`, 'Memorial Descritivo'])).toBe(3);
+    });
+
+    it('sem nenhuma linha no padrão, segue a posição', () => {
+        expect(nextFolhaNumber(COD, [])).toBe(1);
+        expect(nextFolhaNumber(COD, ['Memorial Descritivo', 'Detalhe Tanque'])).toBe(3);
+    });
+
+    it('renomeia apenas as linhas que seguem o padrão antigo, preservando o número', () => {
+        const gab = [
+            { papel: `${COD}-F01` },
+            { papel: `${COD}-F02` },
+            { papel: 'Memorial Descritivo' }, // editada à mão: intacta
+        ];
+        const out = renomearPapeisAuto(gab, COD, 'CER18-AUSTRA-ARQ');
+        expect(out.map(g => g.papel)).toEqual([
+            'CER18-AUSTRA-ARQ-F01',
+            'CER18-AUSTRA-ARQ-F02',
+            'Memorial Descritivo',
+        ]);
+    });
+
+    it('acompanha a digitação desde a codificação vazia e trata caracteres especiais', () => {
+        // referência nova: papel nasce '-F01' e vai sendo renomeado conforme se digita
+        expect(renomearPapeisAuto([{ papel: '-F01' }], '', 'B')[0].papel).toBe('B-F01');
+        // codificação com caractere especial de regex não quebra o casamento
+        const cod = 'BSO(116)+ARQ';
+        expect(renomearPapeisAuto([{ papel: `${cod}-F04` }], cod, 'NOVO')[0].papel).toBe('NOVO-F04');
+    });
+
+    it('codificação inalterada não mexe em nada', () => {
+        const gab = [{ papel: `${COD}-F01` }];
+        expect(renomearPapeisAuto(gab, COD, COD)).toBe(gab);
     });
 });
