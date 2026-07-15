@@ -94,7 +94,7 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
         const excluiveis = daDisciplina.filter(r => (conjuntosByRef.get(r.id) || []).length === 0);
 
         if (excluiveis.length === 0) {
-            alert(`Todas as ${daDisciplina.length} referência(s) de ${discipline} possuem conjuntos instanciados na Carteira. Exclua os conjuntos antes.`);
+            alert(`Todas as ${daDisciplina.length} referência(s) de ${discipline} possuem conjuntos instanciados em Projetos Locais. Exclua os conjuntos antes.`);
             return;
         }
 
@@ -160,7 +160,7 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
                     if (k.enviado > 0) stats.push({ value: k.enviado, label: 'com o cliente', tone: 'text-blue-600 dark:text-blue-400 font-semibold' });
                     if (k.aprovado > 0) stats.push({ value: k.aprovado, label: 'aprovado(s)', tone: 'text-emerald-600 dark:text-emerald-400 font-semibold' });
                     if (k.reprovado > 0) stats.push({ value: k.reprovado, label: 'reprovado(s)', tone: 'text-rose-600 dark:text-rose-400 font-semibold' });
-                    if (k.total === 0) stats.push({ value: '', label: 'Catálogo vazio — comece por aqui', tone: 'italic col-span-2' });
+                    if (k.total === 0) stats.push({ value: '', label: 'Nenhuma referência — comece por aqui', tone: 'italic col-span-2' });
                     return stats;
                 }}
             />
@@ -613,7 +613,7 @@ function ReferenciaModal({ referencia, clients, defaultClient, onClose, onSave }
                 <div className="flex justify-end gap-2">
                     <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg font-medium">Cancelar</button>
                     <button onClick={save} className="px-5 py-2 text-sm bg-brand-700 hover:bg-brand-800 text-white rounded-lg font-semibold shadow-sm">
-                        {referencia ? 'Salvar Alterações' : 'Cadastrar no Catálogo'}
+                        {referencia ? 'Salvar Alterações' : 'Cadastrar Referência'}
                     </button>
                 </div>
             </div>
@@ -690,7 +690,7 @@ function InstanciarModal({ referencia, existingBases, basesRegistradas, onClose,
                     className="w-full font-mono bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-sm rounded-lg p-2.5 mb-1" />
                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-4">
                     A codificação varia por órgão regulamentador, então é digitada à mão. O prefixo + sufixo do gabarito apenas
-                    pré-preenchem o código de cada prancha — tudo editável depois, na Carteira.
+                    pré-preenchem o código de cada prancha — tudo editável depois, em Projetos Locais.
                 </p>
 
                 {/* Pré-visualização das pranchas que serão criadas */}
@@ -710,7 +710,7 @@ function InstanciarModal({ referencia, existingBases, basesRegistradas, onClose,
                 {referencia.statusAprovacao !== RefStatus.APROVADO && referencia.statusAprovacao !== RefStatus.SUPERSEDED && (
                     <p className="text-[11px] text-cyan-700 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-900/20 border border-cyan-100 dark:border-cyan-900/40 rounded-lg px-3 py-2 mb-4">
                         Ao instanciar, o ciclo preliminar desta referência será encerrado como <b>Executivo Gerado</b> —
-                        as etapas pendentes ({referencia.statusAprovacao}) são desconsideradas e o trabalho segue nas pranchas da Carteira.
+                        as etapas pendentes ({referencia.statusAprovacao}) são desconsideradas e o trabalho segue nas pranchas de Projetos Locais.
                     </p>
                 )}
 
@@ -903,7 +903,7 @@ function InstanciarLoteModal({ referencias, conjuntos, clients, onClose, onConfi
                                 <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Prefixo da codificação por base (manual, opcional)</p>
                                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-2">
                                     O prefixo de cada base + o sufixo do gabarito pré-preenchem o código das pranchas daquela base
-                                    (ex.: <span className="font-mono">WRS-153MG-081+430-SAU-EXE</span>). Base sem prefixo fica só com o sufixo — tudo editável depois, na Carteira.
+                                    (ex.: <span className="font-mono">WRS-153MG-081+430-SAU-EXE</span>). Base sem prefixo fica só com o sufixo — tudo editável depois, em Projetos Locais.
                                 </p>
                                 <div className="space-y-1.5 max-h-40 overflow-y-auto custom-scrollbar">
                                     {basesEscolhidas.map(b => (

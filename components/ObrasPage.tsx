@@ -628,7 +628,7 @@ function ObraFormModal({ form, onChange, onSubmit, onClose, isEditing }: ObraFor
                   {[
                     { value: SiteType.CONSTRUCTION_SITE, title: 'Canteiro de Obras', sub: 'Obra única centralizada' },
                     { value: SiteType.OPERATIONAL_BASE, title: 'Bases Operacionais', sub: 'Múltiplos pontos de atendimento' },
-                    { value: SiteType.HIGHWAY, title: 'Obra de Rodovia', sub: 'Bases replicadas ao longo do traçado (usa Catálogo/Carteira)' },
+                    { value: SiteType.HIGHWAY, title: 'Obra de Rodovia', sub: 'Bases replicadas ao longo do traçado (usa Projetos Referências/Projetos Locais)' },
                   ].map(opt => (
                     <label key={opt.value} className={`flex items-center gap-2 cursor-pointer p-3 rounded-lg border transition-colors ${form.type === opt.value ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}`}>
                       <input type="radio" name="siteType" value={opt.value} checked={form.type === opt.value}
@@ -659,7 +659,7 @@ function ObraFormModal({ form, onChange, onSubmit, onClose, isEditing }: ObraFor
                 <div className="animate-in fade-in slide-in-from-top-2 duration-200">
                   <Label>Bases da Rodovia (KM / trecho) — {form.bases.length} registrada(s)</Label>
                   <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-2">
-                    Estas bases aparecem para seleção ao instanciar referências no Catálogo. Registre aqui para padronizar a grafia
+                    Estas bases aparecem para seleção ao instanciar referências na aba Projetos Referências. Registre aqui para padronizar a grafia
                     (evita duplicidade como "KM 104" e "104+000").
                   </p>
                   <BasesEditor bases={form.bases} onChange={bases => set({ bases })} />

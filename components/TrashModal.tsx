@@ -8,9 +8,9 @@ import { ptBR } from 'date-fns/locale';
 const COLL_LABEL: Record<string, string> = {
   projects: 'Projetos',
   supplyOrders: 'Suprimentos',
-  references: 'Catálogo',
-  conjuntos: 'Carteira',
-  pranchas: 'Carteira',
+  references: 'Projetos Referências',
+  conjuntos: 'Projetos Locais',
+  pranchas: 'Projetos Locais',
   clients: 'Obras',
 };
 

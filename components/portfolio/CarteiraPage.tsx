@@ -250,7 +250,7 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
                 </div>
             </div>
             <button onClick={onMigrate} className="flex-shrink-0 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm">
-                Migrar para a Carteira
+                Migrar para Projetos Locais
             </button>
         </div>
     );
@@ -262,7 +262,7 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
                 {migracaoBanner}
                 <ObraSelectScreen
                     obras={clients}
-                    subtitle="A carteira é navegada por obra — a mesma obra ativa do Catálogo. A escolha fica salva para as próximas visitas."
+                    subtitle="Os projetos locais são navegados por obra — a mesma obra ativa de Projetos Referências. A escolha fica salva para as próximas visitas."
                     emptyTitle="Nenhuma obra de rodovia cadastrada"
                     emptyHint='Cadastre uma obra do tipo "Obra de Rodovia" na aba Obras para usar a carteira.'
                     onSelect={selecionarObra}
@@ -278,7 +278,7 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
                         if (k.aguardando > 0) stats.push({ value: k.aguardando, label: 'aguardando cliente', tone: 'text-amber-600 dark:text-amber-400 font-semibold' });
                         if (k.aprovado > 0) stats.push({ value: k.aprovado, label: 'aprovada(s)', tone: 'text-emerald-600 dark:text-emerald-400 font-semibold' });
                         if (k.reprovado > 0) stats.push({ value: k.reprovado, label: 'reprovada(s)', tone: 'text-rose-600 dark:text-rose-400 font-semibold' });
-                        if (cjs.length === 0) stats.push({ value: '', label: 'Sem conjuntos — instancie pelo Catálogo', tone: 'italic col-span-2' });
+                        if (cjs.length === 0) stats.push({ value: '', label: 'Sem conjuntos — instancie por Projetos Referências', tone: 'italic col-span-2' });
                         return stats;
                     }}
                 />
@@ -318,7 +318,7 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
                 <div className="text-center py-16 bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-600">
                     <FolderKanban className="mx-auto text-slate-300 dark:text-slate-600 mb-3" size={40} />
                     <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Nenhum conjunto instanciado em {obraAtiva}</p>
-                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Use "Instanciar em Base" no Catálogo para replicar uma referência em uma base (KM).</p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Use "Instanciar em Base" na aba Projetos Referências para replicar uma referência em uma base (KM).</p>
                 </div>
             )}
 
