@@ -82,17 +82,29 @@ export function useAppFilters(
 
     // Só a janela de data (sem cliente/disciplina) — o Cronograma usa isto, já que
     // os filtros de cliente/disciplina passaram a viver apenas nos Indicadores.
-    const dateFilteredProjects = useMemo(() => {
+    const applyDateWindow = (list: ProjectFile[]) => {
         const dateRange = getFilterDateRange();
-        if (!dateRange) return projects;
+        if (!dateRange) return list;
         const { start: filterStart, end: filterEnd } = dateRange;
-        return projects.filter(p => {
+        return list.filter(p => {
             if (!p.startDate) return false;
             const projectStart = parseISO(p.startDate);
             const projectEnd = (p.endDate && isValid(parseISO(p.endDate))) ? parseISO(p.endDate) : new Date();
             return projectStart <= filterEnd && projectEnd >= filterStart;
         });
-    }, [projects, dateFilterType, referenceDate, customRange]);
+    };
+
+    const dateFilteredProjects = useMemo(
+        () => applyDateWindow(projects),
+        [projects, dateFilterType, referenceDate, customRange]
+    );
+
+    // Mesma janela de data sobre o canal extra (projeção da Carteira/Catálogo +
+    // rodovia não migrada) — permite ao Cronograma cobrir TODOS os projetos.
+    const dateFilteredPortfolioProjects = useMemo(
+        () => applyDateWindow(portfolioProjects),
+        [portfolioProjects, dateFilterType, referenceDate, customRange]
+    );
 
     const filteredSupplyOrders = useMemo(() => {
         let result = supplyOrders;
@@ -159,7 +171,8 @@ export function useAppFilters(
         dateFilterType, setDateFilterType,
         referenceDate, setReferenceDate,
         customRange, setCustomRange,
-        filteredProjects, filteredPortfolioProjects, filteredSupplyOrders, dateFilteredProjects,
+        filteredProjects, filteredPortfolioProjects, filteredSupplyOrders,
+        dateFilteredProjects, dateFilteredPortfolioProjects,
         uniqueClients
     };
 }

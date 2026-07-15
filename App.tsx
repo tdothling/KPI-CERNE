@@ -119,7 +119,8 @@ export default function App() {
     dateFilterType, setDateFilterType,
     referenceDate, setReferenceDate,
     customRange, setCustomRange,
-    filteredProjects, filteredPortfolioProjects, filteredSupplyOrders, dateFilteredProjects,
+    filteredProjects, filteredPortfolioProjects, filteredSupplyOrders,
+    dateFilteredProjects, dateFilteredPortfolioProjects,
     uniqueClients
   } = useAppFilters(legacyProjects, supplyOrders, clients, dashboardOnlyProjects);
 
@@ -127,6 +128,13 @@ export default function App() {
   const dashboardData = useMemo(
     () => [...filteredProjects, ...filteredPortfolioProjects],
     [filteredProjects, filteredPortfolioProjects]
+  );
+
+  // Cronograma cobre TODOS os projetos: canteiro/bases + carteira de rodovia
+  // (projeção somente-leitura) + rodovia não migrada, na mesma janela de data
+  const timelineData = useMemo(
+    () => [...dateFilteredProjects, ...dateFilteredPortfolioProjects],
+    [dateFilteredProjects, dateFilteredPortfolioProjects]
   );
 
   // O filtro antigo (Clientes/Disciplinas/Lupa) vive APENAS nos Indicadores. As demais
@@ -594,7 +602,7 @@ export default function App() {
           <Suspense fallback={<TabLoading />}>
             {isAdmin && activeTab === 'dashboard' && <DataMigration projects={projects} onUpdateProject={updateProject} />}
             {activeTab === 'dashboard' && <div className="animate-in fade-in zoom-in-95 duration-200"><Dashboard data={dashboardData} supplyOrders={filteredSupplyOrders} clients={clients} isDarkMode={isDarkMode} holidays={holidays} /></div>}
-            {activeTab === 'timeline' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectTimeline projects={dateFilteredProjects} holidays={holidays} clients={clients} /></div>}
+            {activeTab === 'timeline' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectTimeline projects={timelineData} holidays={holidays} clients={clients} /></div>}
             {activeTab === 'obras' && <div className="animate-in fade-in zoom-in-95 duration-200"><ObrasPage clients={clients} projectCount={(name) => projects.filter(p => p.client === name).length} onAddClient={handleAddClient} onUpdateClient={handleUpdateClient} onDeleteClient={handleDeleteClient} /></div>}
             {activeTab === 'projects' && <div className="animate-in fade-in zoom-in-95 duration-200"><CanteiroPage projects={legacyProjects} clients={clients} onAdd={addProject} onUpdate={updateProject} onDelete={deleteProject} onAddRevision={addProjectRevision} onPromote={promoteProjectToExecutive} holidays={holidays} readOnly={isReadOnly} /></div>}
             {activeTab === 'catalogo' && <div className="animate-in fade-in zoom-in-95 duration-200"><CatalogoPage referencias={referencias} conjuntos={conjuntos} clients={rodoviaClients} holidays={holidays} readOnly={isReadOnly} onAdd={handleAddReferencia} onUpdate={handleUpdateReferencia} onDelete={handleDeleteReferencia} onMove={handleMoveReferencia} onInstanciar={handleInstanciar} onInstanciarLote={handleInstanciarLote} onAddMany={handleAddReferencias} onDeleteMany={handleDeleteReferencias} /></div>}
