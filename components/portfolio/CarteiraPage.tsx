@@ -306,9 +306,9 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
                 <KpiCard color="slate" icon={<FolderKanban size={16} />} label="Todas" value={kpis.total} active={statusFilter === 'ALL'} onClick={() => setStatusFilter('ALL')} />
                 <KpiCard color="slate" icon={<ListTodo size={16} />} label="A Fazer" value={kpis.aFazer} active={statusFilter === PranchaStatus.A_FAZER} onClick={() => setStatusFilter(f => f === PranchaStatus.A_FAZER ? 'ALL' : PranchaStatus.A_FAZER)} />
-                <KpiCard color="blue" icon={<Play size={16} />} label="Em Andamento" value={kpis.emAndamento} active={statusFilter === PranchaStatus.EM_ANDAMENTO} onClick={() => setStatusFilter(f => f === PranchaStatus.EM_ANDAMENTO ? 'ALL' : PranchaStatus.EM_ANDAMENTO)} />
+                <KpiCard color="amber" icon={<Play size={16} />} label="Em Andamento" value={kpis.emAndamento} active={statusFilter === PranchaStatus.EM_ANDAMENTO} onClick={() => setStatusFilter(f => f === PranchaStatus.EM_ANDAMENTO ? 'ALL' : PranchaStatus.EM_ANDAMENTO)} />
                 <KpiCard color="violet" icon={<CheckCircle2 size={16} />} label="Concluídas" value={kpis.concluido} active={statusFilter === PranchaStatus.CONCLUIDO} onClick={() => setStatusFilter(f => f === PranchaStatus.CONCLUIDO ? 'ALL' : PranchaStatus.CONCLUIDO)} />
-                <KpiCard color="amber" icon={<Send size={16} />} label="Aguardando" value={kpis.aguardando} active={statusFilter === PranchaStatus.ENVIADO} onClick={() => setStatusFilter(f => f === PranchaStatus.ENVIADO ? 'ALL' : PranchaStatus.ENVIADO)} />
+                <KpiCard color="blue" icon={<Send size={16} />} label="Aguardando" value={kpis.aguardando} active={statusFilter === PranchaStatus.ENVIADO} onClick={() => setStatusFilter(f => f === PranchaStatus.ENVIADO ? 'ALL' : PranchaStatus.ENVIADO)} />
                 <KpiCard color="emerald" icon={<BadgeCheck size={16} />} label="Aprovadas" value={kpis.aprovado} active={statusFilter === PranchaStatus.APROVADO} onClick={() => setStatusFilter(f => f === PranchaStatus.APROVADO ? 'ALL' : PranchaStatus.APROVADO)} />
                 <KpiCard color="rose" icon={<ThumbsDown size={16} />} label="Reprovadas" value={kpis.reprovado} active={statusFilter === PranchaStatus.REPROVADO} onClick={() => setStatusFilter(f => f === PranchaStatus.REPROVADO ? 'ALL' : PranchaStatus.REPROVADO)} />
                 <KpiCard color="red" icon={<AlertTriangle size={16} />} label="Atrasadas" value={kpis.atrasado} active={statusFilter === 'OVERDUE'} onClick={() => setStatusFilter(f => f === 'OVERDUE' ? 'ALL' : 'OVERDUE')} />
@@ -425,7 +425,7 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
                                                 /* Ações em LOTE do conjunto: movem todas as pranchas elegíveis de uma vez */
                                                 <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                                                     {countMovable(todas, PranchaStatus.EM_ANDAMENTO) > 0 && (
-                                                        <PranchaBtn title={`Iniciar todas as elegíveis (${countMovable(todas, PranchaStatus.EM_ANDAMENTO)})`} onClick={() => askMoveLote(todas, PranchaStatus.EM_ANDAMENTO, `do conjunto "${conjunto.base}"`)}><Play size={13} /></PranchaBtn>
+                                                        <PranchaBtn title={`Iniciar todas as elegíveis (${countMovable(todas, PranchaStatus.EM_ANDAMENTO)})`} tone="text-amber-600" onClick={() => askMoveLote(todas, PranchaStatus.EM_ANDAMENTO, `do conjunto "${conjunto.base}"`)}><Play size={13} /></PranchaBtn>
                                                     )}
                                                     {countMovable(todas, PranchaStatus.CONCLUIDO) > 0 && (
                                                         <PranchaBtn title={`Concluir todas as elegíveis (${countMovable(todas, PranchaStatus.CONCLUIDO)})`} tone="text-violet-600" onClick={() => askMoveLote(todas, PranchaStatus.CONCLUIDO, `do conjunto "${conjunto.base}"`)}><CheckCircle2 size={13} /></PranchaBtn>
@@ -526,7 +526,7 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
                                                     {!readOnly && (
                                                         <div className="flex items-center gap-1 flex-shrink-0">
                                                             {canPranchaTransition(p.status, PranchaStatus.EM_ANDAMENTO) && (
-                                                                <PranchaBtn title={p.status === PranchaStatus.REPROVADO ? 'Revisar (reabre execução)' : 'Iniciar execução'} onClick={() => askMovePrancha(p, PranchaStatus.EM_ANDAMENTO)}>
+                                                                <PranchaBtn title={p.status === PranchaStatus.REPROVADO ? 'Revisar (reabre execução)' : 'Iniciar execução'} tone="text-amber-600" onClick={() => askMovePrancha(p, PranchaStatus.EM_ANDAMENTO)}>
                                                                     {p.status === PranchaStatus.REPROVADO ? <RotateCcw size={13} /> : <Play size={13} />}
                                                                 </PranchaBtn>
                                                             )}
@@ -567,7 +567,7 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
                 <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-white dark:bg-slate-800 border border-violet-300 dark:border-violet-700 rounded-xl shadow-2xl px-4 py-2.5 flex items-center gap-2 flex-wrap justify-center animate-in fade-in slide-in-from-bottom-2 print:hidden">
                     <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{selPranchas.length} selecionada(s)</span>
                     <span className="w-px h-4 bg-slate-200 dark:bg-slate-700"></span>
-                    <LoteBtn label="Iniciar" count={countMovable(selPranchas, PranchaStatus.EM_ANDAMENTO)} tone="text-brand-700 dark:text-brand-400" onClick={() => askMoveLote(selPranchas, PranchaStatus.EM_ANDAMENTO, 'selecionada(s)', () => setSelecionadas(new Set()))} />
+                    <LoteBtn label="Iniciar" count={countMovable(selPranchas, PranchaStatus.EM_ANDAMENTO)} tone="text-amber-600 dark:text-amber-400" onClick={() => askMoveLote(selPranchas, PranchaStatus.EM_ANDAMENTO, 'selecionada(s)', () => setSelecionadas(new Set()))} />
                     <LoteBtn label="Concluir" count={countMovable(selPranchas, PranchaStatus.CONCLUIDO)} tone="text-violet-600 dark:text-violet-400" onClick={() => askMoveLote(selPranchas, PranchaStatus.CONCLUIDO, 'selecionada(s)', () => setSelecionadas(new Set()))} />
                     <LoteBtn label="Enviar" count={countMovable(selPranchas, PranchaStatus.ENVIADO)} tone="text-blue-600 dark:text-blue-400" onClick={() => askMoveLote(selPranchas, PranchaStatus.ENVIADO, 'selecionada(s)', () => setSelecionadas(new Set()))} />
                     <LoteBtn label="Aprovar" count={countMovable(selPranchas, PranchaStatus.APROVADO)} tone="text-emerald-600 dark:text-emerald-400" onClick={() => askMoveLote(selPranchas, PranchaStatus.APROVADO, 'selecionada(s)', () => setSelecionadas(new Set()))} />

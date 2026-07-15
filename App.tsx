@@ -9,7 +9,7 @@ import { AdvancedFilter } from './components/AdvancedFilter';
 import { DataMigration } from './components/DataMigration';
 import { ImportReviewModal, StagingRow } from './components/ImportReviewModal';
 import { CerneLogo } from './components/CerneLogo';
-import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Database, LogIn, LogOut, Truck, HardHat, Search, ChevronDown, CheckSquare, Square, FileText, MoreHorizontal, BookOpen, FolderKanban, Trash2, Route } from 'lucide-react';
+import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard, Calendar, List, CalendarDays, Download, Database, LogIn, LogOut, Truck, HardHat, Search, ChevronDown, CheckSquare, Square, FileText, MoreHorizontal, BookOpen, FolderKanban, Trash2, Route, Building2 } from 'lucide-react';
 
 // Code-splitting por aba: cada tela pesada vira um chunk próprio (o Dashboard carrega
 // o recharts, por exemplo) e só é baixada quando o usuário abre a aba correspondente.
@@ -440,7 +440,13 @@ export default function App() {
             <NavTab active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutDashboard size={16} className="min-w-[16px]" />} label="Indicadores" />
             <NavTab active={activeTab === 'timeline'} onClick={() => setActiveTab('timeline')} icon={<Calendar size={16} className="min-w-[16px]" />} label="Cronograma" />
             <NavTab active={activeTab === 'obras'} onClick={() => setActiveTab('obras')} icon={<HardHat size={16} className="min-w-[16px]" />} label="Obras" />
-            <NavTab active={activeTab === 'projects'} onClick={() => setActiveTab('projects')} icon={<List size={16} className="min-w-[16px]" />} label="Canteiro de Obras" />
+            {/* Grupo destacado: obras de CANTEIRO/BASES (ciclo completo dentro da própria aba) */}
+            <div className="flex items-center h-9 my-auto mx-1 rounded-lg border border-emerald-300/70 dark:border-emerald-700/50 bg-emerald-50/70 dark:bg-emerald-900/15 flex-shrink-0 overflow-hidden">
+              <span className="self-stretch flex items-center gap-1 pl-2.5 pr-2 text-[9px] font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-500 bg-emerald-100/70 dark:bg-emerald-900/25 border-r border-emerald-200/70 dark:border-emerald-800/40" title="Aba exclusiva de canteiros e bases operacionais">
+                <Building2 size={11} className="min-w-[11px]" /> Canteiros
+              </span>
+              <NavTab active={activeTab === 'projects'} onClick={() => setActiveTab('projects')} icon={<List size={16} className="min-w-[16px]" />} label="Canteiro de Obras" />
+            </div>
             {/* Grupo destacado: fluxo exclusivo de OBRAS DE RODOVIA (referência → replicação por base) */}
             <div className="flex items-center h-9 my-auto mx-1 rounded-lg border border-amber-300/70 dark:border-amber-700/50 bg-amber-50/70 dark:bg-amber-900/15 flex-shrink-0 overflow-hidden">
               <span className="self-stretch flex items-center gap-1 pl-2.5 pr-2 text-[9px] font-bold uppercase tracking-widest text-amber-700 dark:text-amber-500 bg-amber-100/70 dark:bg-amber-900/25 border-r border-amber-200/70 dark:border-amber-800/40" title="Abas exclusivas de obras de rodovia">

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { BookOpen, Plus, Send, BadgeCheck, ThumbsDown, FileEdit, Trash2, Layers, X, ChevronDown, ChevronRight, MapPin, GripVertical, PencilLine, Play, CheckCircle2, Hammer, Timer, CopyPlus, CheckSquare, Square, Loader2, Wand2, FastForward } from 'lucide-react';
+import { BookOpen, Plus, Send, BadgeCheck, ThumbsDown, FileEdit, Trash2, Layers, X, ChevronDown, ChevronRight, MapPin, GripVertical, PencilLine, Play, CheckCircle2, Timer, CopyPlus, CheckSquare, Square, Loader2, Wand2, FastForward } from 'lucide-react';
 import { useObraAtiva, ObraSelectScreen, ObraAtivaBar, ObraCardStat } from '../ObraGate';
 import { ClientDoc, Discipline, Period, RevisionReason } from '../../types';
 import { Referencia, Conjunto, RefStatus, GabaritoItem, canRefTransition, catalogoKpis, buildCodigoCompleto, inferRefStatusFromDates, planInstanciacaoLote, slugify, DISCIPLINA_SIGLA, gerarReferenciasDisciplinas, planGerarDisciplinasLote, swapDisciplinaSigla, papelFolha, nextFolhaNumber, renomearPapeisAuto } from '../../domain/portfolio';
@@ -176,7 +176,7 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
                 <KpiCard color="slate" icon={<BookOpen size={16} />} label="Todos os Tipos" value={kpis.total} active={statusFilter === 'ALL'} onClick={() => setStatusFilter('ALL')} />
                 <KpiCard color="slate" icon={<FileEdit size={16} />} label="Rascunho" value={kpis.rascunho} active={statusFilter === RefStatus.RASCUNHO} onClick={() => setStatusFilter(f => f === RefStatus.RASCUNHO ? 'ALL' : RefStatus.RASCUNHO)} />
-                <KpiCard color="amber" icon={<Hammer size={16} />} label="Em Elaboração" value={kpis.emElaboracao} active={statusFilter === RefStatus.EM_ELABORACAO} onClick={() => setStatusFilter(f => f === RefStatus.EM_ELABORACAO ? 'ALL' : RefStatus.EM_ELABORACAO)} />
+                <KpiCard color="amber" icon={<Play size={16} />} label="Em Elaboração" value={kpis.emElaboracao} active={statusFilter === RefStatus.EM_ELABORACAO} onClick={() => setStatusFilter(f => f === RefStatus.EM_ELABORACAO ? 'ALL' : RefStatus.EM_ELABORACAO)} />
                 <KpiCard color="violet" icon={<CheckCircle2 size={16} />} label="Elaborados" value={kpis.elaborado} active={statusFilter === RefStatus.ELABORADO} onClick={() => setStatusFilter(f => f === RefStatus.ELABORADO ? 'ALL' : RefStatus.ELABORADO)} />
                 <KpiCard color="blue" icon={<Send size={16} />} label="Com o Cliente" value={kpis.enviado} active={statusFilter === RefStatus.ENVIADO} onClick={() => setStatusFilter(f => f === RefStatus.ENVIADO ? 'ALL' : RefStatus.ENVIADO)} />
                 <KpiCard color="emerald" icon={<BadgeCheck size={16} />} label="Tipos Aprovados" value={kpis.aprovado} active={statusFilter === RefStatus.APROVADO} onClick={() => setStatusFilter(f => f === RefStatus.APROVADO ? 'ALL' : RefStatus.APROVADO)} />
@@ -302,7 +302,7 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
                                                     <ActionBtn title="Concluir elaboração (fecha o tempo de execução)" tone="text-violet-600" onClick={() => askMove(ref, RefStatus.ELABORADO)}><CheckCircle2 size={15} /></ActionBtn>
                                                 )}
                                                 {canRefTransition(ref.statusAprovacao, RefStatus.ENVIADO) && (
-                                                    <ActionBtn title="Registrar envio ao cliente" onClick={() => askMove(ref, RefStatus.ENVIADO)}><Send size={15} /></ActionBtn>
+                                                    <ActionBtn title="Registrar envio ao cliente" tone="text-blue-600" onClick={() => askMove(ref, RefStatus.ENVIADO)}><Send size={15} /></ActionBtn>
                                                 )}
                                                 {canRefTransition(ref.statusAprovacao, RefStatus.APROVADO) && (
                                                     <ActionBtn title="Aprovar" tone="text-emerald-600" onClick={() => askMove(ref, RefStatus.APROVADO)}><BadgeCheck size={15} /></ActionBtn>
