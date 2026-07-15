@@ -14,7 +14,7 @@ import { UploadCloud, Filter, X, Layers, FolderInput, Moon, Sun, LayoutDashboard
 // Code-splitting por aba: cada tela pesada vira um chunk próprio (o Dashboard carrega
 // o recharts, por exemplo) e só é baixada quando o usuário abre a aba correspondente.
 const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
-const ProjectList = lazy(() => import('./components/ProjectList').then(m => ({ default: m.ProjectList })));
+const CanteiroPage = lazy(() => import('./components/canteiro/CanteiroPage').then(m => ({ default: m.CanteiroPage })));
 const ProjectTimeline = lazy(() => import('./components/ProjectTimeline').then(m => ({ default: m.ProjectTimeline })));
 const ObrasPage = lazy(() => import('./components/ObrasPage').then(m => ({ default: m.ObrasPage })));
 const SupplyPage = lazy(() => import('./components/supply/SupplyPage').then(m => ({ default: m.SupplyPage })));
@@ -440,7 +440,7 @@ export default function App() {
             <NavTab active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutDashboard size={16} className="min-w-[16px]" />} label="Indicadores" />
             <NavTab active={activeTab === 'timeline'} onClick={() => setActiveTab('timeline')} icon={<Calendar size={16} className="min-w-[16px]" />} label="Cronograma" />
             <NavTab active={activeTab === 'obras'} onClick={() => setActiveTab('obras')} icon={<HardHat size={16} className="min-w-[16px]" />} label="Obras" />
-            <NavTab active={activeTab === 'projects'} onClick={() => setActiveTab('projects')} icon={<List size={16} className="min-w-[16px]" />} label="Projetos" />
+            <NavTab active={activeTab === 'projects'} onClick={() => setActiveTab('projects')} icon={<List size={16} className="min-w-[16px]" />} label="Canteiro de Obras" />
             {/* Grupo destacado: fluxo exclusivo de OBRAS DE RODOVIA (referência → replicação por base) */}
             <div className="flex items-center h-9 my-auto mx-1 rounded-lg border border-amber-300/70 dark:border-amber-700/50 bg-amber-50/70 dark:bg-amber-900/15 flex-shrink-0 overflow-hidden">
               <span className="self-stretch flex items-center gap-1 pl-2.5 pr-2 text-[9px] font-bold uppercase tracking-widest text-amber-700 dark:text-amber-500 bg-amber-100/70 dark:bg-amber-900/25 border-r border-amber-200/70 dark:border-amber-800/40" title="Abas exclusivas de obras de rodovia">
@@ -522,7 +522,7 @@ export default function App() {
                           {activeTab === 'projects' && (
                             <ActionMenuItem
                               icon={<Layers size={16} />}
-                              label="Edição em Lote (Projetos)"
+                              label="Edição em Lote (Canteiro)"
                               onClick={() => {
                                 setIsBatchEditOpen(true);
                                 setIsActionsMenuOpen(false);
@@ -590,7 +590,7 @@ export default function App() {
             {activeTab === 'dashboard' && <div className="animate-in fade-in zoom-in-95 duration-200"><Dashboard data={dashboardData} supplyOrders={filteredSupplyOrders} clients={clients} isDarkMode={isDarkMode} holidays={holidays} /></div>}
             {activeTab === 'timeline' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectTimeline projects={dateFilteredProjects} holidays={holidays} clients={clients} /></div>}
             {activeTab === 'obras' && <div className="animate-in fade-in zoom-in-95 duration-200"><ObrasPage clients={clients} projectCount={(name) => projects.filter(p => p.client === name).length} onAddClient={handleAddClient} onUpdateClient={handleUpdateClient} onDeleteClient={handleDeleteClient} /></div>}
-            {activeTab === 'projects' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectList projects={legacyProjects} clients={clients} onUpdate={updateProject} onDelete={deleteProject} onAddRevision={addProjectRevision} onPromote={promoteProjectToExecutive} holidays={holidays} readOnly={isReadOnly} /></div>}
+            {activeTab === 'projects' && <div className="animate-in fade-in zoom-in-95 duration-200"><CanteiroPage projects={legacyProjects} clients={clients} onAdd={addProject} onUpdate={updateProject} onDelete={deleteProject} onAddRevision={addProjectRevision} onPromote={promoteProjectToExecutive} holidays={holidays} readOnly={isReadOnly} /></div>}
             {activeTab === 'catalogo' && <div className="animate-in fade-in zoom-in-95 duration-200"><CatalogoPage referencias={referencias} conjuntos={conjuntos} clients={rodoviaClients} holidays={holidays} readOnly={isReadOnly} onAdd={handleAddReferencia} onUpdate={handleUpdateReferencia} onDelete={handleDeleteReferencia} onMove={handleMoveReferencia} onInstanciar={handleInstanciar} onInstanciarLote={handleInstanciarLote} onAddMany={handleAddReferencias} onDeleteMany={handleDeleteReferencias} /></div>}
             {activeTab === 'carteira' && <div className="animate-in fade-in zoom-in-95 duration-200"><CarteiraPage referencias={referencias} conjuntos={conjuntos} pranchas={pranchas} clients={rodoviaClients} holidays={holidays} readOnly={isReadOnly} legacyPendingCount={legacyPendingCount} isMigrationAdmin={isMigrationAdmin} onMigrate={handleMigratePortfolio} onMovePrancha={handleMovePrancha} onMovePranchasLote={handleMovePranchasLote} onUpdatePrancha={handleUpdatePrancha} onAddPrancha={handleAddPrancha} onDeletePrancha={handleDeletePrancha} onDeleteConjunto={handleDeleteConjunto} /></div>}
             {activeTab === 'suprimentos' && <div className="animate-in fade-in zoom-in-95 duration-200"><SupplyPage orders={supplyOrders} clients={clients} holidays={holidays} currentUser={currentUser ? formatUsername(currentUser.email) : ''} isAdmin={isMigrationAdmin} readOnly={isReadOnly} onAdd={handleAddSupplyOrder} onUpdate={handleUpdateSupplyOrder} onDelete={handleDeleteSupplyOrder} onMoveStatus={handleMoveSupplyStatus} onToggleItem={handleToggleSupplyItem} onMigrateLegacy={handleMigrateLegacyPurchases} /></div>}
@@ -753,8 +753,8 @@ export default function App() {
                     <List size={20} />
                   </div>
                   <div className="text-left">
-                    <span className="block font-semibold text-slate-800 dark:text-slate-200">Projetos</span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">Controle de Arquivos</span>
+                    <span className="block font-semibold text-slate-800 dark:text-slate-200">Canteiro de Obras</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">Controle de Arquivos de Projeto</span>
                   </div>
                 </div>
                 <Download size={18} className="text-slate-400 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors" />

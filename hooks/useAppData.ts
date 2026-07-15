@@ -104,13 +104,16 @@ export function useAppData(projectFilter: ProjectFilterState) {
     const updateProject = (updated: ProjectFile) => updateProjectInDb(updated);
     const deleteProject = (id: string) => { deleteProjectFromDb(id); };
 
-    const addProjectRevision = (id: string, reason: RevisionReason, comment: string) => {
+    // Data/período opcionais: quando o modal de revisão pergunta a data de
+    // reabertura, ela vale como início da R+1 (default: hoje/agora)
+    const addProjectRevision = (id: string, reason: RevisionReason, comment: string, startDate?: string, startPeriod?: Period) => {
         const originalProject = projects.find(p => p.id === id);
         if (!originalProject) return;
         updateProjectInDb({ ...originalProject, status: Status.REVISED });
         const { id: _, ...projectData } = originalProject;
 
-        const currentPeriod: Period = new Date().getHours() < 12 ? 'MANHA' : 'TARDE';
+        const effectiveStart = startDate || new Date().toISOString().split('T')[0];
+        const effectivePeriod: Period = startPeriod || (new Date().getHours() < 12 ? 'MANHA' : 'TARDE');
 
         addProject({
             ...projectData,
@@ -118,10 +121,10 @@ export function useAppData(projectFilter: ProjectFilterState) {
             groupId: originalProject.groupId || crypto.randomUUID(),
             revision: (originalProject.revision || 0) + 1,
             status: Status.IN_PROGRESS,
-            startDate: new Date().toISOString().split('T')[0],
-            startPeriod: currentPeriod,
+            startDate: effectiveStart,
+            startPeriod: effectivePeriod,
             endDate: '', sendDate: '', feedbackDate: '', blockedDays: 0,
-            revisions: [{ id: crypto.randomUUID(), date: new Date().toISOString().split('T')[0], reason, comment }]
+            revisions: [{ id: crypto.randomUUID(), date: effectiveStart, reason, comment }]
         });
     };
 
