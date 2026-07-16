@@ -601,7 +601,7 @@ export default function App() {
         <div className="mt-6 print:mt-0">
           <Suspense fallback={<TabLoading />}>
             {isAdmin && activeTab === 'dashboard' && <DataMigration projects={projects} onUpdateProject={updateProject} />}
-            {activeTab === 'dashboard' && <div className="animate-in fade-in zoom-in-95 duration-200"><Dashboard data={dashboardData} supplyOrders={filteredSupplyOrders} clients={clients} isDarkMode={isDarkMode} holidays={holidays} /></div>}
+            {activeTab === 'dashboard' && <div className="animate-in fade-in zoom-in-95 duration-200"><Dashboard data={dashboardData} clients={clients} isDarkMode={isDarkMode} holidays={holidays} /></div>}
             {activeTab === 'timeline' && <div className="animate-in fade-in zoom-in-95 duration-200"><ProjectTimeline projects={timelineData} holidays={holidays} clients={clients} /></div>}
             {activeTab === 'obras' && <div className="animate-in fade-in zoom-in-95 duration-200"><ObrasPage clients={clients} projectCount={(name) => projects.filter(p => p.client === name).length} onAddClient={handleAddClient} onUpdateClient={handleUpdateClient} onDeleteClient={handleDeleteClient} /></div>}
             {activeTab === 'projects' && <div className="animate-in fade-in zoom-in-95 duration-200"><CanteiroPage projects={legacyProjects} clients={clients} onAdd={addProject} onUpdate={updateProject} onDelete={deleteProject} onAddRevision={addProjectRevision} onPromote={promoteProjectToExecutive} holidays={holidays} readOnly={isReadOnly} /></div>}

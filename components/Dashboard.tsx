@@ -1,8 +1,8 @@
 
 import React, { useMemo, useState, useCallback, useRef } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, ReferenceLine, ComposedChart } from 'recharts';
-import { ProjectFile, Discipline, Status, SupplyOrder, SupplyStatus, ProjectPhase, ClientDoc, ObraStatus, RevisionReason } from '../types';
-import { format, parseISO, isValid, isAfter, isSameDay, addDays, startOfDay, endOfDay, subMonths, startOfMonth, differenceInCalendarDays } from 'date-fns';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, ReferenceLine, ComposedChart, LabelList } from 'recharts';
+import { ProjectFile, Discipline, Status, ProjectPhase, ClientDoc, ObraStatus, RevisionReason } from '../types';
+import { format, parseISO, isValid, isAfter, isSameDay, addDays, startOfDay, subMonths, startOfMonth, differenceInCalendarDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { LayoutDashboard, FileDown, Activity, Clock3, AlertTriangle, Send, Target, CheckCircle2 } from 'lucide-react';
 import { getProjectBaseName, getRevisionNumber, calculateBusinessDaysWithHolidays, calculateNetExecutionDuration, calculateDeadlineDate, getEffectiveStatus } from '../utils';
@@ -13,7 +13,6 @@ import { DrillDownModal, DrillDownPayload } from './DrillDownModal';
 
 interface DashboardProps {
   data: ProjectFile[];
-  supplyOrders?: SupplyOrder[];
   clients?: ClientDoc[];
   isDarkMode?: boolean;
   holidays: string[];
@@ -57,16 +56,6 @@ interface SlaAlert {
   daysLate: number;
 }
 
-interface WipItem {
-  id: string;
-  filename: string;
-  client: string;
-  discipline: string;
-  phase: string;
-  days: number;
-  baseline: number | null;
-}
-
 const SectionHeader: React.FC<{ label: string }> = ({ label }) => (
   <div className="flex items-center gap-3 mt-8 mb-4 print:mt-4">
     <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 shrink-0">{label}</h3>
@@ -94,7 +83,7 @@ const KpiTile: React.FC<{ label: string; value: React.ReactNode; sub?: React.Rea
 const metaAccent = (pct: number, meta: number) =>
   pct >= meta ? 'text-emerald-500' : pct >= meta - 15 ? 'text-amber-500' : 'text-rose-500';
 
-export const Dashboard: React.FC<DashboardProps> = ({ data, supplyOrders = [], clients = [], isDarkMode = false, holidays }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ data, clients = [], isDarkMode = false, holidays }) => {
   const axisColor = isDarkMode ? '#94a3b8' : '#64748b';
   const gridColor = isDarkMode ? '#334155' : '#e2e8f0';
   const tooltipBg = isDarkMode ? '#1e293b' : '#ffffff';
@@ -116,13 +105,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, supplyOrders = [], c
 
   // Tiles executivos navegam até o painel correspondente
   const alertsRef = useRef<HTMLDivElement>(null);
-  const wipRef = useRef<HTMLDivElement>(null);
   const goToAlerts = useCallback(() => {
     setSlaCollapsed(false);
     setTimeout(() => alertsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
-  }, []);
-  const goToWip = useCallback(() => {
-    wipRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
 
@@ -148,7 +133,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, supplyOrders = [], c
       latest: ProjectFile; latestRev: number;
     }> = {};
 
-    const wipCandidates: Omit<WipItem, 'baseline'>[] = [];
+    let totalWipFiles = 0;
+    let volumeRevisoes = 0;
     const deliveredMonthly: Record<string, number> = {};
     const startedMonthly: Record<string, number> = {};
     let deliveries30 = 0;
@@ -223,10 +209,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, supplyOrders = [], c
       // 4. Volume / carga de trabalho — todos os arquivos, revisões inclusas (carga real)
       {
         if (!volumeMap[project.client]) {
-          volumeMap[project.client] = { name: project.client, total: 0 };
+          // Toda disciplina nasce zerada: o rótulo de total ancora no topo da
+          // pilha via última barra, que precisa existir em todos os clientes
+          volumeMap[project.client] = { name: project.client, total: 0, ...Object.fromEntries(Object.values(Discipline).map(d => [d, 0])) };
         }
         volumeMap[project.client].total += 1;
         volumeMap[project.client][project.discipline] = (volumeMap[project.client][project.discipline] || 0) + 1;
+        if (rev > 0) volumeRevisoes++; // arquivo que é reemissão (R01+) = retrabalho no volume
       }
 
       // S3: Cycle Time (startDate → feedbackDate) — apenas ciclos completos
@@ -244,16 +233,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, supplyOrders = [], c
           }
       }
 
-      // 5. Aging WIP — arquivos em execução, dias úteis desde o início (desconta pausas)
-      if (project.status === Status.IN_PROGRESS && project.startDate && isValid(parseISO(project.startDate))) {
-          const start = parseISO(project.startDate);
-          if (start <= today) {
-              const days = calculateNetExecutionDuration({ ...project, endDate: todayStr, endPeriod: 'TARDE' }, holidays);
-              wipCandidates.push({
-                  id: project.id, filename: project.filename, client: project.client,
-                  discipline: project.discipline, phase: projectPhase, days,
-              });
-          }
+      // 5. Arquivos em execução (WIP) — alimenta o subtítulo do tile "Em Execução"
+      if (project.status === Status.IN_PROGRESS && project.startDate && isValid(parseISO(project.startDate)) && parseISO(project.startDate) <= today) {
+          totalWipFiles++;
       }
 
       // 6. Entregas (evento de envio ao cliente): sendDate, ou endDate quando execução terminou
@@ -358,18 +340,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, supplyOrders = [], c
       nExec: timeByDiscipline[d].execCount,
     }));
 
-    // Baseline de aging: média histórica de execução da disciplina/fase
-    const execBaseline: Record<string, number | null> = {};
-    Object.keys(timeByDiscipline).forEach(d => {
-        const t = timeByDiscipline[d];
-        execBaseline[`${d}|${ProjectPhase.PRELIMINARY}`] = t.prelimCount ? t.prelimTotal / t.prelimCount : null;
-        execBaseline[`${d}|${ProjectPhase.EXECUTIVE}`] = t.execCount ? t.execTotal / t.execCount : null;
-    });
-    const agingWip: WipItem[] = wipCandidates
-        .map(w => ({ ...w, baseline: execBaseline[`${w.discipline}|${w.phase}`] ?? null }))
-        .sort((a, b) => b.days - a.days)
-        .slice(0, 8);
-
     const clientResponseData = Object.keys(clientResponseMap).map(c => ({
         name: c,
         avgDays: clientResponseMap[c].count ? Number((clientResponseMap[c].totalDays / clientResponseMap[c].count).toFixed(1)) : 0,
@@ -385,6 +355,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, supplyOrders = [], c
     }));
 
     const volumeData = Object.values(volumeMap).sort((a: any, b: any) => b.total - a.total);
+    // Resumo da carga: massa total de arquivos, obras no filtro e retrabalho (R01+)
+    const volumeResumo = {
+      files: volumeData.reduce((acc: number, v: any) => acc + v.total, 0),
+      obras: volumeData.length,
+      revisoes: volumeRevisoes,
+    };
 
     const reasonsData = Object.entries(reasonsMap)
       .map(([name, count]) => ({ name, count, category: REASON_CATEGORY[name] || 'Outros' as ReasonCategory }))
@@ -434,49 +410,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, supplyOrders = [], c
     });
 
     return {
-      executionData, fttData, volumeData, reasonsData, clientResponseData, cycleTimeData,
+      executionData, fttData, volumeData, volumeResumo, reasonsData, clientResponseData, cycleTimeData,
       otdPercentage, otdChartData, totalSlaMeasured, alerts,
       reasonCategoryTotals, totalReasons,
       iaprGlobal, closedGroups,
       groupsInProgress, groupsWaiting,
       deliveries30, deliveriesPrev30,
-      monthlyData, agingWip, totalWipFiles: wipCandidates.length,
+      monthlyData, totalWipFiles,
     };
   }, [filteredProjects, holidays, clients]);
 
-  // Entrega de Suprimentos: respeita os mesmos filtros do dashboard (cliente, disciplina, período de criação)
-  const supplyStats = useMemo(() => {
-    const filtered = supplyOrders.filter(o => {
-      if (filters.clients.length > 0 && !filters.clients.includes(o.client)) return false;
-      if (filters.disciplines.length > 0 && (!o.discipline || !filters.disciplines.includes(o.discipline))) return false;
-      if (filters.dateFrom && o.createdAt && isValid(parseISO(o.createdAt))) {
-        if (parseISO(o.createdAt) < startOfDay(parseISO(filters.dateFrom))) return false;
-      }
-      if (filters.dateTo && o.createdAt && isValid(parseISO(o.createdAt))) {
-        if (parseISO(o.createdAt) > endOfDay(parseISO(filters.dateTo))) return false;
-      }
-      return true;
-    });
-
-    // % de entrega sobre pedidos não-cancelados; atrasados = passaram do neededBy sem entregar
-    const active = filtered.filter(o => o.status !== SupplyStatus.CANCELED);
-    const total = active.length;
-    const done = active.filter(o => o.status === SupplyStatus.DELIVERED).length;
-    const pending = total - done;
-    const today = format(new Date(), 'yyyy-MM-dd');
-    const overdue = active.filter(o => o.status !== SupplyStatus.DELIVERED && o.neededBy && o.neededBy < today).length;
-    const percentage = total > 0 ? Math.round((done / total) * 100) : 0;
-
-    const chartData = [
-        { name: 'Entregue', value: done, color: '#10b981' },
-        { name: 'Pendente', value: pending, color: isDarkMode ? '#334155' : '#e2e8f0' }
-    ].filter(d => d.value > 0);
-
-    return { total, done, overdue, percentage, chartData };
-  }, [supplyOrders, filters, isDarkMode]);
-
   const deliveryDelta = stats.deliveries30 - stats.deliveriesPrev30;
-  const maxWipDays = stats.agingWip.length > 0 ? Math.max(...stats.agingWip.map(w => w.days), 1) : 1;
 
   return (
     <div className="animate-in fade-in zoom-in-95 duration-200">
@@ -526,7 +470,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, supplyOrders = [], c
           value={stats.groupsInProgress}
           sub={`${stats.totalWipFiles} arquivo${stats.totalWipFiles !== 1 ? 's' : ''} WIP`}
           icon={<Activity size={15} />}
-          onClick={goToWip}
         />
         <KpiTile
           label="Aguardando Cliente"
@@ -939,55 +882,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, supplyOrders = [], c
         </div>
       </div>
 
-      {/* Aging WIP */}
-      <div ref={wipRef} className="mt-6 scroll-mt-4 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 print:break-inside-avoid print:shadow-none print:border-slate-300">
-        <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">Projetos em Aberto — Aging WIP</h3>
-        <p className="text-xs text-slate-400 mb-4">
-          Dias úteis em execução (pausas descontadas) comparados à média histórica da disciplina/fase — os 8 mais antigos de {stats.totalWipFiles} em andamento
-        </p>
-        {stats.agingWip.length > 0 ? (
-          <div className="space-y-2">
-            {stats.agingWip.map(w => {
-              const over = w.baseline !== null && w.baseline > 0 ? w.days / w.baseline : null;
-              const barColor = over === null ? 'bg-sky-400' : over <= 1 ? 'bg-emerald-400' : over <= 1.5 ? 'bg-amber-400' : 'bg-rose-500';
-              return (
-                <div key={w.id} className="flex items-center gap-3">
-                  <div className="w-52 md:w-64 shrink-0">
-                    <p className="text-xs font-medium text-slate-700 dark:text-slate-200 truncate" title={w.filename}>{w.filename}</p>
-                    <p className="text-[10px] text-slate-400 truncate">{w.client} · {w.discipline} ({w.phase})</p>
-                  </div>
-                  <div className="flex-1 h-3 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.max((w.days / maxWipDays) * 100, 2)}%` }} />
-                  </div>
-                  <div className="w-28 text-right shrink-0">
-                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{w.days}d</span>
-                    <span className="text-[10px] text-slate-400 ml-1">
-                      {w.baseline !== null ? `/ méd. ${w.baseline.toFixed(0)}d` : '/ sem histórico'}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-            <div className="flex items-center gap-4 pt-2 text-[10px] text-slate-400">
-              <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400" /> dentro da média</span>
-              <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400" /> até 1,5× a média</span>
-              <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500" /> acima de 1,5×</span>
-              <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-sky-400" /> sem histórico p/ comparar</span>
-            </div>
-          </div>
-        ) : (
-          <div className="h-20 flex items-center justify-center text-slate-400 text-sm italic">
-            Nenhum projeto em execução no momento
-          </div>
-        )}
-      </div>
-
-      {/* ===== CARGA & MATERIAIS ===== */}
-      <SectionHeader label="Carga & Materiais" />
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 print:grid-cols-3">
-        <div className="col-span-1 md:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 print:break-inside-avoid print:shadow-none print:border-slate-300">
+      {/* ===== CARGA DE TRABALHO ===== */}
+      <SectionHeader label="Carga de Trabalho" />
+      <div className="mb-8">
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 print:break-inside-avoid print:shadow-none print:border-slate-300">
             <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">Carga de Trabalho por Cliente</h3>
-            <p className="text-xs text-slate-400 mb-4">Arquivos por disciplina — inclui revisões (esforço real da equipe)</p>
+            <p className="text-xs text-slate-400 mb-2">Arquivos por disciplina — inclui revisões (esforço real da equipe)</p>
+            <div className="flex flex-wrap gap-x-5 gap-y-1 mb-4 text-xs text-slate-500 dark:text-slate-400">
+              <span><b className="text-slate-700 dark:text-slate-200 text-sm">{stats.volumeResumo.files}</b> arquivos no total</span>
+              <span><b className="text-slate-700 dark:text-slate-200 text-sm">{stats.volumeResumo.obras}</b> obra{stats.volumeResumo.obras !== 1 ? 's' : ''}</span>
+              {stats.volumeResumo.obras > 0 && (
+                <span>média de <b className="text-slate-700 dark:text-slate-200 text-sm">{Math.round(stats.volumeResumo.files / stats.volumeResumo.obras)}</b> arquivos/obra</span>
+              )}
+              <span>
+                <b className={`text-sm ${stats.volumeResumo.revisoes > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-700 dark:text-slate-200'}`}>{stats.volumeResumo.revisoes}</b> revisõe{stats.volumeResumo.revisoes !== 1 ? 's' : ''} no volume
+                {stats.volumeResumo.files > 0 && <> ({Math.round((stats.volumeResumo.revisoes / stats.volumeResumo.files) * 100)}% de retrabalho)</>}
+              </span>
+            </div>
             <div className="h-80">
               {stats.volumeData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%" minWidth={0}>
@@ -997,8 +908,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, supplyOrders = [], c
                       <YAxis stroke={axisColor} fontSize={12} allowDecimals={false} />
                       <Tooltip cursor={{ fill: isDarkMode ? '#334155' : '#f1f5f9' }} contentStyle={{ borderRadius: '8px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', ...tooltipStyle }} itemStyle={{ color: tooltipText }} labelStyle={{ color: tooltipText }} />
                       <Legend />
-                      {Object.values(Discipline).map((discipline) => (
-                        <Bar key={discipline} dataKey={discipline} stackId="a" fill={DISCIPLINE_COLORS[discipline] || '#cbd5e1'} name={discipline} />
+                      {Object.values(Discipline).map((discipline, i, arr) => (
+                        <Bar key={discipline} dataKey={discipline} stackId="a" fill={DISCIPLINE_COLORS[discipline] || '#cbd5e1'} name={discipline}>
+                          {/* Massa total da obra no topo da pilha (ancorada na última barra, que existe zerada em todas) */}
+                          {i === arr.length - 1 && (
+                            <LabelList dataKey="total" position="top" offset={6} fill={isDarkMode ? '#e2e8f0' : '#334155'} fontSize={11} fontWeight={700} />
+                          )}
+                        </Bar>
                       ))}
                     </BarChart>
                   </ResponsiveContainer>
@@ -1008,43 +924,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, supplyOrders = [], c
                   </div>
               )}
             </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 print:break-inside-avoid print:shadow-none print:border-slate-300">
-           <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">Entrega de Suprimentos</h3>
-           <p className="text-xs text-slate-400 mb-2">Pedidos entregues sobre não-cancelados — respeita os filtros acima</p>
-           <div className="h-60 relative flex flex-col items-center justify-center">
-               {supplyStats.total > 0 ? (
-                   <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                       <PieChart>
-                           <Pie data={supplyStats.chartData} cx="50%" cy="50%" startAngle={180} endAngle={0} innerRadius={60} outerRadius={80} paddingAngle={0} dataKey="value">
-                               {supplyStats.chartData.map((entry, index) => (
-                                   <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
-                               ))}
-                           </Pie>
-                           <Tooltip formatter={(value: number) => [value, 'Pedidos']} contentStyle={tooltipStyle} itemStyle={{ color: tooltipText }} />
-                       </PieChart>
-                   </ResponsiveContainer>
-               ) : (
-                   <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 text-xs italic text-center pb-10">
-                       Nenhum pedido<br/>no filtro atual
-                   </div>
-               )}
-               {supplyStats.total > 0 && (
-                   <>
-                       <div className="absolute top-1/2 left-0 right-0 text-center -translate-y-1 transform">
-                           <span className="text-3xl font-bold text-slate-800 dark:text-white block">{supplyStats.percentage}%</span>
-                           <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Entregue</span>
-                       </div>
-                       <div className="mt-[-20px] text-center">
-                           <p className="text-xs text-slate-400 dark:text-slate-500">
-                               {supplyStats.done} entregues de {supplyStats.total} pedidos
-                               {supplyStats.overdue > 0 && <span className="text-rose-500 font-bold"> · {supplyStats.overdue} atrasados</span>}
-                           </p>
-                       </div>
-                   </>
-               )}
-           </div>
         </div>
       </div>
 
