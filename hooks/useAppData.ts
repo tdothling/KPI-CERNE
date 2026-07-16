@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { ProjectFile, ClientDoc, Status, RevisionReason, ProjectPhase, Period, ProjectFilterState, SupplyOrder, SupplyStatus, SiteType, TrashEntry } from '../types';
 import { subscribeToProjects, addProject, updateProjectInDb, deleteProjectFromDb, subscribeToClients, addClient, updateClientInDb, deleteClientFromDb, countLinkedRecords, subscribeToHolidays, saveHolidaysToDb, batchUpdateProjectsInDb, subscribeToSupplyOrders, addSupplyOrder, updateSupplyOrderInDb, deleteSupplyOrderFromDb, applySupplyStatusChange, patchSupplyOrderInDb, migrateLegacyPurchasesToSupply, subscribeToReferencias, subscribeToConjuntos, subscribeToPranchas, addReferenciaToDb, patchReferenciaInDb, deleteReferenciaFromDb, instanciarConjuntoInDb, instanciarLoteInDb, deleteConjuntoFromDb, patchPranchaInDb, batchUpdatePranchasInDb, addPranchaToDb, deletePranchaFromDb, migrateProjectsToPortfolio, subscribeToTrash, restoreFromTrash, purgeTrashEntries } from '../services/db';
-import { Referencia, Conjunto, Prancha, PranchaStatus, RefStatus, canRefTransition, canPranchaTransition, instanciarConjunto, planInstanciacaoLote, planMoverPranchasLote, slugify, refStatusAposInstanciar } from '../domain/portfolio';
+import { Referencia, Conjunto, Prancha, PranchaStatus, RefStatus, canRefTransition, canPranchaTransition, instanciarConjunto, planInstanciacaoLote, planMoverPranchasLote, slugify, refStatusAposInstanciar, buildCycleSnapshot } from '../domain/portfolio';
 import { buildStatusChangePatch } from '../components/supply/supplyUtils';
 import { formatUsername } from '../services/auth';
 import { subscribeToAuth } from '../services/auth';
@@ -251,14 +251,15 @@ export function useAppData(projectFilter: ProjectFilterState) {
             changes.startDate = date;
             changes.startPeriod = period;
             // Retrabalho após reprovação = nova revisão do molde, ciclo recomeça.
-            // O motivo entra no histórico — mesma estrutura da aba Projetos (KPI futuro).
+            // O motivo entra no histórico junto com a FOTO do ciclo encerrado —
+            // sem ela as datas da revisão anterior seriam perdidas ao zerar abaixo.
             if (ref.statusAprovacao === RefStatus.REPROVADO) {
                 changes.revisao = (ref.revisao || 0) + 1;
                 changes.endDate = ''; changes.sendDate = ''; changes.feedbackDate = '';
                 changes.blockedDays = 0; // o ciclo com o cliente recomeça na nova revisão
                 changes.revisions = [
                     ...(ref.revisions || []),
-                    { id: crypto.randomUUID(), date, reason: options.reason || RevisionReason.CLIENT_REQUEST, comment: options.comment || '' }
+                    { id: crypto.randomUUID(), date, reason: options.reason || RevisionReason.CLIENT_REQUEST, comment: options.comment || '', snapshot: buildCycleSnapshot(ref) }
                 ];
             }
         }
@@ -369,14 +370,15 @@ export function useAppData(projectFilter: ProjectFilterState) {
         if (to === PranchaStatus.EM_ANDAMENTO) {
             changes.startDate = date;
             changes.startPeriod = period;
-            // Reabertura após reprovação = revisão da prancha
+            // Reabertura após reprovação = revisão da prancha. A foto do ciclo
+            // encerrado vai junto — sem ela as datas anteriores seriam perdidas.
             if (prancha.status === PranchaStatus.REPROVADO) {
                 changes.revisao = (prancha.revisao || 0) + 1;
                 changes.endDate = ''; changes.sendDate = ''; changes.feedbackDate = '';
                 changes.blockedDays = 0; // o ciclo com o cliente recomeça na nova revisão
                 changes.revisions = [
                     ...(prancha.revisions || []),
-                    { id: crypto.randomUUID(), date, reason: options.reason || RevisionReason.CLIENT_REQUEST, comment: options.comment || '' }
+                    { id: crypto.randomUUID(), date, reason: options.reason || RevisionReason.CLIENT_REQUEST, comment: options.comment || '', snapshot: buildCycleSnapshot(prancha) }
                 ];
             }
         }

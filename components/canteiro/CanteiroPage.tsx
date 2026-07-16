@@ -372,6 +372,7 @@ function CanteiroInner({
                     title={`Histórico de revisões — ${historicoDe.filename}`}
                     revisions={historicoDe.revisions || []}
                     readOnly={readOnly}
+                    holidays={holidays}
                     onSave={(revs) => { onUpdate({ ...historicoDe, revisions: revs }); setHistoricoDe(null); }}
                     onClose={() => setHistoricoDe(null)}
                 />

@@ -15,7 +15,7 @@
 // As etapas de elaboração da referência existem para MEDIR o tempo de execução do
 // projeto preliminar (início→conclusão) e os dias com o cliente (envio→feedback).
 
-import { Discipline, Period, ProjectFile, ProjectPhase, Revision, Status } from '../types';
+import { Discipline, Period, ProjectFile, ProjectPhase, Revision, RevisionCycleSnapshot, Status } from '../types';
 import { getProjectBaseName } from '../utils';
 
 // Prefixos dos IDs sintéticos da projeção para os Indicadores (ver
@@ -617,6 +617,31 @@ export interface RevisaoStats {
     porMotivo: Record<string, number>;   // RevisionReason → quantidade
 }
 
+// Foto do ciclo encerrado, tirada ANTES de zerar as datas ao abrir uma revisão.
+// Vai dentro da entrada de `revisions[]` — é ela que permite consultar revisões
+// passadas e projetá-las nos Indicadores como docs "Revisado" (paridade com a
+// aba Projetos, onde cada revisão era um documento próprio).
+// Campos ausentes são OMITIDOS (Firestore rejeita `undefined`).
+export const buildCycleSnapshot = (item: {
+    revisao?: number;
+    startDate?: string; startPeriod?: Period;
+    endDate?: string; endPeriod?: Period;
+    sendDate?: string; sendPeriod?: Period;
+    feedbackDate?: string; feedbackPeriod?: Period;
+    blockedDays?: number;
+}): RevisionCycleSnapshot => ({
+    revisao: item.revisao || 0,
+    ...(item.startDate ? { startDate: item.startDate } : {}),
+    ...(item.startPeriod ? { startPeriod: item.startPeriod } : {}),
+    ...(item.endDate ? { endDate: item.endDate } : {}),
+    ...(item.endPeriod ? { endPeriod: item.endPeriod } : {}),
+    ...(item.sendDate ? { sendDate: item.sendDate } : {}),
+    ...(item.sendPeriod ? { sendPeriod: item.sendPeriod } : {}),
+    ...(item.feedbackDate ? { feedbackDate: item.feedbackDate } : {}),
+    ...(item.feedbackPeriod ? { feedbackPeriod: item.feedbackPeriod } : {}),
+    ...(item.blockedDays ? { blockedDays: item.blockedDays } : {}),
+});
+
 export const revisaoStats = (items: { revisions?: Revision[] }[]): RevisaoStats => {
     const stats: RevisaoStats = { totalRevisoes: 0, itensRevisados: 0, taxaRevisao: 0, porMotivo: {} };
     items.forEach(item => {
@@ -881,6 +906,12 @@ export const planPortfolioMigration = (input: MigrationInput): MigrationPlan => 
 // medir e inflariam "Em Execução". Como cada referência/prancha guarda as suas
 // revisões NO PRÓPRIO documento (revisao + revisions[]), cada uma vira 1 família
 // de revisão (groupId próprio) — o IAPR conta certo sem docs duplicados.
+//
+// Revisões passadas: cada entrada de revisions[] com snapshot vira um doc
+// sintético "Revisado" na MESMA família do vigente — assim arquivos totais,
+// tempos e dias com cliente dos ciclos encerrados contam igual à aba Projetos.
+// O array revisions[] fica só no vigente (cumulativo) para não duplicar a
+// contagem de motivos de revisão nos gráficos.
 
 const REF_STATUS_TO_LEGACY: Record<RefStatus, Status | null> = {
     [RefStatus.RASCUNHO]: null,                       // não iniciada — fora dos KPIs
@@ -922,6 +953,26 @@ const cycleDatesToLegacy = (item: {
     revisions: item.revisions || [],
 });
 
+// Docs sintéticos dos ciclos encerrados: 1 por entrada de revisions[] com
+// snapshot, status "Revisado", mesma família (groupId) do vigente. Entradas
+// antigas sem snapshot não têm datas para projetar — ficam só no modal.
+const snapshotsToLegacy = (
+    revisions: Revision[] | undefined,
+    vigente: Pick<ProjectFile, 'groupId' | 'filename' | 'client' | 'base' | 'discipline' | 'phase'>
+): ProjectFile[] =>
+    (revisions || []).flatMap(rev => {
+        const s = rev.snapshot;
+        if (!s) return [];
+        return [{
+            ...vigente,
+            id: `${vigente.groupId}__r${s.revisao}`,
+            revision: s.revisao,
+            status: Status.REVISED,
+            ...cycleDatesToLegacy(s),
+            revisions: [], // motivos contam uma única vez, no array cumulativo do vigente
+        }];
+    });
+
 export const portfolioToProjectFiles = (
     referencias: Referencia[],
     conjuntos: Conjunto[],
@@ -934,18 +985,22 @@ export const portfolioToProjectFiles = (
     referencias.forEach(r => {
         const status = REF_STATUS_TO_LEGACY[r.statusAprovacao];
         if (!status) return;
-        out.push({
-            id: `${PROJECAO_REF_PREFIX}${r.id}`,
+        const vigente = {
             groupId: `${PROJECAO_REF_PREFIX}${r.id}`,
-            revision: r.revisao || 0,
             filename: r.codigoCliente,
             client: r.client,
             base: 'Catálogo',
             discipline: r.discipline,
             phase: ProjectPhase.PRELIMINARY,
+        };
+        out.push({
+            id: `${PROJECAO_REF_PREFIX}${r.id}`,
+            ...vigente,
+            revision: r.revisao || 0,
             status,
             ...cycleDatesToLegacy(r),
         });
+        out.push(...snapshotsToLegacy(r.revisions, vigente));
     });
 
     pranchas.forEach(p => {
@@ -958,18 +1013,22 @@ export const portfolioToProjectFiles = (
         // pranchas homônimas de conjuntos diferentes não se fundirem no mesmo grupo.
         const filename = (p.codigoCompleto || '').trim()
             || [ref?.codigoCliente, p.papel, conjunto.base].filter(Boolean).join(' · ');
-        out.push({
-            id: `${PROJECAO_PRANCHA_PREFIX}${p.id}`,
+        const vigente = {
             groupId: `${PROJECAO_PRANCHA_PREFIX}${p.id}`,
-            revision: p.revisao || 0,
             filename,
             client: conjunto.client,
             base: conjunto.base,
             discipline: ref?.discipline || Discipline.OTHER,
             phase: ProjectPhase.EXECUTIVE,
+        };
+        out.push({
+            id: `${PROJECAO_PRANCHA_PREFIX}${p.id}`,
+            ...vigente,
+            revision: p.revisao || 0,
             status,
             ...cycleDatesToLegacy(p),
         });
+        out.push(...snapshotsToLegacy(p.revisions, vigente));
     });
 
     return out;

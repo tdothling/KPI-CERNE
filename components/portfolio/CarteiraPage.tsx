@@ -598,6 +598,7 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
                     title={historicoDe.codigoCompleto || historicoDe.papel}
                     revisions={historicoDe.revisions || []}
                     readOnly={readOnly}
+                    holidays={holidays}
                     onSave={(updated) => {
                         onUpdatePrancha(historicoDe.id, { revisions: updated });
                         setHistoricoDe({ ...historicoDe, revisions: updated });

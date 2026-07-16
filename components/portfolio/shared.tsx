@@ -265,11 +265,14 @@ export function DateActionModal({ request, onClose }: { request: DateActionReque
 // --- Histórico de Revisões (Referências E Pranchas — mesmo formato da aba Projetos) ---
 // Cada entrada nasce quando uma revisão é ABERTA (reprovado → retrabalho). Motivo e
 // comentário são editáveis depois, para corrigir classificações sem mexer no ciclo.
+// Se a entrada tiver a foto do ciclo encerrado (snapshot), as datas e os tempos da
+// revisão passada aparecem aqui — entradas antigas (sem snapshot) mostram só o motivo.
 
-export function RevisionHistoryModal({ title, revisions, readOnly, onSave, onClose }: {
+export function RevisionHistoryModal({ title, revisions, readOnly, holidays, onSave, onClose }: {
     title: string;
     revisions: Revision[];
     readOnly?: boolean;
+    holidays?: string[]; // habilita o cálculo do tempo de execução dos ciclos fotografados
     onSave: (updated: Revision[]) => void;
     onClose: () => void;
 }) {
@@ -306,6 +309,8 @@ export function RevisionHistoryModal({ title, revisions, readOnly, onSave, onClo
                     {[...revisions].reverse().map((rev, i) => {
                         const numero = revisions.length - i; // mais recente primeiro
                         const isEditing = editingId === rev.id;
+                        const s = rev.snapshot;
+                        const exec = s && holidays ? execDaysOf(s, false, holidays) : null;
                         return (
                             <div key={rev.id} className="border border-slate-200 dark:border-slate-700 rounded-lg p-3 bg-slate-50/60 dark:bg-slate-900/40">
                                 <div className="flex items-center gap-2 flex-wrap">
@@ -342,6 +347,17 @@ export function RevisionHistoryModal({ title, revisions, readOnly, onSave, onClo
                                     </div>
                                 ) : (
                                     rev.comment && <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 whitespace-pre-wrap">{rev.comment}</p>
+                                )}
+                                {s && (
+                                    <div className="mt-2 pt-1.5 border-t border-slate-200 dark:border-slate-700 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                                        <span className="col-span-2 font-semibold text-slate-600 dark:text-slate-300">Ciclo encerrado — R{String(s.revisao).padStart(2, '0')}</span>
+                                        {s.startDate && <span>Início: {formatDateDisplay(s.startDate)}</span>}
+                                        {s.endDate && <span>Conclusão: {formatDateDisplay(s.endDate)}</span>}
+                                        {s.sendDate && <span>Envio: {formatDateDisplay(s.sendDate)}</span>}
+                                        {s.feedbackDate && <span>Feedback: {formatDateDisplay(s.feedbackDate)}</span>}
+                                        {exec && <span className="flex items-center gap-1"><Clock size={11} /> Execução: {exec.days} dia(s) útil(eis)</span>}
+                                        {(s.blockedDays ?? 0) > 0 && <span>Com cliente: {s.blockedDays} dia(s) útil(eis)</span>}
+                                    </div>
                                 )}
                             </div>
                         );

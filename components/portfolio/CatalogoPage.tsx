@@ -397,6 +397,7 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
                     title={historicoDe.codigoCliente}
                     revisions={historicoDe.revisions || []}
                     readOnly={readOnly}
+                    holidays={holidays}
                     onSave={(updated) => {
                         onUpdate(historicoDe.id, { revisions: updated });
                         setHistoricoDe({ ...historicoDe, revisions: updated });

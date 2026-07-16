@@ -10,6 +10,7 @@ import {
     planPortfolioMigration, inferPapel, execMoldeKey, buildCodigoCompleto,
     portfolioToProjectFiles, PROJECAO_REF_PREFIX, PROJECAO_PRANCHA_PREFIX,
     refStatusAposInstanciar, refStatusAposDesinstanciar, papelFolha, nextFolhaNumber, renomearPapeisAuto,
+    buildCycleSnapshot,
 } from './portfolio';
 import { Discipline, ProjectFile, ProjectPhase, RevisionReason, Status } from '../types';
 
@@ -761,6 +762,91 @@ describe('portfolioToProjectFiles', () => {
         const out = portfolioToProjectFiles([], [conjunto104], [prancha({})]);
         expect(out).toHaveLength(1);
         expect(out[0].discipline).toBe(Discipline.OTHER);
+    });
+
+    it('revisão com snapshot vira doc "Revisado" na mesma família do vigente', () => {
+        const p1 = prancha({
+            id: 'p1', status: PranchaStatus.EM_ANDAMENTO, revisao: 1,
+            startDate: '2026-07-01', codigoCompleto: 'ELO-040RJ-104+000-BSO-EXE-DE-P1-101',
+            revisions: [{
+                id: 'rev1', date: '2026-07-01', reason: RevisionReason.CLIENT_REQUEST, comment: '',
+                snapshot: { revisao: 0, startDate: '2026-06-01', endDate: '2026-06-05', sendDate: '2026-06-06', feedbackDate: '2026-06-10', blockedDays: 2 },
+            }],
+        });
+        const out = portfolioToProjectFiles([refBSO], [conjunto104], [p1]);
+        expect(out).toHaveLength(2);
+        const vigente = out.find(f => f.status === Status.IN_PROGRESS)!;
+        const revisado = out.find(f => f.status === Status.REVISED)!;
+        // Mesma família e mesmo nome → o Dashboard agrupa como 1 entregável (IAPR)
+        expect(revisado.groupId).toBe(vigente.groupId);
+        expect(revisado.filename).toBe(vigente.filename);
+        expect(revisado.id).not.toBe(vigente.id);
+        // O ciclo encerrado conta com as SUAS datas (arquivos totais, tempos, dias com cliente)
+        expect(revisado.revision).toBe(0);
+        expect(revisado.startDate).toBe('2026-06-01');
+        expect(revisado.endDate).toBe('2026-06-05');
+        expect(revisado.feedbackDate).toBe('2026-06-10');
+        expect(revisado.blockedDays).toBe(2);
+        // Motivos de revisão ficam só no vigente (contagem única nos gráficos)
+        expect(revisado.revisions).toHaveLength(0);
+        expect(vigente.revisions).toHaveLength(1);
+        expect(vigente.revision).toBe(1);
+        expect(vigente.startDate).toBe('2026-07-01');
+    });
+
+    it('referência revisada projeta o ciclo encerrado como Preliminar "Revisado"', () => {
+        const ref: Referencia = {
+            ...refBSO,
+            statusAprovacao: RefStatus.EM_ELABORACAO, revisao: 1, startDate: '2026-07-02',
+            revisions: [{
+                id: 'rev1', date: '2026-07-02', reason: RevisionReason.SCOPE_CHANGE, comment: '',
+                snapshot: { revisao: 0, startDate: '2026-06-01', endDate: '2026-06-08', sendDate: '2026-06-09', feedbackDate: '2026-06-15', blockedDays: 4 },
+            }],
+        };
+        const out = portfolioToProjectFiles([ref], [], []);
+        expect(out).toHaveLength(2);
+        const revisado = out.find(f => f.status === Status.REVISED)!;
+        expect(revisado.phase).toBe(ProjectPhase.PRELIMINARY);
+        expect(revisado.revision).toBe(0);
+        expect(revisado.blockedDays).toBe(4);
+    });
+
+    it('entrada de revisão antiga (sem snapshot) não gera doc sintético', () => {
+        const ref: Referencia = {
+            ...refBSO,
+            statusAprovacao: RefStatus.EM_ELABORACAO, revisao: 1, startDate: '2026-07-02',
+            revisions: [{ id: 'rev1', date: '2026-07-02', reason: RevisionReason.CLIENT_REQUEST, comment: '' }],
+        };
+        const out = portfolioToProjectFiles([ref], [], []);
+        expect(out).toHaveLength(1);
+    });
+});
+
+// --- Foto do ciclo encerrado ao abrir revisão ---
+
+describe('buildCycleSnapshot', () => {
+    it('copia número da revisão, datas, períodos e dias com cliente', () => {
+        const s = buildCycleSnapshot({
+            revisao: 2,
+            startDate: '2026-06-01', startPeriod: 'MANHA',
+            endDate: '2026-06-05', endPeriod: 'TARDE',
+            sendDate: '2026-06-06', feedbackDate: '2026-06-10',
+            blockedDays: 3,
+        });
+        expect(s).toEqual({
+            revisao: 2,
+            startDate: '2026-06-01', startPeriod: 'MANHA',
+            endDate: '2026-06-05', endPeriod: 'TARDE',
+            sendDate: '2026-06-06', feedbackDate: '2026-06-10',
+            blockedDays: 3,
+        });
+    });
+
+    it('omite campos vazios (Firestore rejeita undefined)', () => {
+        const s = buildCycleSnapshot({ startDate: '2026-06-01' });
+        expect(s).toEqual({ revisao: 0, startDate: '2026-06-01' });
+        expect('endDate' in s).toBe(false);
+        expect('blockedDays' in s).toBe(false);
     });
 });
 

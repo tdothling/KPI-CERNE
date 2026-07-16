@@ -41,11 +41,24 @@ export enum RevisionReason {
 export type DateFilterType = 'ALL' | 'MONTH' | 'QUARTER' | 'SEMESTER' | 'YEAR' | 'CUSTOM';
 export type Period = 'MANHA' | 'TARDE';
 
+// Foto do ciclo que a revisão ENCERROU (Catálogo/Carteira, onde a revisão é
+// in-place no mesmo documento). Sem ela, as datas do ciclo anterior seriam
+// sobrescritas sem registro — o histórico e os Indicadores perderiam a revisão.
+export interface RevisionCycleSnapshot {
+  revisao: number; // número da revisão encerrada (R00, R01...)
+  startDate?: string; startPeriod?: Period;
+  endDate?: string; endPeriod?: Period;
+  sendDate?: string; sendPeriod?: Period;
+  feedbackDate?: string; feedbackPeriod?: Period;
+  blockedDays?: number;
+}
+
 export interface Revision {
   id: string;
   date: string;
   reason: RevisionReason;
   comment: string;
+  snapshot?: RevisionCycleSnapshot; // ausente nas entradas antigas e na aba Projetos (lá cada revisão é um doc próprio)
 }
 
 export interface ProjectPause {
