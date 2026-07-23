@@ -273,12 +273,11 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
                                                 )}
                                                 <StatusBadge label={ref.statusAprovacao} className={REF_STATUS_STYLE[ref.statusAprovacao]} />
                                                 {bases.length > 0 && ref.statusAprovacao !== RefStatus.SUPERSEDED && (
-                                                    <span
-                                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap text-cyan-700 bg-cyan-100 border-cyan-300 dark:bg-cyan-900/40 dark:border-cyan-700 dark:text-cyan-400"
+                                                    <StatusBadge
+                                                        label={RefStatus.SUPERSEDED}
+                                                        className={REF_STATUS_STYLE[RefStatus.SUPERSEDED]}
                                                         title={`Já instanciada em ${bases.length} base(s) — o veredito "${ref.statusAprovacao}" é mantido, mas o trabalho segue no executivo (Projetos Locais)`}
-                                                    >
-                                                        <MapPin size={10} /> Instanciado
-                                                    </span>
+                                                    />
                                                 )}
                                                 {ref.importada && <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400" title="Criada pela migração a partir de executivos sem preliminar">importada</span>}
                                             </div>

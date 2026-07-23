@@ -84,9 +84,9 @@ export const PRANCHA_STATUS_STYLE: Record<PranchaStatus, string> = {
     [PranchaStatus.REPROVADO]: 'text-rose-700 bg-rose-100 border-rose-300 dark:bg-rose-900/40 dark:border-rose-700 dark:text-rose-400',
 };
 
-export function StatusBadge({ label, className }: { label: string; className: string }) {
+export function StatusBadge({ label, className, title }: { label: string; className: string; title?: string }) {
     return (
-        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap ${className}`}>
+        <span title={title} className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap ${className}`}>
             {label}
         </span>
     );
