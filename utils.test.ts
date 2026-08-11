@@ -18,6 +18,7 @@ describe('calculateNetExecutionDuration', () => {
         endPeriod: 'TARDE',
         pauses: [
           {
+            id: 'pausa-1',
             startDate: '2026-03-25',
             startPeriod: 'MANHA',
             endDate: '2026-03-26',
@@ -73,7 +74,7 @@ describe('calculateNetExecutionDuration', () => {
   });
 
   it('retorna 0 quando não há data de início válida', () => {
-    expect(calculateNetExecutionDuration({ startDate: '' }, [])).toBe(0);
+    expect(calculateNetExecutionDuration({ startDate: '', endDate: '' }, [])).toBe(0);
   });
 });
 

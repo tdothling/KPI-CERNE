@@ -17,15 +17,7 @@ import {
   ComposedChart,
   LabelList,
 } from 'recharts';
-import {
-  ProjectFile,
-  Discipline,
-  Status,
-  ProjectPhase,
-  ClientDoc,
-  ObraStatus,
-  RevisionReason,
-} from '../types';
+import { ProjectFile, Discipline, Status, ProjectPhase, ClientDoc, ObraStatus } from '../types';
 import {
   format,
   parseISO,
@@ -61,58 +53,23 @@ import { useDashboardFilters } from '../hooks/useDashboardFilters';
 import { DashboardFilters } from './DashboardFilters';
 import { DrillDownModal, DrillDownPayload } from './DrillDownModal';
 import { SectionHeader, KpiTile, metaAccent } from './DashboardPrimitives';
+import {
+  META_OTD,
+  META_IAPR,
+  DISCIPLINE_COLORS,
+  REASON_CATEGORY,
+  CATEGORY_COLORS_LIGHT,
+  CATEGORY_COLORS_DARK,
+  ReasonCategory,
+  SlaAlert,
+} from './dashboardShared';
+import { ReportModal } from './report/ReportModal';
 
 interface DashboardProps {
   data: ProjectFile[];
   clients?: ClientDoc[];
   isDarkMode?: boolean;
   holidays: string[];
-}
-
-// Metas corporativas dos indicadores (ajustar aqui quando a meta mudar)
-const META_OTD = 85; // % de entregas dentro da SLA
-const META_IAPR = 70; // % de aprovação sem revisão
-
-const DISCIPLINE_COLORS: Record<string, string> = {
-  [Discipline.ARCHITECTURE]: '#8e1c3e',
-  [Discipline.STRUCTURE]: '#64748b',
-  [Discipline.FOUNDATION]: '#94a3b8',
-  [Discipline.HYDRAULIC]: '#06b6d4',
-  [Discipline.ELECTRICAL]: '#eab308',
-  [Discipline.DATA]: '#8b5cf6',
-  [Discipline.SPDA]: '#ef4444',
-  [Discipline.HVAC]: '#10b981',
-  [Discipline.OTHER]: '#f472b6',
-};
-
-// Causa gerencial de cada motivo de revisão: interna (processo/equipe) x externa (cliente/escopo)
-type ReasonCategory = 'Interna' | 'Externa' | 'Outros';
-const REASON_CATEGORY: Record<string, ReasonCategory> = {
-  [RevisionReason.INTERNAL_ERROR]: 'Interna',
-  [RevisionReason.COMPATIBILITY]: 'Interna',
-  [RevisionReason.CLIENT_REQUEST]: 'Externa',
-  [RevisionReason.SCOPE_CHANGE]: 'Externa',
-  [RevisionReason.PROJECT_CHANGE]: 'Externa',
-  [RevisionReason.ADDENDUM]: 'Externa',
-  [RevisionReason.OTHER]: 'Outros',
-};
-// Paleta validada (validate_palette.js) por modo; identidade acompanha a categoria, nunca a posição
-const CATEGORY_COLORS_LIGHT: Record<ReasonCategory, string> = {
-  Interna: '#f43f5e',
-  Externa: '#0ea5e9',
-  Outros: '#f59e0b',
-};
-const CATEGORY_COLORS_DARK: Record<ReasonCategory, string> = {
-  Interna: '#f43f5e',
-  Externa: '#0284c7',
-  Outros: '#d97706',
-};
-
-interface SlaAlert {
-  project: ProjectFile;
-  slaStatus: 'ATRASADO' | 'VENCENDO';
-  deadline: Date;
-  daysLate: number;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -160,9 +117,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
     setTimeout(() => alertsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   }, []);
 
-  const handlePrint = () => {
-    window.print();
-  };
+  // Relatório A4: documento próprio, não a tela impressa (ver components/report/)
+  const [showReport, setShowReport] = useState(false);
 
   const stats = useMemo(() => {
     // Tempo de execução por disciplina/fase — apenas ciclos CONCLUÍDOS (endDate real),
@@ -599,11 +555,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
         <div className="flex items-center gap-2 print:hidden">
           <button
-            onClick={handlePrint}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg transition-colors border border-slate-200 dark:border-slate-700"
+            onClick={() => setShowReport(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-brand-700 hover:bg-brand-800 text-white rounded-lg transition-colors shadow-sm"
           >
             <FileDown size={18} />
-            <span className="font-medium hidden sm:inline">Exportar PDF</span>
+            <span className="font-medium hidden sm:inline">Relatório / Enviar</span>
           </button>
         </div>
       </div>
@@ -1454,6 +1410,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Relatório A4 para PDF/email */}
+      {showReport && (
+        <ReportModal
+          stats={stats}
+          filters={filters}
+          totalProjects={filteredProjects.length}
+          onClose={() => setShowReport(false)}
+        />
+      )}
 
       {/* Drill-Down Modal */}
       {drillDown && (

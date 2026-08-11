@@ -37,3 +37,93 @@ body {
 .dark .custom-scrollbar::-webkit-scrollbar-thumb {
   background-color: rgba(75, 85, 99, 0.5);
 }
+
+/* ===========================================================================
+   Relatório A4 (components/report/)
+   ---------------------------------------------------------------------------
+   O relatório é um documento próprio, com largura fixa em pixels, e não a tela
+   do app impressa. Por isso a impressão esconde o #root inteiro e manda para o
+   papel apenas o conteúdo do #report-portal.
+
+   REPORT_DOC_WIDTH em reportLayout.ts precisa continuar batendo com a largura
+   útil da folha definida aqui (A4 210mm - 2x10mm de margem = 190mm ≈ 718px).
+   =========================================================================== */
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  /* Com o relatório aberto, a aplicação não vai para o papel */
+  body.report-printing #root {
+    display: none !important;
+  }
+
+  /* A moldura deixa de ser overlay de tela e vira fluxo normal de documento */
+  body.report-printing .report-shell {
+    position: static !important;
+    inset: auto !important;
+    display: block !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    background: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .report-toolbar {
+    display: none !important;
+  }
+
+  /* A moldura cinza e o cartão branco existem só para a leitura na tela.
+     No papel a folha já é a moldura, então tudo isso é zerado. */
+  body.report-printing .report-frame,
+  body.report-printing .report-page {
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: none !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+
+  .report-doc {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    /* Faixas, tarjas de status e zebra da tabela precisam sair coloridas no PDF */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Nenhum cartão pode ser partido ao meio entre duas folhas */
+  .report-block {
+    break-inside: avoid;
+  }
+
+  .report-page-break {
+    break-before: page;
+  }
+
+  /* Tabelas longas podem quebrar, desde que repitam o cabeçalho e não partam linhas */
+  .report-doc table {
+    break-inside: auto;
+  }
+  .report-doc thead {
+    display: table-header-group;
+  }
+  .report-doc tr {
+    break-inside: avoid;
+  }
+}
