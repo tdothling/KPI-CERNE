@@ -288,24 +288,33 @@ export const addBusinessDaysWithHolidays = (
   return date;
 };
 
-// Calcula a data limite somando dias corridos à data do contrato
-export const calculateDeadlineDate = (
-  contractDate?: string,
-  deadlineDays?: number | string,
+// Prazo efetivo de UMA entrega (registro), já resolvido para Date | null.
+// targetDate no próprio registro sempre vence; senão, só a 1ª entrega (isFirstCycle)
+// herda o prazo padrão da obra (projectDeadlineDate); entregas posteriores sem targetDate
+// próprio ficam sem prazo — não são medidas por SLA (evita reabrir "atrasado" numa revisão
+// pós-certificadora combinada à parte com o cliente).
+export const resolveEntregavelDeadline = (
+  targetDate: string | undefined,
+  isFirstCycle: boolean,
+  projectDeadlineDate: string | undefined,
 ): Date | null => {
-  if (
-    !contractDate ||
-    !isValid(parseISO(contractDate)) ||
-    deadlineDays === undefined ||
-    deadlineDays === null ||
-    deadlineDays === ''
-  ) {
-    return null;
+  if (targetDate && isValid(parseISO(targetDate))) return parseISO(targetDate);
+  if (isFirstCycle && projectDeadlineDate && isValid(parseISO(projectDeadlineDate))) {
+    return parseISO(projectDeadlineDate);
   }
-  const date = parseISO(contractDate);
-  const days = typeof deadlineDays === 'string' ? parseInt(deadlineDays, 10) : deadlineDays;
+  return null;
+};
 
-  if (isNaN(days)) return null;
-
-  return addDays(date, days);
+// Está atrasado hoje, dado um prazo já resolvido? Mesma régua usada em Canteiro e Carteira:
+// se já tem endDate, compara a entrega em si; se ainda está em aberto, compara com hoje.
+export const isEntregavelOverdue = (
+  deadline: Date | null,
+  endDate: string | undefined,
+  isOpenStatus: boolean,
+): boolean => {
+  if (!deadline) return false;
+  const deadlineStr = format(deadline, 'yyyy-MM-dd');
+  if (endDate) return endDate > deadlineStr;
+  if (isOpenStatus) return new Date().toISOString().split('T')[0] > deadlineStr;
+  return false;
 };

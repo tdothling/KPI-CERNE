@@ -164,42 +164,55 @@ export function ObraFormModal({
             </Section>
 
             {/* SLA */}
-            <Section title="Configuração de SLA (Opcional)">
+            <Section title="Cronograma da Obra (Opcional)">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <Label>Data Assinatura Contrato</Label>
+                  <Label>Início da Obra</Label>
                   <input
                     type="date"
-                    value={form.contractDate}
-                    onChange={(e) => set({ contractDate: e.target.value })}
+                    value={form.obraStartDate}
+                    onChange={(e) => set({ obraStartDate: e.target.value })}
                     className={inputCls + ' dark:[color-scheme:dark]'}
                   />
                 </div>
                 <div>
-                  <Label>Dias Corridos (SLA)</Label>
+                  <Label>Fim da Obra</Label>
                   <input
-                    type="number"
-                    min="0"
-                    value={form.deadlineDays ?? ''}
-                    onChange={(e) =>
-                      set({
-                        deadlineDays: e.target.value === '' ? undefined : Number(e.target.value),
-                      })
-                    }
-                    placeholder="Ex: 90"
-                    className={inputCls}
+                    type="date"
+                    value={form.obraEndDate}
+                    onChange={(e) => set({ obraEndDate: e.target.value })}
+                    className={inputCls + ' dark:[color-scheme:dark]'}
                   />
                 </div>
                 <div>
-                  <Label>Prazo Previsto de Conclusão</Label>
+                  <Label>Data Estipulada p/ Finalizar os Projetos</Label>
                   <input
                     type="date"
-                    value={form.expectedCompletionDate}
-                    onChange={(e) => set({ expectedCompletionDate: e.target.value })}
+                    value={form.projectDeadlineDate}
+                    onChange={(e) => set({ projectDeadlineDate: e.target.value })}
                     className={inputCls + ' dark:[color-scheme:dark]'}
                   />
                 </div>
               </div>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                A "Data Estipulada" é o prazo que alimenta o SLA/OTD dos Indicadores e o ERP
+                industrial. Entregas posteriores (revisão pós-certificadora) não usam esta data —
+                configure a meta de cada uma no próprio arquivo, na Carteira ou no Canteiro.
+              </p>
+
+              {(form.contractDate || form.deadlineDays !== undefined) && (
+                <div className="bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                    SLA antigo (referência — não utilizado no cálculo)
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {form.contractDate &&
+                      `Contrato: ${new Date(form.contractDate + 'T00:00:00').toLocaleDateString('pt-BR')}`}
+                    {form.contractDate && form.deadlineDays !== undefined && ' · '}
+                    {form.deadlineDays !== undefined && `${form.deadlineDays} dias corridos`}
+                  </p>
+                </div>
+              )}
             </Section>
 
             {/* Status */}

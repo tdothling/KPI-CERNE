@@ -199,7 +199,7 @@ export function ReportView({ stats, filters, totalProjects, generatedAt }: Repor
               ? `${stats.totalSlaMeasured} entregáveis medidos`
               : 'Nenhuma SLA medida no período'
           }
-          hint="Entregáveis aprovados dentro do prazo contratual da obra."
+          hint="Entregáveis aprovados dentro do prazo de entrega dos projetos."
         />
         <ReportGauge
           label="IAPR — Aprovação de Primeira"
@@ -228,8 +228,8 @@ export function ReportView({ stats, filters, totalProjects, generatedAt }: Repor
         <>
           <p className="mb-2 text-[10px] text-slate-600">
             <strong>{atrasados.length}</strong> atrasado{atrasados.length !== 1 ? 's' : ''} e{' '}
-            <strong>{vencendo.length}</strong> a vencer, medidos contra o prazo contratual da obra.
-            Lista completa, ordenada do maior atraso para o menor.
+            <strong>{vencendo.length}</strong> a vencer, medidos contra o prazo de entrega dos
+            projetos. Lista completa, ordenada do maior atraso para o menor.
           </p>
           <table className="w-full table-fixed border-collapse text-[9.5px]">
             <thead>
@@ -413,9 +413,11 @@ export function ReportView({ stats, filters, totalProjects, generatedAt }: Repor
           {format(generatedAt, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}.
         </p>
         <p className="mt-0.5">
-          OTD mede entregáveis aprovados dentro do prazo contratual da obra. IAPR mede entregáveis
-          aprovados sem revisão. Ambos consideram o entregável, não o arquivo — revisões do mesmo
-          documento não são contadas duas vezes.
+          OTD mede entregáveis aprovados dentro do prazo de entrega dos projetos: a 1ª entrega
+          de cada entregável contra o prazo padrão da obra, e entregas posteriores (revisão
+          pós-certificadora) só entram na conta quando têm uma meta própria configurada. IAPR
+          mede entregáveis aprovados sem revisão, sempre pelo entregável (não pelo arquivo) —
+          revisões do mesmo documento não são contadas duas vezes.
         </p>
       </footer>
     </div>

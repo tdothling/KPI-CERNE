@@ -100,6 +100,10 @@ export interface ProjectFile {
   revisions: Revision[];
   pauses?: ProjectPause[]; // Array de pausas de execução do time
   predecessorIds?: string[]; // IDs de arquivos que precisam terminar antes deste começar
+
+  // Meta de entrega desta revisão (opcional). Sobrepõe o prazo padrão da 1ª entrega
+  // (client.projectDeadlineDate); sem ela, revisões após a 1ª não são medidas por SLA.
+  targetDate?: string;
 }
 
 // Interface para o Filtro Avançado
@@ -243,14 +247,19 @@ export interface ClientDoc {
   // da mesma base ("KM 104" vs "104+000"). Para HIGHWAY, numberOfBases = bases.length.
   bases?: string[];
 
-  // SLA Padrão da Obra
+  // Cronograma da Obra
+  obraStartDate?: string; // Início da Obra
+  expectedCompletionDate?: string; // Fim da Obra (rótulo na UI; propriedade mantida p/ não migrar dado)
+  projectDeadlineDate?: string; // Data Estipulada para Finalizar os Projetos — dirige o SLA/OTD
+
+  // SLA antigo (legado) — mantido só para exibição somente-leitura; não editável, não usado em cálculo.
+  // Media o prazo da OBRA INTEIRA (contrato + N dias corridos), por isso o OTD nunca refletia atraso real.
   contractDate?: string;
   deadlineDays?: number;
 
   // Ciclo de Vida da Obra
   obraStatus?: ObraStatus;
   completedAt?: string; // ISO Date — suprime alertas SLA quando COMPLETED ou CANCELLED
-  expectedCompletionDate?: string; // Prazo previsto de conclusão (campo editorial, independente do SLA)
   responsavel?: string;
   observacoes?: string;
 }

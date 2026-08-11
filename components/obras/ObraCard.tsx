@@ -102,9 +102,9 @@ export function ObraCard({
     ? ''
     : sla.isOverdue
       ? 'bg-rose-500'
-      : sla.progress > 85
+      : (sla.progress ?? 0) > 85
         ? 'bg-amber-500'
-        : sla.progress > 65
+        : (sla.progress ?? 0) > 65
           ? 'bg-yellow-400'
           : 'bg-emerald-500';
 
@@ -171,20 +171,20 @@ export function ObraCard({
             </div>
 
             {/* SLA / dates row */}
-            {(client.contractDate ||
-              client.deadlineDays !== undefined ||
+            {(client.obraStartDate ||
+              client.projectDeadlineDate ||
               client.expectedCompletionDate ||
+              client.contractDate ||
               client.completedAt) && (
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400 mt-1">
-                {client.contractDate && (
+                {client.obraStartDate && (
                   <span className="flex items-center gap-1">
-                    <Calendar size={11} /> Contrato:{' '}
-                    {format(parseISO(client.contractDate), 'dd/MM/yyyy')}
+                    <Calendar size={11} /> Início: {format(parseISO(client.obraStartDate), 'dd/MM/yyyy')}
                   </span>
                 )}
-                {client.deadlineDays !== undefined && (
+                {client.projectDeadlineDate && (
                   <span className="font-semibold text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/20 px-1.5 py-0.5 rounded border border-brand-100 dark:border-brand-900/30">
-                    SLA: {client.deadlineDays} dias
+                    Prazo Projetos: {format(parseISO(client.projectDeadlineDate), 'dd/MM/yyyy')}
                   </span>
                 )}
                 {sla && !isDone && (
@@ -198,7 +198,12 @@ export function ObraCard({
                 )}
                 {client.expectedCompletionDate && (
                   <span className="flex items-center gap-1">
-                    Previsto: {format(parseISO(client.expectedCompletionDate), 'dd/MM/yyyy')}
+                    Fim da Obra: {format(parseISO(client.expectedCompletionDate), 'dd/MM/yyyy')}
+                  </span>
+                )}
+                {client.contractDate && (
+                  <span className="text-slate-400 dark:text-slate-500">
+                    Contrato (antigo): {format(parseISO(client.contractDate), 'dd/MM/yyyy')}
                   </span>
                 )}
                 {client.completedAt && isDone && (
@@ -210,8 +215,8 @@ export function ObraCard({
               </div>
             )}
 
-            {/* SLA progress bar */}
-            {sla && isActive && (
+            {/* SLA progress bar — só quando dá pra computar (Início + Prazo dos Projetos definidos) */}
+            {sla && isActive && sla.progress !== null && (
               <div className="mt-2 flex items-center gap-2">
                 <div className="flex-1 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
                   <div

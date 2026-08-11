@@ -1,7 +1,12 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import { Prancha, inferPranchaStatusFromDates } from '../../domain/portfolio';
-import { TimelineDatesEditor, TimelineDates, PRANCHA_TIMELINE_FIELDS } from './shared';
+import {
+  TimelineDatesEditor,
+  TimelineDates,
+  PRANCHA_TIMELINE_FIELDS,
+  TargetDateInput,
+} from './shared';
 
 // A codificação é manual (varia por órgão regulamentador): este modal é o ponto
 // de ajuste fino do código de cada prancha.
@@ -27,6 +32,7 @@ export function PranchaEditModal({
     feedbackDate: prancha.feedbackDate || '',
     feedbackPeriod: prancha.feedbackPeriod || 'TARDE',
   });
+  const [targetDate, setTargetDate] = useState(prancha.targetDate || '');
 
   const save = () => {
     if (!papel.trim()) {
@@ -75,6 +81,7 @@ export function PranchaEditModal({
       observacao: observacao.trim() || undefined,
       ...datePayload,
       ...statusPatch,
+      targetDate: targetDate || '',
     });
   };
 
@@ -118,6 +125,7 @@ export function PranchaEditModal({
             onChange={(patch) => setDates((prev) => ({ ...prev, ...patch }))}
             note="O status segue a linha do tempo: apagar datas retroage o status (ex.: Concluída → Em Andamento/A Fazer) e preencher avança. Aprovada/Reprovada preservam a decisão. Os dias com o cliente recalculam de envio e feedback."
           />
+          <TargetDateInput value={targetDate} onChange={setTargetDate} />
         </div>
 
         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">

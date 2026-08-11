@@ -46,7 +46,7 @@ import {
   getRevisionNumber,
   calculateBusinessDaysWithHolidays,
   calculateNetExecutionDuration,
-  calculateDeadlineDate,
+  resolveEntregavelDeadline,
   getEffectiveStatus,
 } from '../utils';
 import { useDashboardFilters } from '../hooks/useDashboardFilters';
@@ -132,6 +132,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
     const volumeMap: Record<string, any> = {};
     const reasonsMap: Record<string, number> = {};
     const cycleTimeByDiscipline: Record<string, { total: number; count: number }> = {};
+
+    // OTD/Atrasados — populados por registro individual dentro do forEach abaixo (não pelo
+    // "latest" consolidado por grupo, que só entra depois para o IAPR)
+    const otdMonthly: Record<string, { measured: number; onTime: number }> = {};
+    const alerts: SlaAlert[] = [];
+    let totalSlaMeasured = 0;
+    let totalOnTime = 0;
 
     // Agrupamento por entregável (cliente|disciplina|nome-base|fase): a unidade de medida
     // de OTD, IAPR e alertas é o entregável, não o arquivo (revisões não contam duas vezes)
@@ -242,6 +249,54 @@ export const Dashboard: React.FC<DashboardProps> = ({
         reasonsMap[r.reason] = (reasonsMap[r.reason] || 0) + 1;
       });
 
+      // 3b. OTD / Atrasados — por registro individual, não pelo "latest" do grupo: uma entrega
+      // pode ter mais de uma janela mensurável (a 1ª entrega, contra o prazo padrão da obra, e
+      // uma revisão pós-certificadora com meta própria). Sem prazo resolvido — revisão sem
+      // targetDate e que não é a 1ª entrega — o registro simplesmente não entra na medição.
+      {
+        const clientData = clientsMap[project.client];
+        const isFirstCycle = rev === 0;
+        const deadline = resolveEntregavelDeadline(
+          project.targetDate,
+          isFirstCycle,
+          clientData?.projectDeadlineDate,
+        );
+        if (deadline) {
+          const effectiveObraStatus = clientData
+            ? getEffectiveStatus(clientData)
+            : ObraStatus.ACTIVE;
+          const obraCompleted =
+            effectiveObraStatus === ObraStatus.COMPLETED ||
+            effectiveObraStatus === ObraStatus.CANCELLED ||
+            effectiveObraStatus === ObraStatus.PAUSED;
+          const isDone = project.status === Status.DONE || project.status === Status.APPROVED;
+
+          if (isDone && project.feedbackDate && isValid(parseISO(project.feedbackDate))) {
+            totalSlaMeasured++;
+            const fb = parseISO(project.feedbackDate);
+            const onTime = !isAfter(fb, deadline);
+            if (onTime) totalOnTime++;
+            const mKey = format(fb, 'yyyy-MM');
+            if (!otdMonthly[mKey]) otdMonthly[mKey] = { measured: 0, onTime: 0 };
+            otdMonthly[mKey].measured++;
+            if (onTime) otdMonthly[mKey].onTime++;
+          } else if (!obraCompleted && project.status === Status.IN_PROGRESS) {
+            // REVISED (superado) e WAITING_APPROVAL (na mão do cliente) não penalizam
+            if (isAfter(today, deadline)) {
+              totalSlaMeasured++;
+              alerts.push({
+                project,
+                slaStatus: 'ATRASADO',
+                deadline,
+                daysLate: differenceInCalendarDays(today, deadline),
+              });
+            } else if (isSameDay(today, deadline) || isSameDay(addDays(today, 1), deadline)) {
+              alerts.push({ project, slaStatus: 'VENCENDO', deadline, daysLate: 0 });
+            }
+          }
+        }
+      }
+
       // 4. Volume / carga de trabalho — todos os arquivos, revisões inclusas (carga real)
       {
         if (!volumeMap[project.client]) {
@@ -319,13 +374,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
       }
     });
 
-    // --- Consolidação por entregável: IAPR, OTD e alertas usam só o arquivo mais recente ---
+    // --- Consolidação por entregável: IAPR usa só o arquivo mais recente do grupo (OTD já foi
+    // calculado por registro individual no forEach acima) ---
     const fttByDiscipline: Record<string, { totalGroups: number; successGroups: number }> = {};
-    const otdMonthly: Record<string, { measured: number; onTime: number }> = {};
     const iaprMonthly: Record<string, { closed: number; success: number }> = {};
-    const alerts: SlaAlert[] = [];
-    let totalSlaMeasured = 0;
-    let totalOnTime = 0;
     let groupsInProgress = 0;
     let groupsWaiting = 0;
     let closedGroups = 0;
@@ -362,47 +414,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
           if (!iaprMonthly[cKey]) iaprMonthly[cKey] = { closed: 0, success: 0 };
           iaprMonthly[cKey].closed++;
           if (success) iaprMonthly[cKey].success++;
-        }
-      }
-
-      // OTD e alertas exigem SLA cadastrada na obra do cliente
-      const clientData = clientsMap[g.client];
-      const hasSLA = clientData?.contractDate && clientData?.deadlineDays !== undefined;
-      if (!hasSLA) return;
-      const deadline = calculateDeadlineDate(
-        clientData.contractDate as string,
-        clientData.deadlineDays as number,
-      );
-      if (!deadline) return;
-
-      const effectiveObraStatus = getEffectiveStatus(clientData);
-      const obraCompleted =
-        effectiveObraStatus === ObraStatus.COMPLETED ||
-        effectiveObraStatus === ObraStatus.CANCELLED ||
-        effectiveObraStatus === ObraStatus.PAUSED;
-      const isDone = latest.status === Status.DONE || latest.status === Status.APPROVED;
-
-      if (isDone && latest.feedbackDate && isValid(parseISO(latest.feedbackDate))) {
-        totalSlaMeasured++;
-        const fb = parseISO(latest.feedbackDate);
-        const onTime = !isAfter(fb, deadline);
-        if (onTime) totalOnTime++;
-        const mKey = format(fb, 'yyyy-MM');
-        if (!otdMonthly[mKey]) otdMonthly[mKey] = { measured: 0, onTime: 0 };
-        otdMonthly[mKey].measured++;
-        if (onTime) otdMonthly[mKey].onTime++;
-      } else if (!obraCompleted && latest.status === Status.IN_PROGRESS) {
-        // REVISED (superado) e WAITING_APPROVAL (na mão do cliente) não penalizam
-        if (isAfter(today, deadline)) {
-          totalSlaMeasured++;
-          alerts.push({
-            project: latest,
-            slaStatus: 'ATRASADO',
-            deadline,
-            daysLate: differenceInCalendarDays(today, deadline),
-          });
-        } else if (isSameDay(today, deadline) || isSameDay(addDays(today, 1), deadline)) {
-          alerts.push({ project: latest, slaStatus: 'VENCENDO', deadline, daysLate: 0 });
         }
       }
     });
@@ -604,7 +615,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <KpiTile
           label="Atrasados (SLA)"
           value={stats.alerts.filter((a) => a.slaStatus === 'ATRASADO').length}
-          sub="prazo da obra vencido"
+          sub="prazo de entrega dos projetos vencido"
           accent={
             stats.alerts.some((a) => a.slaStatus === 'ATRASADO')
               ? 'text-rose-500'
@@ -689,7 +700,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
                   </span>
                   <span className="text-base font-bold text-rose-800 dark:text-rose-400">
-                    Entregáveis Atrasados ou Próximos do Vencimento (SLA da Obra)
+                    Entregáveis Atrasados ou Próximos do Vencimento (Prazo dos Projetos)
                   </span>
                   <span className="flex items-center gap-1.5 ml-1">
                     {atrasadoCount > 0 && (
@@ -816,7 +827,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             Entrega no Prazo (OTD)
           </h3>
           <p className="text-xs text-slate-400 text-center mb-4">
-            Entregáveis aprovados dentro da SLA da obra · Meta ≥ {META_OTD}%
+            Entregáveis aprovados dentro do prazo de entrega dos projetos · Meta ≥ {META_OTD}%
           </p>
           {stats.totalSlaMeasured > 0 ? (
             <div className="h-32 w-full relative flex items-center justify-center">

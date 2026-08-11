@@ -123,6 +123,12 @@ export interface Prancha {
   feedbackPeriod?: Period;
   blockedDays?: number;
 
+  // Meta de entrega desta revisão (opcional). Sobrepõe o prazo padrão da 1ª entrega
+  // (do ClientDoc.projectDeadlineDate da obra); sem ela, revisões após a 1ª (revisao > 0)
+  // não são medidas por SLA. Mesma regra do ProjectFile (types.ts), aplicada ao modelo
+  // de revisão in-place do Catálogo/Carteira.
+  targetDate?: string;
+
   revisions?: Revision[];
   observacao?: string;
   legacy?: { source: 'projects'; originalId: string };

@@ -21,16 +21,19 @@ import {
   REF_TIMELINE_FIELDS,
   RevisionHistoryModal,
   execDaysOf,
+  TargetDateInput,
 } from '../portfolio/shared';
 import {
   canTransitionTo,
   inferStatusFromDates,
   calculateBusinessDaysWithHolidays,
   formatDateDisplay,
-  calculateDeadlineDate,
+  resolveEntregavelDeadline,
+  isEntregavelOverdue,
   getEffectiveStatus,
+  getRevisionNumber,
 } from '../../utils';
-import { parseISO, isValid, format } from 'date-fns';
+import { parseISO, isValid } from 'date-fns';
 import {
   HardHat,
   Layers,
@@ -207,19 +210,18 @@ function CanteiroInner({
 
   const obraDoc = useMemo(() => clients.find((c) => c.name === obraAtiva), [clients, obraAtiva]);
 
-  // Atraso pelo SLA da obra — mesma régua dos Indicadores e de Projetos Locais
-  // (obra pausada, concluída ou cancelada não gera atraso)
+  // Atraso pelo prazo de entrega dos projetos — mesma régua dos Indicadores e de Projetos
+  // Locais (obra pausada, concluída ou cancelada não gera atraso; revisão posterior sem
+  // meta própria não é medida)
   const isOverdue = (p: ProjectFile): boolean => {
-    if (!obraDoc?.contractDate || obraDoc.deadlineDays === undefined) return false;
-    if (getEffectiveStatus(obraDoc) !== ObraStatus.ACTIVE) return false;
-    const deadline = calculateDeadlineDate(obraDoc.contractDate, obraDoc.deadlineDays);
-    if (!deadline) return false;
-    const deadlineStr = format(deadline, 'yyyy-MM-dd');
-    if (p.endDate) return p.endDate > deadlineStr;
-    if (p.status === Status.IN_PROGRESS || p.status === Status.REJECTED) {
-      return new Date().toISOString().split('T')[0] > deadlineStr;
-    }
-    return false;
+    if (!obraDoc || getEffectiveStatus(obraDoc) !== ObraStatus.ACTIVE) return false;
+    const isFirstCycle = (p.revision ?? getRevisionNumber(p.filename)) === 0;
+    const deadline = resolveEntregavelDeadline(p.targetDate, isFirstCycle, obraDoc.projectDeadlineDate);
+    return isEntregavelOverdue(
+      deadline,
+      p.endDate,
+      p.status === Status.IN_PROGRESS || p.status === Status.REJECTED,
+    );
   };
 
   // --- KPIs (mesma dinâmica do Catálogo: cada card é um filtro) ---
@@ -631,18 +633,14 @@ function CanteiroInner({
         </div>
       ))}
 
-      {/* Aviso de SLA da obra, quando cadastrado */}
-      {obraDoc?.contractDate && obraDoc.deadlineDays !== undefined && (
+      {/* Aviso do prazo de entrega dos projetos, quando cadastrado */}
+      {obraDoc?.projectDeadlineDate && (
         <p className="flex items-center gap-1.5 text-[11px] text-slate-400 dark:text-slate-500">
           <AlertTriangle size={12} className="text-amber-500" />
-          Prazo contratual da obra:{' '}
-          {formatDateDisplay(
-            format(
-              calculateDeadlineDate(obraDoc.contractDate, obraDoc.deadlineDays) || new Date(),
-              'yyyy-MM-dd',
-            ),
-          )}{' '}
-          — projetos além dessa data são marcados como Atrasados.
+          Data Estipulada para Finalizar os Projetos:{' '}
+          {formatDateDisplay(obraDoc.projectDeadlineDate)} — a 1ª entrega de cada projeto além
+          dessa data é marcada como Atrasada. Revisões posteriores só contam se tiverem meta
+          própria configurada.
         </p>
       )}
 
@@ -753,6 +751,7 @@ function ProjetoModal({
     feedbackDate: projeto?.feedbackDate || '',
     feedbackPeriod: projeto?.feedbackPeriod || 'TARDE',
   });
+  const [targetDate, setTargetDate] = useState(projeto?.targetDate || '');
   const [saving, setSaving] = useState(false);
 
   const showBase = !obraDoc || obraDoc.type === SiteType.OPERATIONAL_BASE;
@@ -802,6 +801,7 @@ function ProjetoModal({
       feedbackDate: dates.feedbackDate || '',
       ...(dates.feedbackDate ? { feedbackPeriod: dates.feedbackPeriod } : {}),
       blockedDays,
+      targetDate: targetDate || '',
     };
     draft.status = inferStatusFromDates({ ...(projeto || {}), ...draft } as ProjectFile);
     setSaving(true);
@@ -906,6 +906,7 @@ function ProjetoModal({
             onChange={(patch) => setDates((prev) => ({ ...prev, ...patch }))}
             note="O status segue a linha do tempo: preencher datas avança o fluxo, apagar retroage (Aprovado/Reprovado são preservados quando há feedback). Os dias úteis com o cliente recalculam a partir de envio e feedback."
           />
+          <TargetDateInput value={targetDate} onChange={setTargetDate} />
         </div>
 
         <div className="flex justify-end gap-2">

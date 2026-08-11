@@ -63,7 +63,6 @@ export interface DashboardStats {
     nExec: number;
   }[];
   fttData: { name: string; rate: number; n: number }[];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   volumeData: any[];
   volumeResumo: { files: number; obras: number; revisoes: number };
   reasonsData: { name: string; count: number; category: ReasonCategory }[];

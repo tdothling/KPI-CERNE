@@ -43,8 +43,12 @@ import {
   RevisionHistoryModal,
   execDaysOf,
 } from './shared';
-import { calculateDeadlineDate, formatDateDisplay, getEffectiveStatus } from '../../utils';
-import { format } from 'date-fns';
+import {
+  resolveEntregavelDeadline,
+  isEntregavelOverdue,
+  formatDateDisplay,
+  getEffectiveStatus,
+} from '../../utils';
 import { useObraAtiva, ObraSelectScreen, ObraAtivaBar, ObraCardStat } from '../ObraGate';
 import { AddPranchaModal } from './AddPranchaModal';
 import { PranchaEditModal } from './PranchaEditModal';
@@ -155,24 +159,19 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
     return map;
   }, [pranchas]);
 
-  // Atraso pelo SLA da obra (mesma régua dos Indicadores: obra pausada,
-  // concluída ou cancelada não gera atraso)
+  // Atraso pelo prazo de entrega dos projetos (mesma régua dos Indicadores: obra pausada,
+  // concluída ou cancelada não gera atraso; revisão posterior sem meta própria não é medida)
   const isPranchaOverdue = (p: Prancha, conjunto: Conjunto): boolean => {
     const obra = clientsMap[conjunto.client];
-    if (!obra?.contractDate || obra.deadlineDays === undefined) return false;
-    if (getEffectiveStatus(obra) !== ObraStatus.ACTIVE) return false;
-    const deadline = calculateDeadlineDate(obra.contractDate, obra.deadlineDays);
-    if (!deadline) return false;
-    const deadlineStr = format(deadline, 'yyyy-MM-dd');
-    if (p.endDate) return p.endDate > deadlineStr;
-    if (
+    if (!obra || getEffectiveStatus(obra) !== ObraStatus.ACTIVE) return false;
+    const deadline = resolveEntregavelDeadline(p.targetDate, p.revisao === 0, obra.projectDeadlineDate);
+    return isEntregavelOverdue(
+      deadline,
+      p.endDate,
       p.status === PranchaStatus.A_FAZER ||
-      p.status === PranchaStatus.EM_ANDAMENTO ||
-      p.status === PranchaStatus.REPROVADO
-    ) {
-      return new Date().toISOString().split('T')[0] > deadlineStr;
-    }
-    return false;
+        p.status === PranchaStatus.EM_ANDAMENTO ||
+        p.status === PranchaStatus.REPROVADO,
+    );
   };
 
   const conjuntoById = useMemo(() => new Map(conjuntos.map((c) => [c.id, c])), [conjuntos]);

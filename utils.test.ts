@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   calculateNetExecutionDuration,
   calculateBusinessDaysWithHolidays,
-  calculateDeadlineDate,
+  resolveEntregavelDeadline,
+  isEntregavelOverdue,
 } from './utils';
 
 describe('calculateNetExecutionDuration', () => {
@@ -110,26 +111,47 @@ describe('calculateBusinessDaysWithHolidays', () => {
   });
 });
 
-describe('calculateDeadlineDate', () => {
-  it('soma dias corridos à data do contrato', () => {
-    const result = calculateDeadlineDate('2026-03-23', 10);
+describe('resolveEntregavelDeadline', () => {
+  it('1ª entrega sem targetDate usa o prazo padrão da obra', () => {
+    const result = resolveEntregavelDeadline(undefined, true, '2026-04-02');
     expect(result?.toISOString().slice(0, 10)).toBe('2026-04-02');
   });
 
-  it('aceita deadlineDays como string numérica', () => {
-    const result = calculateDeadlineDate('2026-03-23', '10');
-    expect(result?.toISOString().slice(0, 10)).toBe('2026-04-02');
+  it('1ª entrega COM targetDate usa o targetDate, não o prazo da obra', () => {
+    const result = resolveEntregavelDeadline('2026-05-10', true, '2026-04-02');
+    expect(result?.toISOString().slice(0, 10)).toBe('2026-05-10');
   });
 
-  it('retorna null sem data de contrato', () => {
-    expect(calculateDeadlineDate(undefined, 10)).toBeNull();
+  it('revisão posterior sem targetDate não tem prazo (não é medida)', () => {
+    expect(resolveEntregavelDeadline(undefined, false, '2026-04-02')).toBeNull();
   });
 
-  it('retorna null sem prazo definido', () => {
-    expect(calculateDeadlineDate('2026-03-23', undefined)).toBeNull();
+  it('revisão posterior COM targetDate usa o targetDate', () => {
+    const result = resolveEntregavelDeadline('2026-06-15', false, '2026-04-02');
+    expect(result?.toISOString().slice(0, 10)).toBe('2026-06-15');
   });
 
-  it('retorna null com prazo não numérico', () => {
-    expect(calculateDeadlineDate('2026-03-23', 'abc')).toBeNull();
+  it('retorna null quando não há prazo da obra nem targetDate', () => {
+    expect(resolveEntregavelDeadline(undefined, true, undefined)).toBeNull();
+  });
+});
+
+describe('isEntregavelOverdue', () => {
+  const deadline = new Date('2026-04-02T00:00:00');
+
+  it('sem prazo resolvido, nunca está atrasado', () => {
+    expect(isEntregavelOverdue(null, '2026-05-01', true)).toBe(false);
+  });
+
+  it('com endDate após o prazo, está atrasado', () => {
+    expect(isEntregavelOverdue(deadline, '2026-04-10', false)).toBe(true);
+  });
+
+  it('com endDate dentro do prazo, não está atrasado', () => {
+    expect(isEntregavelOverdue(deadline, '2026-03-30', false)).toBe(false);
+  });
+
+  it('sem endDate, status fechado (não aberto), não está atrasado', () => {
+    expect(isEntregavelOverdue(deadline, undefined, false)).toBe(false);
   });
 });

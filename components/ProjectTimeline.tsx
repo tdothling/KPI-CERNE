@@ -33,7 +33,6 @@ import {
 import {
   calculateBusinessDaysWithHolidays,
   calculateNetExecutionDuration,
-  calculateDeadlineDate,
   addBusinessDaysWithHolidays,
 } from '../utils';
 
@@ -170,9 +169,11 @@ const ClientDetailGantt = ({
   const { rows, days, totalDays, chartStart, contractDeadline, holidaySet } = useMemo(() => {
     const hSet = new Set(holidays);
     const clientDoc = clients.find((c) => c.name === clientName);
-    const deadlineDays = clientDoc?.deadlineDays || 0;
-    // Prazo contratual da obra (marco fixo: data do contrato + dias de prazo)
-    const cDeadline = calculateDeadlineDate(clientDoc?.contractDate, clientDoc?.deadlineDays);
+    // Data Estipulada para Finalizar os Projetos (marco fixo do eixo do gráfico)
+    const cDeadline =
+      clientDoc?.projectDeadlineDate && isValid(parseISO(clientDoc.projectDeadlineDate))
+        ? parseISO(clientDoc.projectDeadlineDate)
+        : null;
     const validProjects = projects.filter((p) => p.startDate && isValid(parseISO(p.startDate)));
     if (validProjects.length === 0)
       return {
@@ -204,14 +205,8 @@ const ClientDetailGantt = ({
           let end = f.endDate && isValid(parseISO(f.endDate)) ? parseISO(f.endDate) : today;
           if (end < start) end = start;
 
-          const plannedEnd = deadlineDays > 0 ? addDays(start, deadlineDays) : start;
-
           discDates.push(start, end);
           allDates.push(start, end);
-          if (deadlineDays > 0) {
-            // plannedEnd só entra no eixo global (allDates), NÃO na barra da disciplina (discDates)
-            allDates.push(plannedEnd);
-          }
 
           // Calcula duração considerando periodos
           const duration = calculateBusinessDaysWithHolidays(
@@ -222,10 +217,6 @@ const ClientDetailGantt = ({
             f.endPeriod || (f.endDate ? 'TARDE' : 'TARDE'),
           );
           const netDuration = calculateNetExecutionDuration(f, holidays);
-
-          // Atraso: execução (ou hoje, se em andamento) ultrapassou o fim planejado
-          const isLate = deadlineDays > 0 && f.status !== Status.REVISED && end > plannedEnd;
-          const daysLate = isLate ? differenceInCalendarDays(end, plannedEnd) : 0;
 
           // Marcos de envio e feedback do cliente (ciclo de aprovação)
           const send = f.sendDate && isValid(parseISO(f.sendDate)) ? parseISO(f.sendDate) : null;
@@ -245,10 +236,6 @@ const ClientDetailGantt = ({
             end,
             duration,
             netDuration,
-            plannedEnd,
-            deadlineDays,
-            isLate,
-            daysLate,
             send,
             feedback,
             pauses: f.pauses || [],
@@ -261,7 +248,6 @@ const ClientDetailGantt = ({
           const maxD = max(discDates);
           // Duração do grupo agora reflete apenas o período real de execução
           const duration = calculateBusinessDaysWithHolidays(minD, maxD, holidays);
-          const lateCount = fileRows.filter((fr) => fr.isLate).length;
           rowData.push({
             id: `disc-${disc}`,
             type: 'DISCIPLINE',
@@ -270,7 +256,6 @@ const ClientDetailGantt = ({
             start: minD,
             end: maxD,
             duration,
-            lateCount,
             children: fileRows,
           });
         }
@@ -360,7 +345,7 @@ const ClientDetailGantt = ({
   }, [rows, expandedDisciplines]);
   const chartWidth = Math.max(900, totalDays * dayWidth);
 
-  // Posição das linhas verticais de referência (Hoje e Prazo Contratual)
+  // Posição das linhas verticais de referência (Hoje e Prazo dos Projetos)
   const todayOffset = differenceInCalendarDays(startOfDay(new Date()), chartStart);
   const showTodayLine = totalDays > 0 && todayOffset >= 0 && todayOffset < totalDays;
   const todayLeftPct = ((todayOffset + 0.5) / totalDays) * 100;
@@ -391,12 +376,6 @@ const ClientDetailGantt = ({
                   </span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <div className="w-3 h-3 rounded-sm border-2 border-dashed border-slate-400 bg-slate-100/50 dark:bg-slate-700/30"></div>
-                  <span className="text-slate-600 dark:text-slate-300 font-medium tracking-tight uppercase">
-                    Planejado (Prazo)
-                  </span>
-                </div>
-                <div className="flex items-center gap-1">
                   <div className="w-0.5 h-3 bg-red-500"></div>
                   <span className="text-slate-600 dark:text-slate-300 font-medium tracking-tight uppercase">
                     Hoje
@@ -406,7 +385,7 @@ const ClientDetailGantt = ({
                   <div className="flex items-center gap-1">
                     <div className="h-3 border-l-2 border-dashed border-amber-500"></div>
                     <span className="text-slate-600 dark:text-slate-300 font-medium tracking-tight uppercase">
-                      Prazo Contratual ({format(contractDeadline, 'dd/MM/yy')})
+                      Prazo dos Projetos ({format(contractDeadline, 'dd/MM/yy')})
                     </span>
                   </div>
                 )}
@@ -551,15 +530,6 @@ const ClientDetailGantt = ({
                           )}
                           <span className="truncate text-xs md:text-sm">{row.label}</span>
                           <span className="ml-auto flex items-center gap-1">
-                            {row.lateCount > 0 && (
-                              <span
-                                className="text-[9px] md:text-[10px] px-1.5 py-0.5 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-400 rounded-full font-bold flex items-center gap-0.5"
-                                title={`${row.lateCount} arquivo(s) além do prazo`}
-                              >
-                                <AlertTriangle size={9} />
-                                {row.lateCount}
-                              </span>
-                            )}
                             <span className="text-[9px] md:text-[10px] px-1.5 py-0.5 bg-slate-200 dark:bg-slate-600 rounded-full text-slate-600 dark:text-slate-300 hidden md:inline-block">
                               {row.children.length} arq
                             </span>
@@ -593,31 +563,21 @@ const ClientDetailGantt = ({
                       )}
                     </div>
                     <div className="flex-1 relative h-full">
-                      {/* Sombra de Planejamento */}
-                      {row.type === 'FILE' && row.deadlineDays > 0 && (
-                        <div
-                          className="absolute top-1.5 bottom-1.5 rounded-md border-2 border-dashed border-slate-400 dark:border-slate-500 bg-slate-100/30 dark:bg-slate-800/30 z-0 pointer-events-none"
-                          style={{
-                            left: `${(differenceInCalendarDays(row.start, chartStart) / totalDays) * 100}%`,
-                            width: `${(Math.max(1, differenceInCalendarDays(row.plannedEnd, row.start) + 1) / totalDays) * 100}%`,
-                          }}
-                        />
-                      )}
                       {/* Barra Executada Principal */}
                       <div
-                        className={`absolute top-2.5 bottom-2.5 rounded-md shadow-sm transition-all flex items-center px-2 whitespace-nowrap overflow-hidden text-[10px] md:text-xs font-medium text-white ${isDisc ? 'opacity-80' : ''} ${DISCIPLINE_COLORS[row.discipline] || 'bg-slate-400'} ${isRejected ? 'ring-2 ring-rose-500' : row.isLate ? 'ring-2 ring-red-500' : ''} z-10`}
+                        className={`absolute top-2.5 bottom-2.5 rounded-md shadow-sm transition-all flex items-center px-2 whitespace-nowrap overflow-hidden text-[10px] md:text-xs font-medium text-white ${isDisc ? 'opacity-80' : ''} ${DISCIPLINE_COLORS[row.discipline] || 'bg-slate-400'} ${isRejected ? 'ring-2 ring-rose-500' : ''} z-10`}
                         style={{
                           left: `${offsetPercent}%`,
                           width: `${widthPercent}%`,
                           ...(isDisc && !isDone ? STRIPE_PATTERN_STYLE : {}),
                         }}
-                        title={`${row.label}\n${format(row.start, 'dd/MM/yyyy')} → ${format(row.end, 'dd/MM/yyyy')}${row.status ? `\nStatus: ${row.status}` : ''}${row.isLate ? `\n⚠ ${row.daysLate} dia(s) além do prazo planejado` : ''}`}
+                        title={`${row.label}\n${format(row.start, 'dd/MM/yyyy')} → ${format(row.end, 'dd/MM/yyyy')}${row.status ? `\nStatus: ${row.status}` : ''}`}
                       >
                         <span className="drop-shadow-md">
                           {row.type === 'FILE' && row.netDuration !== undefined
                             ? row.netDuration
                             : row.duration}{' '}
-                          dias{row.isLate ? ` · +${row.daysLate}d` : ''}
+                          dias
                         </span>
                       </div>
 
@@ -679,7 +639,7 @@ const ClientDetailGantt = ({
                         />
                       )}
 
-                      {/* Linhas de referência: Hoje e Prazo Contratual */}
+                      {/* Linhas de referência: Hoje e Prazo dos Projetos */}
                       {showTodayLine && (
                         <div
                           className="absolute top-0 bottom-0 w-px bg-red-500/70 z-[12] pointer-events-none"
@@ -779,7 +739,10 @@ export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({
     return Object.entries(groups)
       .map(([name, stats]) => {
         const clientDoc = clients.find((c) => c.name === name);
-        const deadline = calculateDeadlineDate(clientDoc?.contractDate, clientDoc?.deadlineDays);
+        const deadline =
+          clientDoc?.projectDeadlineDate && isValid(parseISO(clientDoc.projectDeadlineDate))
+            ? parseISO(clientDoc.projectDeadlineDate)
+            : null;
         const progress =
           stats.relevantFiles > 0
             ? Math.round((stats.deliveredFiles / stats.relevantFiles) * 100)
@@ -1029,7 +992,7 @@ export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({
                   }}
                   title={`${client.name}: ${format(client.startDate, 'dd/MM/yy')} → ${format(client.endDate, 'dd/MM/yy')} · ${client.progress}% entregue`}
                 />
-                {/* Marco de prazo contratual */}
+                {/* Marco do prazo de entrega dos projetos */}
                 {client.deadline && (
                   <div
                     className="absolute top-1 bottom-1 border-l-2 border-dashed border-amber-500"

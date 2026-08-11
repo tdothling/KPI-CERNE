@@ -57,7 +57,7 @@ export function buildEmailBody(input: ReportSummaryInput): string {
     `Em execução: ${stats.groupsInProgress} entregáveis (${stats.totalWipFiles} arquivos em trabalho)`,
   );
   linhas.push(`Aguardando retorno do cliente: ${stats.groupsWaiting} entregáveis`);
-  linhas.push(`Atrasados (SLA da obra): ${atrasados.length}`);
+  linhas.push(`Atrasados (prazo de entrega dos projetos): ${atrasados.length}`);
   linhas.push(`A vencer em até 1 dia: ${vencendo.length}`);
   linhas.push(
     `Entregas nos últimos 30 dias: ${stats.deliveries30} (${deltaTexto} vs. os 30 dias anteriores)`,

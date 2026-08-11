@@ -1,24 +1,34 @@
 import React from 'react';
-import { differenceInDays, addDays, parseISO } from 'date-fns';
+import { differenceInDays, isValid, parseISO } from 'date-fns';
 import { ClientDoc, SiteType, ObraStatus } from '../../types';
 import { getEffectiveStatus } from '../../utils';
 
 export const today = new Date().toISOString().split('T')[0];
 
-// --- SLA (prazo contratual) ---
+// --- SLA (prazo de entrega dos projetos) ---
 
 export function getSlaInfo(client: ClientDoc) {
-  if (!client.contractDate || client.deadlineDays === undefined) return null;
+  if (!client.projectDeadlineDate || !isValid(parseISO(client.projectDeadlineDate))) return null;
   try {
-    const start = parseISO(client.contractDate);
-    const end = addDays(start, client.deadlineDays);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const elapsed = Math.max(0, differenceInDays(today, start));
-    const remaining = differenceInDays(end, today);
-    const progress = Math.min(100, Math.max(0, (elapsed / client.deadlineDays) * 100));
-    const isOverdue = today > end;
-    return { end, elapsed, remaining, progress, isOverdue, isAtRisk: !isOverdue && remaining <= 7 };
+    const end = parseISO(client.projectDeadlineDate);
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const remaining = differenceInDays(end, now);
+    const isOverdue = now > end;
+
+    // Progresso só é computável se soubermos o início da obra; sem ele, mostra
+    // apenas "faltam N dias"/"venceu há N dias", sem barra de progresso.
+    const start =
+      client.obraStartDate && isValid(parseISO(client.obraStartDate))
+        ? parseISO(client.obraStartDate)
+        : null;
+    const totalSpan = start ? differenceInDays(end, start) : 0;
+    const progress =
+      start && totalSpan > 0
+        ? Math.min(100, Math.max(0, (differenceInDays(now, start) / totalSpan) * 100))
+        : null;
+
+    return { end, remaining, progress, isOverdue, isAtRisk: !isOverdue && remaining <= 7 };
   } catch {
     return null;
   }
@@ -32,11 +42,15 @@ export interface FormState {
   type: SiteType;
   numberOfBases: number;
   bases: string[]; // rodovia: bases nomeadas (fonte da instanciação no Catálogo)
+  obraStartDate: string;
+  obraEndDate: string; // mapeia para ClientDoc.expectedCompletionDate (mesma propriedade, rótulo novo)
+  projectDeadlineDate: string;
+  // SLA antigo (legado) — somente leitura no formulário; nenhum input escreve nestes campos,
+  // então eles nunca entram no payload de salvar e o valor em Firestore é preservado.
   contractDate: string;
   deadlineDays: number | undefined;
   obraStatus: ObraStatus;
   completedAt: string;
-  expectedCompletionDate: string;
   responsavel: string;
   observacoes: string;
 }
@@ -47,11 +61,13 @@ export const defaultForm: FormState = {
   type: SiteType.CONSTRUCTION_SITE,
   numberOfBases: 0,
   bases: [],
+  obraStartDate: '',
+  obraEndDate: '',
+  projectDeadlineDate: '',
   contractDate: '',
   deadlineDays: undefined,
   obraStatus: ObraStatus.ACTIVE,
   completedAt: '',
-  expectedCompletionDate: '',
   responsavel: '',
   observacoes: '',
 };
@@ -63,11 +79,13 @@ export function clientToForm(c: ClientDoc): FormState {
     type: c.type,
     numberOfBases: c.numberOfBases || 0,
     bases: c.bases || [],
+    obraStartDate: c.obraStartDate || '',
+    obraEndDate: c.expectedCompletionDate || '',
+    projectDeadlineDate: c.projectDeadlineDate || '',
     contractDate: c.contractDate || '',
     deadlineDays: c.deadlineDays,
     obraStatus: getEffectiveStatus(c),
     completedAt: c.completedAt || '',
-    expectedCompletionDate: c.expectedCompletionDate || '',
     responsavel: c.responsavel || '',
     observacoes: c.observacoes || '',
   };

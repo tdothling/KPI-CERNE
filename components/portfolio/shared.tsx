@@ -320,6 +320,38 @@ export function TimelineDatesEditor({
   );
 }
 
+// --- Meta de entrega desta revisão (SLA de entregas posteriores à 1ª) ---
+// Sem período (é uma meta, não uma data de trabalho) — por isso fica fora do
+// TimelineDatesEditor/TimelineFieldSpec acima, que sempre pareia data+período.
+// Usado pelo Canteiro (ProjectFile.targetDate) e pela Carteira/Catálogo
+// (Prancha.targetDate); a Referência não usa, pois não é medida por SLA.
+export function TargetDateInput({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-lg p-3 mt-3">
+      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">
+        Meta de Entrega desta Revisão (opcional)
+      </label>
+      <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-2">
+        Preencha só se esta entrega tiver uma data própria, combinada à parte (ex.: revisão
+        pós-certificadora) — diferente do prazo padrão da 1ª entrega da obra. Sem esta data, a
+        revisão não entra na medição de atraso. Deixe em branco para limpar.
+      </p>
+      <input
+        type="date"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full max-w-[220px] bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-sm rounded-lg p-2 dark:[color-scheme:dark]"
+      />
+    </div>
+  );
+}
+
 export function DateActionModal({
   request,
   onClose,

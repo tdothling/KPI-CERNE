@@ -117,11 +117,14 @@ export const ObrasPage: React.FC<ObrasPageProps> = ({
           ? cleanBases.length || undefined
           : formData.numberOfBases || undefined,
       bases: cleanBases.length > 0 ? cleanBases : undefined,
-      contractDate: formData.contractDate || undefined,
-      deadlineDays: formData.deadlineDays,
+      obraStartDate: formData.obraStartDate || undefined,
+      expectedCompletionDate: formData.obraEndDate || undefined,
+      projectDeadlineDate: formData.projectDeadlineDate || undefined,
+      // contractDate/deadlineDays (SLA antigo) propositalmente FORA do payload: são
+      // somente-leitura no formulário, então não devem ser reescritos ao salvar — o
+      // valor que já está em Firestore (se houver) é preservado pelo merge do updateDoc.
       obraStatus: formData.obraStatus,
       completedAt: needsCompletedAt ? formData.completedAt || today : '',
-      expectedCompletionDate: formData.expectedCompletionDate || undefined,
       responsavel: formData.responsavel || undefined,
       observacoes: formData.observacoes || undefined,
     };
