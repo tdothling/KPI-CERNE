@@ -1,4 +1,3 @@
-
 export enum Discipline {
   ARCHITECTURE = 'Arquitetura',
   STRUCTURE = 'Estrutura',
@@ -10,12 +9,12 @@ export enum Discipline {
   SPDA = 'SPDA',
   FIRE = 'Incêndio',
   HVAC = 'Climatização',
-  OTHER = 'Outros'
+  OTHER = 'Outros',
 }
 
 export enum ProjectPhase {
   PRELIMINARY = 'Preliminar',
-  EXECUTIVE = 'Executivo'
+  EXECUTIVE = 'Executivo',
 }
 
 export enum Status {
@@ -25,7 +24,7 @@ export enum Status {
   APPROVED = 'Aprovado', // Novo
   REJECTED = 'Reprovado', // Novo
   REVISED = 'Revisado', // Novo: Indica que este arquivo gerou uma revisão
-  SUPERSEDED = 'Executivo Gerado' // Preliminar finalizado sem envio: o executivo foi criado antes, tornando o envio desnecessário
+  SUPERSEDED = 'Executivo Gerado', // Preliminar finalizado sem envio: o executivo foi criado antes, tornando o envio desnecessário
 }
 
 export enum RevisionReason {
@@ -35,7 +34,7 @@ export enum RevisionReason {
   PROJECT_CHANGE = 'Mudança de Projeto', // Novo
   ADDENDUM = 'Aditivo', // Novo
   COMPATIBILITY = 'Compatibilização',
-  OTHER = 'Outros' // Novo
+  OTHER = 'Outros', // Novo
 }
 
 export type DateFilterType = 'ALL' | 'MONTH' | 'QUARTER' | 'SEMESTER' | 'YEAR' | 'CUSTOM';
@@ -46,10 +45,14 @@ export type Period = 'MANHA' | 'TARDE';
 // sobrescritas sem registro — o histórico e os Indicadores perderiam a revisão.
 export interface RevisionCycleSnapshot {
   revisao: number; // número da revisão encerrada (R00, R01...)
-  startDate?: string; startPeriod?: Period;
-  endDate?: string; endPeriod?: Period;
-  sendDate?: string; sendPeriod?: Period;
-  feedbackDate?: string; feedbackPeriod?: Period;
+  startDate?: string;
+  startPeriod?: Period;
+  endDate?: string;
+  endPeriod?: Period;
+  sendDate?: string;
+  sendPeriod?: Period;
+  feedbackDate?: string;
+  feedbackPeriod?: Period;
   blockedDays?: number;
 }
 
@@ -83,7 +86,7 @@ export interface ProjectFile {
 
   startDate: string; // ISO Date
   startPeriod?: Period; // Novo
-  
+
   endDate: string; // ISO Date (Fim da Execução)
   endPeriod?: Period; // Novo
 
@@ -101,9 +104,9 @@ export interface ProjectFile {
 
 // Interface para o Filtro Avançado
 export interface ProjectFilterState {
-    clients: string[];
-    disciplines: Discipline[];
-    isActive: boolean;
+  clients: string[];
+  disciplines: Discipline[];
+  isActive: boolean;
 }
 
 // --- COMPRAS (LEGADO) ---
@@ -114,7 +117,7 @@ export enum PurchaseStatus {
   PENDING = 'Pendente', // Solicitação feita
   BOUGHT = 'Comprado', // Pedido realizado no fornecedor
   DELIVERED = 'Entregue', // Material chegou na base
-  CANCELED = 'Cancelado'
+  CANCELED = 'Cancelado',
 }
 
 export interface PurchaseDoc {
@@ -124,13 +127,13 @@ export interface PurchaseDoc {
   base: string; // Para qual base/obra
   application: string; // Qual a aplicação (Ex: Infraestrutura elétrica)
   requester: string; // Quem pediu
-  
+
   requestDate: string; // Data do pedido
   requestPeriod?: Period; // Novo
-  
+
   arrivalDate: string; // Data da chegada (vazio se não chegou)
   arrivalPeriod?: Period; // Novo
-  
+
   status: PurchaseStatus;
   link?: string; // Link de referência ou rastreio
   observation?: string;
@@ -141,12 +144,12 @@ export interface PurchaseDoc {
 // um pedido (SupplyOrder) percorre o ciclo completo, do planejamento à entrega.
 
 export enum SupplyStatus {
-  PLANNING = 'Planejamento',    // Lista de materiais em elaboração
-  READY = 'Lista Pronta',       // Lista fechada, aguardando cotação
-  QUOTING = 'Em Cotação',       // Cotação com fornecedores em andamento
-  BOUGHT = 'Comprado',          // Pedido realizado no fornecedor
-  DELIVERED = 'Entregue',       // Material chegou na obra/base
-  CANCELED = 'Cancelado'
+  PLANNING = 'Planejamento', // Lista de materiais em elaboração
+  READY = 'Lista Pronta', // Lista fechada, aguardando cotação
+  QUOTING = 'Em Cotação', // Cotação com fornecedores em andamento
+  BOUGHT = 'Comprado', // Pedido realizado no fornecedor
+  DELIVERED = 'Entregue', // Material chegou na obra/base
+  CANCELED = 'Cancelado',
 }
 
 export type SupplyPriority = 'BAIXA' | 'NORMAL' | 'ALTA' | 'URGENTE';
@@ -156,17 +159,17 @@ export interface SupplyItem {
   id: string;
   description: string;
   quantity: number;
-  unit: string;               // un, m, kg, cx...
+  unit: string; // un, m, kg, cx...
   delivered: boolean;
-  deliveredAt?: string;       // ISO Date de quando o item chegou
+  deliveredAt?: string; // ISO Date de quando o item chegou
   observation?: string;
 }
 
 // Evento da timeline de status (histórico completo, inclui regressões)
 export interface SupplyStatusEvent {
   id: string;
-  status: SupplyStatus;       // status de DESTINO do movimento
-  date: string;               // ISO Date
+  status: SupplyStatus; // status de DESTINO do movimento
+  date: string; // ISO Date
   period?: Period;
   user?: string;
   comment?: string;
@@ -174,28 +177,32 @@ export interface SupplyStatusEvent {
 
 // Datas de marco por etapa (cache achatado p/ KPIs sem varrer o histórico)
 export interface SupplyMilestones {
-  readyAt?: string;     readyPeriod?: Period;
-  quotingAt?: string;   quotingPeriod?: Period;
-  boughtAt?: string;    boughtPeriod?: Period;
-  deliveredAt?: string; deliveredPeriod?: Period;
+  readyAt?: string;
+  readyPeriod?: Period;
+  quotingAt?: string;
+  quotingPeriod?: Period;
+  boughtAt?: string;
+  boughtPeriod?: Period;
+  deliveredAt?: string;
+  deliveredPeriod?: Period;
   canceledAt?: string;
 }
 
 export interface SupplyOrder {
   id: string;
-  title: string;              // Nome do pedido/lista (ex: "Infra elétrica Bloco B")
-  client: string;             // Obra — nome denormalizado, igual às demais coleções
+  title: string; // Nome do pedido/lista (ex: "Infra elétrica Bloco B")
+  client: string; // Obra — nome denormalizado, igual às demais coleções
   base: string;
-  application?: string;       // Aplicação (ex: Infraestrutura de rede)
-  discipline?: Discipline;    // Opcional — habilita o filtro global de disciplinas
+  application?: string; // Aplicação (ex: Infraestrutura de rede)
+  discipline?: Discipline; // Opcional — habilita o filtro global de disciplinas
   requester: string;
   priority: SupplyPriority;
   status: SupplyStatus;
   items: SupplyItem[];
 
-  createdAt: string;          // ISO Date (início do Planejamento)
+  createdAt: string; // ISO Date (início do Planejamento)
   createdPeriod?: Period;
-  neededBy?: string;          // Data-limite desejada — base do alerta de atraso
+  neededBy?: string; // Data-limite desejada — base do alerta de atraso
 
   milestones: SupplyMilestones;
   statusHistory: SupplyStatusEvent[];
@@ -215,14 +222,14 @@ export enum SiteType {
   // Contrato de rodovia: obras iguais replicadas ao longo do traçado (KM).
   // Usa o fluxo Catálogo/Carteira (Referência → Conjunto → Prancha) em vez
   // do fluxo de arquivos da aba Projetos.
-  HIGHWAY = 'Obra de Rodovia'
+  HIGHWAY = 'Obra de Rodovia',
 }
 
 export enum ObraStatus {
   ACTIVE = 'Em andamento',
   PAUSED = 'Pausada',
   COMPLETED = 'Concluída',
-  CANCELLED = 'Cancelada'
+  CANCELLED = 'Cancelada',
 }
 
 export interface ClientDoc {
@@ -256,7 +263,7 @@ export interface KPISummary {
 }
 
 // Entrada da Lixeira: cópia de segurança gravada ANTES de qualquer exclusão no
-// app (todas as abas). `data` é o documento original intacto; restaurar = 
+// app (todas as abas). `data` é o documento original intacto; restaurar =
 // recriar o doc em `coll/docId` e remover a entrada. `opId` agrupa exclusões
 // feitas numa mesma ação (ex.: conjunto + suas pranchas, lote de referências).
 export interface TrashEntry {
@@ -264,9 +271,9 @@ export interface TrashEntry {
   coll: string;
   docId: string;
   data: Record<string, any>;
-  label: string;      // nome legível do que foi excluído (filename/name/título)
-  client: string;     // obra, quando o doc tem esse vínculo
-  deletedAt: string;  // ISO datetime
-  deletedBy: string;  // e-mail de quem excluiu
+  label: string; // nome legível do que foi excluído (filename/name/título)
+  client: string; // obra, quando o doc tem esse vínculo
+  deletedAt: string; // ISO datetime
+  deletedBy: string; // e-mail de quem excluiu
   opId: string;
 }

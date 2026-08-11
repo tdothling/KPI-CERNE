@@ -39,21 +39,35 @@ interface TrashModalProps {
   readOnly?: boolean;
 }
 
-export const TrashModal: React.FC<TrashModalProps> = ({ items, onRestore, onPurge, onClose, readOnly = false }) => {
+export const TrashModal: React.FC<TrashModalProps> = ({
+  items,
+  onRestore,
+  onPurge,
+  onClose,
+  readOnly = false,
+}) => {
   const [busyOp, setBusyOp] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
 
   // Exclusões da mesma ação (mesmo opId) aparecem como um grupo único
   const groups = useMemo<TrashGroup[]>(() => {
     const map = new Map<string, TrashGroup>();
-    items.forEach(item => {
+    items.forEach((item) => {
       const key = item.opId || item.id;
       if (!map.has(key)) {
-        map.set(key, { opId: key, deletedAt: item.deletedAt, deletedBy: item.deletedBy, client: item.client, entries: [] });
+        map.set(key, {
+          opId: key,
+          deletedAt: item.deletedAt,
+          deletedBy: item.deletedBy,
+          client: item.client,
+          entries: [],
+        });
       }
       map.get(key)!.entries.push(item);
     });
-    return Array.from(map.values()).sort((a, b) => (b.deletedAt || '').localeCompare(a.deletedAt || ''));
+    return Array.from(map.values()).sort((a, b) =>
+      (b.deletedAt || '').localeCompare(a.deletedAt || ''),
+    );
   }, [items]);
 
   const fmtWhen = (iso: string) => {
@@ -65,10 +79,11 @@ export const TrashModal: React.FC<TrashModalProps> = ({ items, onRestore, onPurg
     setBusyOp(group.opId);
     setFeedback(null);
     try {
-      const result = await onRestore(group.entries.map(e => e.id));
+      const result = await onRestore(group.entries.map((e) => e.id));
       const parts: string[] = [];
       if (result.restored.length) parts.push(`${result.restored.length} item(ns) restaurado(s)`);
-      if (result.skipped.length) parts.push(`${result.skipped.length} já existia(m) e foram mantidos na lixeira`);
+      if (result.skipped.length)
+        parts.push(`${result.skipped.length} já existia(m) e foram mantidos na lixeira`);
       setFeedback(parts.join('; ') || 'Nada a restaurar.');
     } catch (e) {
       console.error('Erro ao restaurar da lixeira:', e);
@@ -79,12 +94,14 @@ export const TrashModal: React.FC<TrashModalProps> = ({ items, onRestore, onPurg
   };
 
   const handlePurge = async (group: TrashGroup) => {
-    const what = group.entries.length === 1 ? `"${group.entries[0].label}"` : `${group.entries.length} itens`;
-    if (!confirm(`Excluir DEFINITIVAMENTE ${what} da lixeira?\n\nEssa ação não pode ser desfeita.`)) return;
+    const what =
+      group.entries.length === 1 ? `"${group.entries[0].label}"` : `${group.entries.length} itens`;
+    if (!confirm(`Excluir DEFINITIVAMENTE ${what} da lixeira?\n\nEssa ação não pode ser desfeita.`))
+      return;
     setBusyOp(group.opId);
     setFeedback(null);
     try {
-      await onPurge(group.entries.map(e => e.id));
+      await onPurge(group.entries.map((e) => e.id));
     } catch (e) {
       console.error('Erro ao excluir da lixeira:', e);
       setFeedback('Erro ao excluir definitivamente. Tente novamente.');
@@ -101,14 +118,19 @@ export const TrashModal: React.FC<TrashModalProps> = ({ items, onRestore, onPurg
             <Trash2 className="text-brand-600 dark:text-brand-400" size={20} />
             Lixeira
           </h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors" aria-label="Fechar Lixeira">
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+            aria-label="Fechar Lixeira"
+          >
             <X size={24} />
           </button>
         </div>
 
         <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
-          Tudo que é excluído em qualquer aba fica guardado aqui e pode ser restaurado com um clique.
-          Exclusões feitas numa mesma ação (ex.: um conjunto com suas pranchas) são restauradas juntas.
+          Tudo que é excluído em qualquer aba fica guardado aqui e pode ser restaurado com um
+          clique. Exclusões feitas numa mesma ação (ex.: um conjunto com suas pranchas) são
+          restauradas juntas.
         </p>
 
         {feedback && (
@@ -120,18 +142,28 @@ export const TrashModal: React.FC<TrashModalProps> = ({ items, onRestore, onPurg
         <div className="flex-1 overflow-y-auto custom-scrollbar -mx-2 px-2">
           {groups.length === 0 ? (
             <div className="py-16 text-center text-slate-400 dark:text-slate-500 text-sm">
-              <Trash2 size={32} className="mx-auto mb-3 opacity-40" />
-              A lixeira está vazia. Novas exclusões aparecerão aqui.
+              <Trash2 size={32} className="mx-auto mb-3 opacity-40" />A lixeira está vazia. Novas
+              exclusões aparecerão aqui.
             </div>
           ) : (
             <div className="space-y-3">
-              {groups.map(group => (
-                <div key={group.opId} className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 bg-slate-50/50 dark:bg-slate-900/20">
+              {groups.map((group) => (
+                <div
+                  key={group.opId}
+                  className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 bg-slate-50/50 dark:bg-slate-900/20"
+                >
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                     <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                      <span className="font-bold text-slate-700 dark:text-slate-200">{fmtWhen(group.deletedAt)}</span>
-                      {' · '}por <span className="font-semibold">{group.deletedBy || 'desconhecido'}</span>
-                      {group.client && <>{' · '}obra <span className="font-semibold">{group.client}</span></>}
+                      <span className="font-bold text-slate-700 dark:text-slate-200">
+                        {fmtWhen(group.deletedAt)}
+                      </span>
+                      {' · '}por{' '}
+                      <span className="font-semibold">{group.deletedBy || 'desconhecido'}</span>
+                      {group.client && (
+                        <>
+                          {' · '}obra <span className="font-semibold">{group.client}</span>
+                        </>
+                      )}
                     </div>
                     {!readOnly && (
                       <div className="flex items-center gap-2">
@@ -141,7 +173,9 @@ export const TrashModal: React.FC<TrashModalProps> = ({ items, onRestore, onPurg
                           className="flex items-center gap-1.5 bg-brand-700 hover:bg-brand-800 disabled:bg-slate-300 dark:disabled:bg-slate-600 text-white px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all"
                         >
                           <RotateCcw size={12} />
-                          {busyOp === group.opId ? 'Restaurando...' : `Restaurar${group.entries.length > 1 ? ` (${group.entries.length})` : ''}`}
+                          {busyOp === group.opId
+                            ? 'Restaurando...'
+                            : `Restaurar${group.entries.length > 1 ? ` (${group.entries.length})` : ''}`}
                         </button>
                         <button
                           onClick={() => handlePurge(group)}
@@ -156,9 +190,14 @@ export const TrashModal: React.FC<TrashModalProps> = ({ items, onRestore, onPurg
                     )}
                   </div>
                   <ul className="space-y-1">
-                    {group.entries.map(entry => (
-                      <li key={entry.id} className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200">
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-tight ${COLL_BADGE[entry.coll] || 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}>
+                    {group.entries.map((entry) => (
+                      <li
+                        key={entry.id}
+                        className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200"
+                      >
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-tight ${COLL_BADGE[entry.coll] || 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}
+                        >
                           {COLL_LABEL[entry.coll] || entry.coll}
                         </span>
                         <span className="font-medium truncate">{entry.label}</span>
@@ -175,7 +214,10 @@ export const TrashModal: React.FC<TrashModalProps> = ({ items, onRestore, onPurg
           <span className="text-[10px] text-slate-400 dark:text-slate-500">
             {items.length} item(ns) na lixeira (últimos 500 exibidos)
           </span>
-          <button onClick={onClose} className="text-sm font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+          <button
+            onClick={onClose}
+            className="text-sm font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+          >
             Fechar
           </button>
         </div>

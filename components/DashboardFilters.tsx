@@ -25,13 +25,20 @@ const DISCIPLINE_COLORS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  [Status.IN_PROGRESS]: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-700',
-  [Status.DONE]: 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300 border-violet-200 dark:border-violet-700',
-  [Status.WAITING_APPROVAL]: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200 dark:border-amber-700',
-  [Status.APPROVED]: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-700',
-  [Status.REJECTED]: 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300 border-rose-200 dark:border-rose-700',
-  [Status.REVISED]: 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400 border-slate-200 dark:border-slate-600',
-  [Status.SUPERSEDED]: 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300 border-teal-200 dark:border-teal-700',
+  [Status.IN_PROGRESS]:
+    'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-700',
+  [Status.DONE]:
+    'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300 border-violet-200 dark:border-violet-700',
+  [Status.WAITING_APPROVAL]:
+    'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200 dark:border-amber-700',
+  [Status.APPROVED]:
+    'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-700',
+  [Status.REJECTED]:
+    'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300 border-rose-200 dark:border-rose-700',
+  [Status.REVISED]:
+    'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400 border-slate-200 dark:border-slate-600',
+  [Status.SUPERSEDED]:
+    'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300 border-teal-200 dark:border-teal-700',
 };
 
 interface DashboardFiltersProps {
@@ -62,7 +69,7 @@ export const DashboardFilters: React.FC<DashboardFiltersProps> = ({
     <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm mb-6 overflow-hidden transition-all duration-200">
       {/* Header row */}
       <button
-        onClick={() => setIsExpanded(e => !e)}
+        onClick={() => setIsExpanded((e) => !e)}
         className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
         aria-expanded={isExpanded}
       >
@@ -78,26 +85,34 @@ export const DashboardFilters: React.FC<DashboardFiltersProps> = ({
         <div className="flex items-center gap-3">
           {activeFilterCount > 0 && (
             <button
-              onClick={e => { e.stopPropagation(); onClearAll(); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onClearAll();
+              }}
               className="flex items-center gap-1 text-xs text-rose-500 hover:text-rose-700 dark:hover:text-rose-400 font-medium transition-colors"
             >
               <X size={12} /> Limpar tudo
             </button>
           )}
-          {isExpanded ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
+          {isExpanded ? (
+            <ChevronUp size={16} className="text-slate-400" />
+          ) : (
+            <ChevronDown size={16} className="text-slate-400" />
+          )}
         </div>
       </button>
 
       {/* Filter panels */}
       {isExpanded && (
         <div className="border-t border-slate-100 dark:border-slate-700 px-4 py-4 space-y-4 animate-in fade-in duration-150">
-
           {/* Clients multi-select */}
           {availableClients.length > 1 && (
             <div>
-              <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Cliente</p>
+              <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">
+                Cliente
+              </p>
               <div className="flex flex-wrap gap-2">
-                {availableClients.map(client => (
+                {availableClients.map((client) => (
                   <button
                     key={client}
                     onClick={() => onToggleMulti('clients', client)}
@@ -116,9 +131,11 @@ export const DashboardFilters: React.FC<DashboardFiltersProps> = ({
 
           {/* Discipline chips */}
           <div>
-            <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Disciplina</p>
+            <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">
+              Disciplina
+            </p>
             <div className="flex flex-wrap gap-2">
-              {Object.values(Discipline).map(disc => (
+              {Object.values(Discipline).map((disc) => (
                 <button
                   key={disc}
                   onClick={() => onToggleMulti('disciplines', disc)}
@@ -136,9 +153,11 @@ export const DashboardFilters: React.FC<DashboardFiltersProps> = ({
 
           {/* Phase toggle */}
           <div>
-            <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Fase</p>
+            <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">
+              Fase
+            </p>
             <div className="flex gap-2">
-              {Object.values(ProjectPhase).map(phase => (
+              {Object.values(ProjectPhase).map((phase) => (
                 <button
                   key={phase}
                   onClick={() => onToggleMulti('phases', phase)}
@@ -156,9 +175,11 @@ export const DashboardFilters: React.FC<DashboardFiltersProps> = ({
 
           {/* Status chips */}
           <div>
-            <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Status</p>
+            <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">
+              Status
+            </p>
             <div className="flex flex-wrap gap-2">
-              {Object.values(Status).map(status => (
+              {Object.values(Status).map((status) => (
                 <button
                   key={status}
                   onClick={() => onToggleMulti('statuses', status)}
@@ -176,9 +197,11 @@ export const DashboardFilters: React.FC<DashboardFiltersProps> = ({
 
           {/* Date presets */}
           <div>
-            <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Período rápido</p>
+            <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">
+              Período rápido
+            </p>
             <div className="flex flex-wrap gap-2">
-              {DATE_PRESETS.map(preset => {
+              {DATE_PRESETS.map((preset) => {
                 const presetFrom = preset.getFrom();
                 const active = filters.dateFrom === presetFrom && !filters.dateTo;
                 return (
@@ -208,25 +231,28 @@ export const DashboardFilters: React.FC<DashboardFiltersProps> = ({
           {/* Date range */}
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex-1">
-              <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Início a partir de</p>
+              <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">
+                Início a partir de
+              </p>
               <input
                 type="date"
                 value={filters.dateFrom}
-                onChange={e => onSetDateFrom(e.target.value)}
+                onChange={(e) => onSetDateFrom(e.target.value)}
                 className="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500 transition-colors"
               />
             </div>
             <div className="flex-1">
-              <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Até</p>
+              <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">
+                Até
+              </p>
               <input
                 type="date"
                 value={filters.dateTo}
-                onChange={e => onSetDateTo(e.target.value)}
+                onChange={(e) => onSetDateTo(e.target.value)}
                 className="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500 transition-colors"
               />
             </div>
           </div>
-
         </div>
       )}
     </div>

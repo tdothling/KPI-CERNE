@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback } from 'react';
 import { ProjectFile, Discipline, Status, ProjectPhase } from '../types';
-import { parseISO, isValid, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
+import { parseISO, isValid, startOfDay, endOfDay } from 'date-fns';
 
 export interface DashboardFilterState {
   clients: string[];
@@ -8,7 +8,7 @@ export interface DashboardFilterState {
   phases: ProjectPhase[];
   statuses: Status[];
   dateFrom: string; // ISO string or ''
-  dateTo: string;   // ISO string or ''
+  dateTo: string; // ISO string or ''
 }
 
 const INITIAL_FILTER_STATE: DashboardFilterState = {
@@ -37,11 +37,12 @@ export function useDashboardFilters(allProjects: ProjectFile[]) {
 
   // Derived: filtered projects — pure derivation during render, no useEffect
   const filteredProjects = useMemo(() => {
-    return allProjects.filter(p => {
+    return allProjects.filter((p) => {
       // Client filter
       if (filters.clients.length > 0 && !filters.clients.includes(p.client)) return false;
       // Discipline filter
-      if (filters.disciplines.length > 0 && !filters.disciplines.includes(p.discipline)) return false;
+      if (filters.disciplines.length > 0 && !filters.disciplines.includes(p.discipline))
+        return false;
       // Phase filter
       if (filters.phases.length > 0) {
         const pPhase = p.phase ?? ProjectPhase.EXECUTIVE;
@@ -62,24 +63,27 @@ export function useDashboardFilters(allProjects: ProjectFile[]) {
 
   // Derived: unique client list from all projects
   const availableClients = useMemo(
-    () => Array.from(new Set(allProjects.map(p => p.client))).sort(),
-    [allProjects]
+    () => Array.from(new Set(allProjects.map((p) => p.client))).sort(),
+    [allProjects],
   );
 
   const clearAllFilters = useCallback(() => setFilters(INITIAL_FILTER_STATE), []);
 
-  const toggleMulti = useCallback(<T,>(key: keyof DashboardFilterState, value: T) => {
-    setFilters(prev => {
+  const toggleMulti = useCallback(<T>(key: keyof DashboardFilterState, value: T) => {
+    setFilters((prev) => {
       const current = prev[key] as T[];
       const next = current.includes(value)
-        ? current.filter(v => v !== value)
+        ? current.filter((v) => v !== value)
         : [...current, value];
       return { ...prev, [key]: next };
     });
   }, []);
 
-  const setDateFrom = useCallback((v: string) => setFilters(prev => ({ ...prev, dateFrom: v })), []);
-  const setDateTo = useCallback((v: string) => setFilters(prev => ({ ...prev, dateTo: v })), []);
+  const setDateFrom = useCallback(
+    (v: string) => setFilters((prev) => ({ ...prev, dateFrom: v })),
+    [],
+  );
+  const setDateTo = useCallback((v: string) => setFilters((prev) => ({ ...prev, dateTo: v })), []);
 
   return {
     filters,

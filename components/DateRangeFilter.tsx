@@ -1,5 +1,16 @@
 import React from 'react';
-import { format, addMonths, subMonths, addYears, subYears, addQuarters, subQuarters, startOfQuarter, endOfQuarter, getQuarter, getYear, getMonth, endOfDay, parseISO } from 'date-fns';
+import {
+  format,
+  addMonths,
+  subMonths,
+  addYears,
+  subYears,
+  addQuarters,
+  subQuarters,
+  getQuarter,
+  getYear,
+  getMonth,
+} from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, CalendarRange } from 'lucide-react';
 import { DateFilterType } from '../types';
@@ -19,36 +30,58 @@ export const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
   referenceDate,
   setReferenceDate,
   customRange,
-  setCustomRange
+  setCustomRange,
 }) => {
-
   const handlePrev = () => {
     switch (filterType) {
-      case 'MONTH': setReferenceDate(subMonths(referenceDate, 1)); break;
-      case 'QUARTER': setReferenceDate(subQuarters(referenceDate, 1)); break;
-      case 'SEMESTER': setReferenceDate(subMonths(referenceDate, 6)); break; 
-      case 'YEAR': setReferenceDate(subYears(referenceDate, 1)); break;
-      default: break;
+      case 'MONTH':
+        setReferenceDate(subMonths(referenceDate, 1));
+        break;
+      case 'QUARTER':
+        setReferenceDate(subQuarters(referenceDate, 1));
+        break;
+      case 'SEMESTER':
+        setReferenceDate(subMonths(referenceDate, 6));
+        break;
+      case 'YEAR':
+        setReferenceDate(subYears(referenceDate, 1));
+        break;
+      default:
+        break;
     }
   };
 
   const handleNext = () => {
     switch (filterType) {
-      case 'MONTH': setReferenceDate(addMonths(referenceDate, 1)); break;
-      case 'QUARTER': setReferenceDate(addQuarters(referenceDate, 1)); break;
-      case 'SEMESTER': setReferenceDate(addMonths(referenceDate, 6)); break;
-      case 'YEAR': setReferenceDate(addYears(referenceDate, 1)); break;
-      default: break;
+      case 'MONTH':
+        setReferenceDate(addMonths(referenceDate, 1));
+        break;
+      case 'QUARTER':
+        setReferenceDate(addQuarters(referenceDate, 1));
+        break;
+      case 'SEMESTER':
+        setReferenceDate(addMonths(referenceDate, 6));
+        break;
+      case 'YEAR':
+        setReferenceDate(addYears(referenceDate, 1));
+        break;
+      default:
+        break;
     }
   };
 
   const renderLabel = () => {
     switch (filterType) {
-      case 'MONTH': return format(referenceDate, 'MMMM yyyy', { locale: ptBR });
-      case 'QUARTER': return `${getQuarter(referenceDate)}º Trimestre ${getYear(referenceDate)}`;
-      case 'SEMESTER': return `${getMonth(referenceDate) < 6 ? 1 : 2}º Semestre ${getYear(referenceDate)}`;
-      case 'YEAR': return format(referenceDate, 'yyyy');
-      default: return '';
+      case 'MONTH':
+        return format(referenceDate, 'MMMM yyyy', { locale: ptBR });
+      case 'QUARTER':
+        return `${getQuarter(referenceDate)}º Trimestre ${getYear(referenceDate)}`;
+      case 'SEMESTER':
+        return `${getMonth(referenceDate) < 6 ? 1 : 2}º Semestre ${getYear(referenceDate)}`;
+      case 'YEAR':
+        return format(referenceDate, 'yyyy');
+      default:
+        return '';
     }
   };
 
@@ -68,18 +101,30 @@ export const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
           <option value="YEAR">Anual</option>
           <option value="CUSTOM">Personalizado</option>
         </select>
-        <CalendarRange size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" aria-hidden="true" />
+        <CalendarRange
+          size={14}
+          className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+          aria-hidden="true"
+        />
       </div>
 
       {filterType !== 'ALL' && filterType !== 'CUSTOM' && (
         <div className="flex items-center bg-slate-50 dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-700">
-          <button onClick={handlePrev} className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-l-md text-slate-500 dark:text-slate-400 transition-colors" aria-label="Período Anterior">
+          <button
+            onClick={handlePrev}
+            className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-l-md text-slate-500 dark:text-slate-400 transition-colors"
+            aria-label="Período Anterior"
+          >
             <ChevronLeft size={16} />
           </button>
           <span className="px-3 min-w-[140px] text-center text-sm font-semibold text-slate-700 dark:text-slate-200 capitalize select-none">
             {renderLabel()}
           </span>
-          <button onClick={handleNext} className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-r-md text-slate-500 dark:text-slate-400 transition-colors" aria-label="Próximo Período">
+          <button
+            onClick={handleNext}
+            className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-r-md text-slate-500 dark:text-slate-400 transition-colors"
+            aria-label="Próximo Período"
+          >
             <ChevronRight size={16} />
           </button>
         </div>
@@ -87,9 +132,21 @@ export const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
 
       {filterType === 'CUSTOM' && (
         <div className="flex items-center gap-2">
-          <input type="date" value={customRange.start} onChange={(e) => setCustomRange({ ...customRange, start: e.target.value })} className="border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded px-2 py-1 text-sm dark:[color-scheme:dark]" aria-label="Data Início" />
+          <input
+            type="date"
+            value={customRange.start}
+            onChange={(e) => setCustomRange({ ...customRange, start: e.target.value })}
+            className="border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded px-2 py-1 text-sm dark:[color-scheme:dark]"
+            aria-label="Data Início"
+          />
           <span className="text-slate-400 text-xs">até</span>
-          <input type="date" value={customRange.end} onChange={(e) => setCustomRange({ ...customRange, end: e.target.value })} className="border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded px-2 py-1 text-sm dark:[color-scheme:dark]" aria-label="Data Fim" />
+          <input
+            type="date"
+            value={customRange.end}
+            onChange={(e) => setCustomRange({ ...customRange, end: e.target.value })}
+            className="border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white rounded px-2 py-1 text-sm dark:[color-scheme:dark]"
+            aria-label="Data Fim"
+          />
         </div>
       )}
     </div>
