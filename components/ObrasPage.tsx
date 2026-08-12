@@ -1,13 +1,81 @@
 import React, { useState, useMemo } from 'react';
-import { HardHat, Building2, Plus, Search } from 'lucide-react';
+import {
+  HardHat,
+  Building2,
+  Plus,
+  Search,
+  Layers,
+  AlertTriangle,
+  PauseCircle,
+  CheckCircle2,
+  XCircle,
+  X,
+} from 'lucide-react';
 import { ClientDoc, ObraStatus, SiteType } from '../types';
 import { getEffectiveStatus } from '../utils';
 import { getSlaInfo, FormState, defaultForm, clientToForm, today } from './obras/shared';
-import { StatCard } from './obras/StatCard';
+import { StatCard, StatTone } from './obras/StatCard';
 import { ObraCard } from './obras/ObraCard';
 import { ObraFormModal } from './obras/ObraFormModal';
 
-type FilterTab = 'ALL' | ObraStatus;
+// 'AT_RISK' é um recorte transversal (obras ativas com SLA vencido ou perto de vencer),
+// não um status do ciclo de vida — por isso não faz parte do enum ObraStatus.
+type FilterTab = 'ALL' | 'AT_RISK' | ObraStatus;
+
+type StatKey = 'total' | 'active' | 'atRisk' | 'paused' | 'completed' | 'cancelled';
+
+const FILTERS: {
+  value: FilterTab;
+  statKey: StatKey;
+  label: string;
+  tone: StatTone;
+  icon: React.ReactNode;
+  alert?: boolean;
+}[] = [
+  {
+    value: 'ALL',
+    statKey: 'total',
+    label: 'Todas as obras',
+    tone: 'slate',
+    icon: <Layers size={17} />,
+  },
+  {
+    value: ObraStatus.ACTIVE,
+    statKey: 'active',
+    label: 'Em andamento',
+    tone: 'blue',
+    icon: <HardHat size={17} />,
+  },
+  {
+    value: 'AT_RISK',
+    statKey: 'atRisk',
+    label: 'Em risco (SLA)',
+    tone: 'rose',
+    icon: <AlertTriangle size={17} />,
+    alert: true,
+  },
+  {
+    value: ObraStatus.PAUSED,
+    statKey: 'paused',
+    label: 'Pausadas',
+    tone: 'amber',
+    icon: <PauseCircle size={17} />,
+  },
+  {
+    value: ObraStatus.COMPLETED,
+    statKey: 'completed',
+    label: 'Concluídas',
+    tone: 'emerald',
+    icon: <CheckCircle2 size={17} />,
+  },
+  {
+    value: ObraStatus.CANCELLED,
+    statKey: 'cancelled',
+    label: 'Canceladas',
+    tone: 'slate',
+    icon: <XCircle size={17} />,
+  },
+];
 
 interface ObrasPageProps {
   clients: ClientDoc[];
@@ -54,7 +122,13 @@ export const ObrasPage: React.FC<ObrasPageProps> = ({
     const q = search.toLowerCase();
     return clients
       .filter((c) => {
-        if (filterTab !== 'ALL' && getEffectiveStatus(c) !== filterTab) return false;
+        if (filterTab === 'AT_RISK') {
+          if (getEffectiveStatus(c) !== ObraStatus.ACTIVE) return false;
+          const sla = getSlaInfo(c);
+          if (!sla || !(sla.isOverdue || sla.isAtRisk)) return false;
+        } else if (filterTab !== 'ALL' && getEffectiveStatus(c) !== filterTab) {
+          return false;
+        }
         if (q && !c.name.toLowerCase().includes(q) && !(c.location || '').toLowerCase().includes(q))
           return false;
         return true;
@@ -179,39 +253,40 @@ export const ObrasPage: React.FC<ObrasPageProps> = ({
         </button>
       </div>
 
-      {/* Stats row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <StatCard label="Total de Obras" value={stats.total} color="slate" />
-        <StatCard label="Ativas" value={stats.active} color="blue" />
-        <StatCard label="Em Risco (SLA)" value={stats.atRisk} color="rose" alert />
-        <StatCard label="Concluídas" value={stats.completed} color="emerald" />
+      {/* Indicadores — cada card também é o filtro da listagem */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {FILTERS.map((f) => (
+          <StatCard
+            key={f.value}
+            tone={f.tone}
+            icon={f.icon}
+            label={f.label}
+            value={stats[f.statKey]}
+            active={filterTab === f.value}
+            alert={f.alert}
+            onClick={() =>
+              setFilterTab(filterTab === f.value && f.value !== 'ALL' ? 'ALL' : f.value)
+            }
+          />
+        ))}
       </div>
 
-      {/* Filter bar */}
+      {/* Barra de contexto: o que está sendo mostrado + busca */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1 overflow-x-auto">
-          {(
-            [
-              ['ALL', `Todas (${stats.total})`],
-              [ObraStatus.ACTIVE, `Ativas (${stats.active})`],
-              [ObraStatus.PAUSED, `Pausadas (${stats.paused})`],
-              [ObraStatus.COMPLETED, `Concluídas (${stats.completed})`],
-              [ObraStatus.CANCELLED, `Canceladas (${stats.cancelled})`],
-            ] as [FilterTab, string][]
-          ).map(([value, label]) => (
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Mostrando{' '}
+          <strong className="text-slate-700 dark:text-slate-200">{filtered.length}</strong> de{' '}
+          {stats.total} obra{stats.total !== 1 ? 's' : ''}
+          {filterTab !== 'ALL' && (
             <button
-              key={value}
-              onClick={() => setFilterTab(value)}
-              className={`px-3 py-1.5 rounded text-xs font-bold whitespace-nowrap transition-all ${
-                filterTab === value
-                  ? 'bg-brand-700 text-white shadow-sm'
-                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-              }`}
+              onClick={() => setFilterTab('ALL')}
+              className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border border-brand-200 bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:border-brand-800 dark:text-brand-400 hover:bg-brand-100 dark:hover:bg-brand-900/50 transition-colors"
             >
-              {label}
+              {FILTERS.find((f) => f.value === filterTab)?.label}
+              <X size={11} />
             </button>
-          ))}
-        </div>
+          )}
+        </p>
 
         <div className="relative flex-shrink-0">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -227,10 +302,14 @@ export const ObrasPage: React.FC<ObrasPageProps> = ({
 
       {/* Obra list */}
       {filtered.length === 0 ? (
-        <div className="text-center py-24 text-slate-400">
-          <Building2 size={48} className="mx-auto mb-3 opacity-40" />
-          <p className="font-medium">Nenhuma obra encontrada</p>
-          <p className="text-xs mt-1">Tente ajustar os filtros ou cadastre uma nova obra</p>
+        <div className="text-center py-24 bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">
+          <Building2 size={48} className="mx-auto mb-3 text-slate-300 dark:text-slate-600" />
+          <p className="font-semibold text-slate-500 dark:text-slate-400">
+            Nenhuma obra encontrada
+          </p>
+          <p className="text-xs mt-1 text-slate-400 dark:text-slate-500">
+            Tente ajustar os filtros ou cadastre uma nova obra
+          </p>
         </div>
       ) : (
         <div className="space-y-3">

@@ -34,6 +34,58 @@ export function getSlaInfo(client: ClientDoc) {
   }
 }
 
+// --- Régua de cronograma (Início da obra → Prazo dos projetos → Fim da obra) ---
+//
+// Diferente do SLA (que mede só Início → Prazo dos projetos), a régua posiciona os
+// três marcos numa mesma linha do tempo e marca onde "hoje" cai. A escala vai do
+// marco mais antigo ao mais recente entre os que existirem — com menos de dois
+// marcos não há linha do tempo para desenhar e a função devolve null.
+
+export interface ScheduleMark {
+  key: 'start' | 'deadline' | 'end';
+  label: string;
+  date: Date;
+  pct: number; // 0-100 na escala da régua
+}
+
+export interface ScheduleInfo {
+  marks: ScheduleMark[]; // em ordem cronológica
+  todayPct: number; // já limitado a 0-100
+  hasStarted: boolean;
+  hasEnded: boolean;
+}
+
+export function getScheduleInfo(client: ClientDoc): ScheduleInfo | null {
+  const parse = (v?: string) => (v && isValid(parseISO(v)) ? parseISO(v) : null);
+  const candidates: { key: ScheduleMark['key']; label: string; date: Date | null }[] = [
+    { key: 'start', label: 'Início da obra', date: parse(client.obraStartDate) },
+    { key: 'deadline', label: 'Prazo dos projetos', date: parse(client.projectDeadlineDate) },
+    { key: 'end', label: 'Fim da obra', date: parse(client.expectedCompletionDate) },
+  ];
+
+  const present = candidates.filter(
+    (m): m is { key: ScheduleMark['key']; label: string; date: Date } => m.date !== null,
+  );
+  if (present.length < 2) return null;
+
+  present.sort((a, b) => a.date.getTime() - b.date.getTime());
+  const min = present[0].date.getTime();
+  const max = present[present.length - 1].date.getTime();
+  if (max <= min) return null; // datas coincidentes: sem escala possível
+
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const nowMs = now.getTime();
+  const pctOf = (ms: number) => ((ms - min) / (max - min)) * 100;
+
+  return {
+    marks: present.map((m) => ({ ...m, pct: pctOf(m.date.getTime()) })),
+    todayPct: Math.min(100, Math.max(0, pctOf(nowMs))),
+    hasStarted: nowMs >= min,
+    hasEnded: nowMs > max,
+  };
+}
+
 // --- Formulário de cadastro/edição de obra ---
 
 export interface FormState {
