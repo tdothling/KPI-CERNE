@@ -120,6 +120,7 @@ export default function App() {
     handleUpdateReferencia,
     handleDeleteReferencia,
     handleMoveReferencia,
+    handleMoveReferenciasLote,
     handleInstanciar,
     handleInstanciarLote,
     handleDeleteConjunto,
@@ -943,6 +944,7 @@ export default function App() {
                   onUpdate={handleUpdateReferencia}
                   onDelete={handleDeleteReferencia}
                   onMove={handleMoveReferencia}
+                  onMoveLote={handleMoveReferenciasLote}
                   onInstanciar={handleInstanciar}
                   onInstanciarLote={handleInstanciarLote}
                   onAddMany={handleAddReferencias}

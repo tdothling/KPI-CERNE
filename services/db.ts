@@ -530,6 +530,10 @@ export const patchReferenciaInDb = async (id: string, changes: Record<string, an
   await updateDoc(doc(db, COLL_REFERENCIAS, id), sanitizeData(changes));
 };
 
+// Transições/edições em lote de referências (mesma mecânica do lote de pranchas)
+export const batchUpdateReferenciasInDb = (patches: BatchDocPatch[]) =>
+  batchUpdateCollection(COLL_REFERENCIAS, patches);
+
 // Excluir referência só é permitido sem conjuntos filhos (verificado no chamador
 // pelo cache e AQUI direto no banco, contra cache desatualizado/limitado).
 export const deleteReferenciaFromDb = async (id: string) => {

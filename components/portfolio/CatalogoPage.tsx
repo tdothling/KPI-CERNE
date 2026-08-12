@@ -19,6 +19,9 @@ import {
   CopyPlus,
   Wand2,
   FastForward,
+  CheckSquare,
+  Square,
+  X,
 } from 'lucide-react';
 import { useObraAtiva, ObraSelectScreen, ObraAtivaBar, ObraCardStat } from '../ObraGate';
 import { ClientDoc, Discipline, Period, RevisionReason } from '../../types';
@@ -28,6 +31,7 @@ import {
   RefStatus,
   canRefTransition,
   catalogoKpis,
+  planMoverReferenciasLote,
 } from '../../domain/portfolio';
 import {
   KpiCard,
@@ -61,6 +65,13 @@ interface CatalogoPageProps {
     period: Period,
     options?: { reason?: RevisionReason; comment?: string },
   ) => void;
+  onMoveLote: (
+    refs: Referencia[],
+    to: RefStatus,
+    date: string,
+    period: Period,
+    options?: { reason?: RevisionReason; comment?: string },
+  ) => Promise<{ movidas: number; puladas: number; erros: string[] }>;
   onInstanciar: (ref: Referencia, base: string, codigoRodovia?: string) => Promise<boolean>;
   onInstanciarLote: (
     refs: Referencia[],
@@ -87,6 +98,7 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
   onUpdate,
   onDelete,
   onMove,
+  onMoveLote,
   onInstanciar,
   onInstanciarLote,
   onAddMany,
@@ -113,10 +125,12 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
   const selecionarObra = (name: string) => {
     selecionarObraRaw(name);
     setStatusFilter('ALL');
+    setSelecionadas(new Set());
   };
   const trocarObra = () => {
     trocarObraRaw();
     setStatusFilter('ALL');
+    setSelecionadas(new Set());
   };
 
   // TODA a página (KPIs, lista, lotes, exclusão de disciplina) enxerga só a obra ativa
@@ -132,6 +146,7 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
   const [dateAction, setDateAction] = useState<DateActionRequest | null>(null);
   const [historicoDe, setHistoricoDe] = useState<Referencia | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set()); // referências marcadas p/ lote
 
   const kpis = useMemo(() => catalogoKpis(refsDaObra), [refsDaObra]);
 
@@ -165,6 +180,86 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
       next.has(d) ? next.delete(d) : next.add(d);
       return next;
     });
+
+  // --- Seleção multi-referência para ações em lote (mesmo padrão da Carteira) ---
+  const refById = useMemo(() => new Map(refsDaObra.map((r) => [r.id, r])), [refsDaObra]);
+  // Ids de referências excluídas/de outra obra caem fora aqui automaticamente
+  const selRefs = useMemo(
+    () => [...selecionadas].map((id) => refById.get(id)).filter((r): r is Referencia => !!r),
+    [selecionadas, refById],
+  );
+
+  const toggleSelecionada = (id: string) =>
+    setSelecionadas((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+  // Marca/desmarca uma lista inteira de referências (disciplina toda)
+  const toggleTodasDaDisciplina = (list: Referencia[]) =>
+    setSelecionadas((prev) => {
+      const next = new Set(prev);
+      const all = list.length > 0 && list.every((r) => next.has(r.id));
+      list.forEach((r) => (all ? next.delete(r.id) : next.add(r.id)));
+      return next;
+    });
+
+  const countMovable = (list: Referencia[], to: RefStatus) =>
+    list.filter((r) => canRefTransition(r.statusAprovacao, to)).length;
+
+  // Ação em LOTE: mesma data/período (e motivo, quando houver revisões) para
+  // todas as referências elegíveis; as demais são puladas — o preview do modal
+  // diz exatamente quantas movem e quantas ficam (mesma dinâmica da Carteira).
+  const LOTE_ACTION: Partial<
+    Record<RefStatus, { verbo: string; confirmLabel: string; tone: DateActionRequest['tone'] }>
+  > = {
+    [RefStatus.EM_ELABORACAO]: { verbo: 'Iniciar', confirmLabel: 'Iniciar Elaboração', tone: 'brand' },
+    [RefStatus.ELABORADO]: { verbo: 'Concluir', confirmLabel: 'Concluir', tone: 'violet' },
+    [RefStatus.ENVIADO]: { verbo: 'Enviar', confirmLabel: 'Registrar Envio', tone: 'blue' },
+    [RefStatus.APROVADO]: { verbo: 'Aprovar', confirmLabel: 'Aprovar', tone: 'emerald' },
+    [RefStatus.REPROVADO]: { verbo: 'Reprovar', confirmLabel: 'Reprovar', tone: 'rose' },
+  };
+
+  const askMoveLote = (alvo: Referencia[], to: RefStatus, origem: string) => {
+    const plan = planMoverReferenciasLote(alvo, to);
+    const a = LOTE_ACTION[to]!;
+    if (plan.moviveis.length === 0) {
+      alert(
+        `Nenhuma das referências ${origem} pode ir para "${to}" (transição não permitida pelo status atual).`,
+      );
+      return;
+    }
+    const temRevisao =
+      to === RefStatus.EM_ELABORACAO &&
+      plan.moviveis.some((r) => r.statusAprovacao === RefStatus.REPROVADO);
+    setDateAction({
+      title: `${a.verbo} ${plan.moviveis.length} referência(s)`,
+      confirmLabel: a.confirmLabel,
+      tone: a.tone,
+      withReason: temRevisao,
+      withComment: temRevisao,
+      description:
+        `${plan.moviveis.length} de ${alvo.length} referência(s) ${origem} será(ão) movida(s) para "${to}".` +
+        (plan.puladas.length > 0
+          ? ` ${plan.puladas.length} será(ão) pulada(s) por status incompatível.`
+          : '') +
+        (temRevisao
+          ? ' As reprovadas reabrem como nova revisão — o mesmo motivo/comentário vale para todas.'
+          : ''),
+      onConfirm: async (date, period, comment, reason) => {
+        const r = await onMoveLote(
+          plan.moviveis,
+          to,
+          date,
+          period,
+          temRevisao ? { reason, comment } : undefined,
+        );
+        if (r.erros.length > 0) alert(`Falha ao mover as referências:\n${r.erros.join('\n')}`);
+        setSelecionadas(new Set());
+      },
+    });
+  };
 
   // Exclui TODAS as referências de uma disciplina DA OBRA ATIVA (nunca de outras
   // obras). Dupla proteção: referências com conjuntos instanciados são bloqueadas
@@ -483,6 +578,20 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
 
           {!collapsed.has(discipline) && (
             <div className="divide-y divide-slate-100 dark:divide-slate-700/60">
+              {!readOnly && (
+                <div className="px-4 py-1.5 flex items-center justify-between bg-slate-50/40 dark:bg-slate-900/20 border-b border-slate-100 dark:border-slate-700/40">
+                  <button
+                    onClick={() => toggleTodasDaDisciplina(refs)}
+                    disabled={refs.length === 0}
+                    className="text-[11px] font-bold text-violet-600 dark:text-violet-400 hover:underline disabled:opacity-40"
+                  >
+                    {refs.length > 0 && refs.every((r) => selecionadas.has(r.id))
+                      ? 'Desmarcar todas'
+                      : 'Selecionar todas'}{' '}
+                    ({refs.length})
+                  </button>
+                </div>
+              )}
               {refs.map((ref) => {
                 const bases = conjuntosByRef.get(ref.id) || [];
                 const exec = execDaysOf(
@@ -495,6 +604,20 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
                     key={ref.id}
                     className="px-4 py-3 flex flex-col lg:flex-row lg:items-center gap-3"
                   >
+                    {!readOnly && (
+                      <button
+                        onClick={() => toggleSelecionada(ref.id)}
+                        className="flex-shrink-0"
+                        title="Selecionar para ação em lote"
+                        aria-label={`Selecionar ${ref.codigoCliente}`}
+                      >
+                        {selecionadas.has(ref.id) ? (
+                          <CheckSquare size={15} className="text-violet-600" />
+                        ) : (
+                          <Square size={15} className="text-slate-300 dark:text-slate-600" />
+                        )}
+                      </button>
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono text-sm font-bold text-slate-800 dark:text-slate-100 truncate">
@@ -657,6 +780,82 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
         </div>
       ))}
 
+      {/* Barra flutuante da seleção: transições em lote das referências marcadas
+          (pode misturar disciplinas — cada referência só move se puder) */}
+      {!readOnly && selRefs.length > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-white dark:bg-slate-800 border border-violet-300 dark:border-violet-700 rounded-xl shadow-2xl px-4 py-2.5 flex items-center gap-2 flex-wrap justify-center animate-in fade-in slide-in-from-bottom-2 print:hidden">
+          <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+            {selRefs.length} selecionada(s)
+          </span>
+          <span className="w-px h-4 bg-slate-200 dark:bg-slate-700"></span>
+          <LoteBtn
+            label="Iniciar"
+            count={countMovable(selRefs, RefStatus.EM_ELABORACAO)}
+            tone="text-amber-600 dark:text-amber-400"
+            onClick={() => askMoveLote(selRefs, RefStatus.EM_ELABORACAO, 'selecionada(s)')}
+          />
+          <LoteBtn
+            label="Concluir"
+            count={countMovable(selRefs, RefStatus.ELABORADO)}
+            tone="text-violet-600 dark:text-violet-400"
+            onClick={() => askMoveLote(selRefs, RefStatus.ELABORADO, 'selecionada(s)')}
+          />
+          <LoteBtn
+            label="Enviar"
+            count={countMovable(selRefs, RefStatus.ENVIADO)}
+            tone="text-blue-600 dark:text-blue-400"
+            onClick={() => askMoveLote(selRefs, RefStatus.ENVIADO, 'selecionada(s)')}
+          />
+          <LoteBtn
+            label="Aprovar"
+            count={countMovable(selRefs, RefStatus.APROVADO)}
+            tone="text-emerald-600 dark:text-emerald-400"
+            onClick={() => askMoveLote(selRefs, RefStatus.APROVADO, 'selecionada(s)')}
+          />
+          <LoteBtn
+            label="Reprovar"
+            count={countMovable(selRefs, RefStatus.REPROVADO)}
+            tone="text-rose-600 dark:text-rose-400"
+            onClick={() => askMoveLote(selRefs, RefStatus.REPROVADO, 'selecionada(s)')}
+          />
+          <span className="w-px h-4 bg-slate-200 dark:bg-slate-700"></span>
+          <button
+            onClick={() => setLoteAberto(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 dark:border-slate-600 hover:border-brand-300 transition-colors text-brand-700 dark:text-brand-400"
+            title={`Instanciar ${selRefs.length} referência(s) selecionada(s) em uma ou mais bases`}
+          >
+            <MapPin size={13} /> Instanciar
+          </button>
+          <button
+            onClick={async () => {
+              if (
+                !confirm(
+                  `Excluir ${selRefs.length} referência(s) selecionada(s)?\n\nReferências com conjuntos instanciados em Projetos Locais não serão excluídas.\n\nEsta ação não pode ser desfeita.`,
+                )
+              )
+                return;
+              const { excluidas, erros } = await onDeleteMany(selRefs.map((r) => r.id));
+              alert(
+                `${excluidas} referência(s) excluída(s).${erros.length > 0 ? `\n\nFalhas:\n${erros.join('\n')}` : ''}`,
+              );
+              setSelecionadas(new Set());
+            }}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 dark:border-slate-600 hover:border-rose-300 transition-colors text-rose-600 dark:text-rose-400"
+            title="Excluir as referências selecionadas (bloqueadas as que têm conjuntos instanciados)"
+          >
+            <Trash2 size={13} /> Excluir
+          </button>
+          <span className="w-px h-4 bg-slate-200 dark:bg-slate-700"></span>
+          <button
+            onClick={() => setSelecionadas(new Set())}
+            className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+            title="Limpar seleção"
+          >
+            <X size={13} /> Limpar
+          </button>
+        </div>
+      )}
+
       {editing && (
         <ReferenciaModal
           referencia={editing === 'NEW' ? null : editing}
@@ -694,7 +893,11 @@ export const CatalogoPage: React.FC<CatalogoPageProps> = ({
           referencias={refsDaObra}
           conjuntos={conjuntos}
           clients={clients}
-          onClose={() => setLoteAberto(false)}
+          initialSelRefs={selecionadas}
+          onClose={() => {
+            setLoteAberto(false);
+            setSelecionadas(new Set());
+          }}
           onConfirm={onInstanciarLote}
         />
       )}
@@ -754,6 +957,30 @@ function ActionBtn({
       className={`p-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 hover:border-brand-300 transition-colors ${tone || 'text-slate-500 dark:text-slate-400'}`}
     >
       {children}
+    </button>
+  );
+}
+
+// Botão da barra de seleção: mostra quantas das selecionadas PODEM ir ao destino
+function LoteBtn({
+  label,
+  count,
+  tone,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  tone?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={count === 0}
+      title={count === 0 ? `Nenhuma selecionada pode "${label}"` : `${label} ${count} referência(s)`}
+      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 dark:border-slate-600 hover:border-brand-300 transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${tone || 'text-slate-600 dark:text-slate-300'}`}
+    >
+      {label} ({count})
     </button>
   );
 }

@@ -37,6 +37,7 @@ import {
   subscribeToPranchas,
   addReferenciaToDb,
   patchReferenciaInDb,
+  batchUpdateReferenciasInDb,
   deleteReferenciaFromDb,
   instanciarConjuntoInDb,
   instanciarLoteInDb,
@@ -61,6 +62,7 @@ import {
   instanciarConjunto,
   planInstanciacaoLote,
   planMoverPranchasLote,
+  planMoverReferenciasLote,
   slugify,
   refStatusAposInstanciar,
   buildCycleSnapshot,
@@ -353,19 +355,16 @@ export function useAppData(projectFilter: ProjectFilterState) {
     );
   };
 
-  // Ciclo da Referência: elaboração do preliminar (mede o tempo de execução) +
-  // validação com o cliente. Independente do ciclo das pranchas.
-  const handleMoveReferencia = (
+  // Monta o patch de uma transição de referência — usado no movimento unitário
+  // e no lote, para que ambos apliquem EXATAMENTE as mesmas regras de datas,
+  // revisão e dias com o cliente (mesmo padrão de buildPranchaMoveChanges).
+  const buildReferenciaMoveChanges = (
     ref: Referencia,
     to: RefStatus,
     date: string,
     period: Period,
     options: { reason?: RevisionReason; comment?: string } = {},
-  ) => {
-    if (!canRefTransition(ref.statusAprovacao, to)) {
-      alert(`Transição inválida: "${ref.statusAprovacao}" não pode ir para "${to}".`);
-      return;
-    }
+  ): Record<string, any> => {
     const changes: Record<string, any> = { statusAprovacao: to };
     if (to === RefStatus.EM_ELABORACAO) {
       changes.startDate = date;
@@ -417,9 +416,49 @@ export function useAppData(projectFilter: ProjectFilterState) {
         }
       }
     }
-    patchReferenciaInDb(ref.id, changes).catch((e) =>
-      alert('Erro ao mover a referência: ' + (e?.message || e)),
+    return changes;
+  };
+
+  // Ciclo da Referência: elaboração do preliminar (mede o tempo de execução) +
+  // validação com o cliente. Independente do ciclo das pranchas.
+  const handleMoveReferencia = (
+    ref: Referencia,
+    to: RefStatus,
+    date: string,
+    period: Period,
+    options: { reason?: RevisionReason; comment?: string } = {},
+  ) => {
+    if (!canRefTransition(ref.statusAprovacao, to)) {
+      alert(`Transição inválida: "${ref.statusAprovacao}" não pode ir para "${to}".`);
+      return;
+    }
+    patchReferenciaInDb(ref.id, buildReferenciaMoveChanges(ref, to, date, period, options)).catch(
+      (e) => alert('Erro ao mover a referência: ' + (e?.message || e)),
     );
+  };
+
+  // Transição em LOTE: o planejador puro separa o que PODE mover (o restante é
+  // pulado, nunca forçado) e a escrita vai em writeBatch. Mesma data/período —
+  // e, nas revisões, mesmo motivo/comentário — para todas as referências do lote.
+  const handleMoveReferenciasLote = async (
+    alvo: Referencia[],
+    to: RefStatus,
+    date: string,
+    period: Period,
+    options: { reason?: RevisionReason; comment?: string } = {},
+  ): Promise<{ movidas: number; puladas: number; erros: string[] }> => {
+    const plan = planMoverReferenciasLote(alvo, to);
+    if (plan.moviveis.length === 0) return { movidas: 0, puladas: plan.puladas.length, erros: [] };
+    const patches = plan.moviveis.map((r) => ({
+      id: r.id,
+      changes: buildReferenciaMoveChanges(r, to, date, period, options),
+    }));
+    try {
+      await batchUpdateReferenciasInDb(patches);
+      return { movidas: patches.length, puladas: plan.puladas.length, erros: [] };
+    } catch (e: any) {
+      return { movidas: 0, puladas: plan.puladas.length, erros: [e?.message || String(e)] };
+    }
   };
 
   // Instanciar: cria 1 Conjunto na base escolhida e PRÉ-GERA as pranchas do
@@ -870,6 +909,7 @@ export function useAppData(projectFilter: ProjectFilterState) {
     handleUpdateReferencia,
     handleDeleteReferencia,
     handleMoveReferencia,
+    handleMoveReferenciasLote,
     handleInstanciar,
     handleInstanciarLote,
     handleDeleteConjunto,

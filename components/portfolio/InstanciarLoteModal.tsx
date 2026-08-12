@@ -14,12 +14,16 @@ export function InstanciarLoteModal({
   referencias,
   conjuntos,
   clients,
+  initialSelRefs,
   onClose,
   onConfirm,
 }: {
   referencias: Referencia[];
   conjuntos: Conjunto[];
   clients: ClientDoc[];
+  // Pré-seleção vinda da barra de ações em lote (checkboxes já marcados no Catálogo).
+  // Sem ela o modal abre do jeito de sempre, zerado.
+  initialSelRefs?: Set<string>;
   onClose: () => void;
   onConfirm: (
     refs: Referencia[],
@@ -32,8 +36,16 @@ export function InstanciarLoteModal({
     () => clients.filter((c) => referencias.some((r) => r.client === c.name)),
     [clients, referencias],
   );
-  const [obra, setObra] = useState(obrasComRefs[0]?.name || '');
-  const [selRefs, setSelRefs] = useState<Set<string>>(new Set());
+  const [obra, setObra] = useState(() => {
+    if (initialSelRefs && initialSelRefs.size > 0) {
+      const first = referencias.find((r) => initialSelRefs.has(r.id));
+      if (first) return first.client;
+    }
+    return obrasComRefs[0]?.name || '';
+  });
+  const [selRefs, setSelRefs] = useState<Set<string>>(
+    () => new Set(initialSelRefs ? [...initialSelRefs] : []),
+  );
   const [selBases, setSelBases] = useState<Set<string>>(new Set());
   // Prefixo manual da codificação POR BASE (opcional; pré-preenche o código das pranchas)
   const [prefixos, setPrefixos] = useState<Record<string, string>>({});

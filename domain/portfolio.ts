@@ -595,6 +595,22 @@ export const planMoverPranchasLote = (
   return plan;
 };
 
+export interface MoverReferenciasLotePlan {
+  moviveis: Referencia[]; // transição permitida a partir do status atual
+  puladas: Referencia[]; // status atual não permite ir para o destino
+}
+
+export const planMoverReferenciasLote = (
+  referencias: Referencia[],
+  to: RefStatus,
+): MoverReferenciasLotePlan => {
+  const plan: MoverReferenciasLotePlan = { moviveis: [], puladas: [] };
+  referencias.forEach((r) =>
+    (canRefTransition(r.statusAprovacao, to) ? plan.moviveis : plan.puladas).push(r),
+  );
+  return plan;
+};
+
 // --- ROLLUP (Conjunto deriva das pranchas; nada é gravado) ---
 
 export interface ConjuntoRollup {
