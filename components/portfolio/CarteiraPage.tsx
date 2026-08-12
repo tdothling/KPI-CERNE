@@ -77,6 +77,13 @@ interface CarteiraPageProps {
     period: Period,
     options?: { reason?: RevisionReason; comment?: string },
   ) => Promise<{ movidas: number; puladas: number; erros: string[] }>;
+  onAbrirRevisaoPrancha: (
+    p: Prancha,
+    date: string,
+    period: Period,
+    reason: RevisionReason,
+    comment: string,
+  ) => void;
   onUpdatePrancha: (id: string, changes: Partial<Prancha>) => void;
   onAddPrancha: (p: Omit<Prancha, 'id'>) => void;
   onDeletePrancha: (p: Prancha) => void;
@@ -97,6 +104,7 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
   onMigrate,
   onMovePrancha,
   onMovePranchasLote,
+  onAbrirRevisaoPrancha,
   onUpdatePrancha,
   onAddPrancha,
   onDeletePrancha,
@@ -351,6 +359,24 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
           period,
           isRevisao ? { reason, comment } : comment ? { comment } : undefined,
         ),
+    });
+  };
+
+  // Nova revisão a qualquer momento — não exige feedback do cliente nem
+  // reprovação (diferente do "Revisar" do Reprovado acima). O ciclo atual
+  // encerra em snapshot no histórico (nada é sobrescrito) e a prancha reabre
+  // em execução como R+1.
+  const askRevisaoPrancha = (p: Prancha) => {
+    setDateAction({
+      title: `Nova revisão de "${p.codigoCompleto || p.papel}"`,
+      confirmLabel: `Abrir R${String((p.revisao || 0) + 1).padStart(2, '0')}`,
+      tone: 'brand',
+      withReason: true,
+      withComment: true,
+      description:
+        'A prancha atual encerra o ciclo (dados preservados no histórico) e a nova revisão nasce em execução na data escolhida. O motivo fica no histórico.',
+      onConfirm: (date, period, comment, reason) =>
+        onAbrirRevisaoPrancha(p, date, period, reason, comment),
     });
   };
 
@@ -1060,6 +1086,19 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
                                             <ThumbsDown size={13} />
                                           </PranchaBtn>
                                         )}
+                                        {/* Independente do status: revisão a qualquer momento, sem
+                                            esperar feedback do cliente. Reprovado já tem seu próprio
+                                            "Revisar" acima, então não duplica aqui. */}
+                                        {p.status !== PranchaStatus.A_FAZER &&
+                                          p.status !== PranchaStatus.REPROVADO && (
+                                            <PranchaBtn
+                                              title="Nova revisão (mesmo sem feedback do cliente) — preserva os dados atuais no histórico"
+                                              tone="text-amber-600"
+                                              onClick={() => askRevisaoPrancha(p)}
+                                            >
+                                              <RotateCcw size={13} />
+                                            </PranchaBtn>
+                                          )}
                                         <PranchaBtn
                                           title="Editar papel/código"
                                           onClick={() => setEditingPrancha(p)}

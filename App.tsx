@@ -126,6 +126,7 @@ export default function App() {
     handleDeleteConjunto,
     handleMovePrancha,
     handleMovePranchasLote,
+    handleAbrirRevisaoPrancha,
     handleUpdatePrancha,
     handleAddPrancha,
     handleDeletePrancha,
@@ -966,6 +967,7 @@ export default function App() {
                   onMigrate={handleMigratePortfolio}
                   onMovePrancha={handleMovePrancha}
                   onMovePranchasLote={handleMovePranchasLote}
+                  onAbrirRevisaoPrancha={handleAbrirRevisaoPrancha}
                   onUpdatePrancha={handleUpdatePrancha}
                   onAddPrancha={handleAddPrancha}
                   onDeletePrancha={handleDeletePrancha}

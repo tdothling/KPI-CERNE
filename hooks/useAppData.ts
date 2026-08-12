@@ -662,6 +662,51 @@ export function useAppData(projectFilter: ProjectFilterState) {
     }
   };
 
+  // Abre uma nova revisão da prancha a qualquer momento — não exige feedback do
+  // cliente nem reprovação. Independente do grafo de transições normal
+  // (canPranchaTransition): o ciclo atual encerra em snapshot no histórico
+  // (nada é sobrescrito, os dados antigos ficam em revisions[].snapshot) e a
+  // prancha reabre em execução como R+1. Mesma mecânica de buildPranchaMoveChanges
+  // no braço de revisão, só que disparável a partir de qualquer status iniciado.
+  const handleAbrirRevisaoPrancha = (
+    prancha: Prancha,
+    date: string,
+    period: Period,
+    reason: RevisionReason,
+    comment: string,
+  ) => {
+    if (prancha.status === PranchaStatus.A_FAZER) {
+      alert('Esta prancha ainda não foi iniciada — não há o que revisar.');
+      return;
+    }
+    const changes: Record<string, any> = {
+      status: PranchaStatus.EM_ANDAMENTO,
+      revisao: (prancha.revisao || 0) + 1,
+      startDate: date,
+      startPeriod: period,
+      endDate: '',
+      endPeriod: '',
+      sendDate: '',
+      sendPeriod: '',
+      feedbackDate: '',
+      feedbackPeriod: '',
+      blockedDays: 0,
+      revisions: [
+        ...(prancha.revisions || []),
+        {
+          id: crypto.randomUUID(),
+          date,
+          reason,
+          comment,
+          snapshot: buildCycleSnapshot(prancha),
+        },
+      ],
+    };
+    patchPranchaInDb(prancha.id, changes).catch((e) =>
+      alert('Erro ao abrir revisão: ' + (e?.message || e)),
+    );
+  };
+
   const handleUpdatePrancha = (id: string, changes: Partial<Prancha>) => {
     const patch: Record<string, any> = { ...changes };
     if (['sendDate', 'sendPeriod', 'feedbackDate', 'feedbackPeriod'].some((k) => k in changes)) {
@@ -915,6 +960,7 @@ export function useAppData(projectFilter: ProjectFilterState) {
     handleDeleteConjunto,
     handleMovePrancha,
     handleMovePranchasLote,
+    handleAbrirRevisaoPrancha,
     handleUpdatePrancha,
     handleAddPrancha,
     handleDeletePrancha,
