@@ -1,7 +1,6 @@
 export enum Discipline {
   ARCHITECTURE = 'Arquitetura',
-  STRUCTURE = 'Estrutura',
-  COVERAGE = 'Cobertura',
+  STRUCTURE = 'Estrutura/Cobertura', // Unificado — antes 'Estrutura' e 'Cobertura' eram disciplinas separadas
   FOUNDATION = 'Fundação',
   HYDRAULIC = 'Hidráulica',
   ELECTRICAL = 'Elétrica',

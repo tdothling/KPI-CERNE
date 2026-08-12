@@ -261,7 +261,7 @@ describe('gerarReferenciasDisciplinas', () => {
     const r = gerarReferenciasDisciplinas({
       origem: arq,
       destinos: [
-        { discipline: Discipline.COVERAGE, sigla: 'COB' },
+        { discipline: Discipline.HYDRAULIC, sigla: 'HID' },
         { discipline: Discipline.ELECTRICAL, sigla: 'ELE' },
         { discipline: Discipline.OTHER, sigla: 'PAISAG' },
       ],
@@ -269,7 +269,7 @@ describe('gerarReferenciasDisciplinas', () => {
     });
     expect(r.novas).toHaveLength(3);
     expect(r.novas.map((n) => n.codigoCliente)).toEqual([
-      'BSO100-VIARAPOSOS-COB',
+      'BSO100-VIARAPOSOS-HID',
       'BSO100-VIARAPOSOS-ELE',
       'BSO100-VIARAPOSOS-PAISAG',
     ]);
@@ -286,13 +286,13 @@ describe('gerarReferenciasDisciplinas', () => {
     const cobExistente: Referencia = {
       ...arq,
       id: 'ref-cob',
-      codigoCliente: 'BSO100-VIARAPOSOS-COB',
-      discipline: Discipline.COVERAGE,
+      codigoCliente: 'BSO100-VIARAPOSOS-HID',
+      discipline: Discipline.HYDRAULIC,
     };
     const r = gerarReferenciasDisciplinas({
       origem: arq,
       destinos: [
-        { discipline: Discipline.COVERAGE, sigla: 'COB' },
+        { discipline: Discipline.HYDRAULIC, sigla: 'HID' },
         { discipline: Discipline.FOUNDATION, sigla: 'FUN' },
         { discipline: Discipline.OTHER, sigla: '   ' }, // sigla vazia → ignorada
         { discipline: Discipline.ARCHITECTURE, sigla: 'ARQ' }, // origem → ignorada
@@ -300,7 +300,7 @@ describe('gerarReferenciasDisciplinas', () => {
       existingReferencias: [arq, cobExistente],
     });
     expect(r.novas.map((n) => n.codigoCliente)).toEqual(['BSO100-VIARAPOSOS-FUN']);
-    expect(r.puladas).toEqual(['BSO100-VIARAPOSOS-COB']);
+    expect(r.puladas).toEqual(['BSO100-VIARAPOSOS-HID']);
   });
 
   it('mesmo código em OUTRA obra não bloqueia a geração', () => {
@@ -308,11 +308,11 @@ describe('gerarReferenciasDisciplinas', () => {
       ...arq,
       id: 'x',
       client: 'Outra Rodovia',
-      codigoCliente: 'BSO100-VIARAPOSOS-COB',
+      codigoCliente: 'BSO100-VIARAPOSOS-HID',
     };
     const r = gerarReferenciasDisciplinas({
       origem: arq,
-      destinos: [{ discipline: Discipline.COVERAGE, sigla: 'COB' }],
+      destinos: [{ discipline: Discipline.HYDRAULIC, sigla: 'HID' }],
       existingReferencias: [arq, outraObra],
     });
     expect(r.novas).toHaveLength(1);
@@ -328,17 +328,17 @@ describe('gerarReferenciasDisciplinas', () => {
     const plan = planGerarDisciplinasLote({
       origens: [arqBSO, arqPSP],
       destinos: [
-        { discipline: Discipline.COVERAGE, sigla: 'COB' },
+        { discipline: Discipline.HYDRAULIC, sigla: 'HID' },
         { discipline: Discipline.ELECTRICAL, sigla: 'ELE' },
       ],
       existingReferencias: [arqBSO, arqPSP],
     });
     expect(plan.novas).toHaveLength(4); // 2 origens × 2 disciplinas
     expect(plan.novas.map((n) => n.codigoCliente).sort()).toEqual([
-      'BSO100-VIARAPOSOS-COB',
       'BSO100-VIARAPOSOS-ELE',
-      'PSP200-VIARAPOSOS-COB',
+      'BSO100-VIARAPOSOS-HID',
       'PSP200-VIARAPOSOS-ELE',
+      'PSP200-VIARAPOSOS-HID',
     ]);
     expect(plan.porOrigem).toEqual([
       { codigoCliente: 'BSO100-VIARAPOSOS-ARQ', count: 2 },
@@ -351,25 +351,25 @@ describe('gerarReferenciasDisciplinas', () => {
     const cobExistente: Referencia = {
       ...arq,
       id: 'c',
-      codigoCliente: 'BSO100-VIARAPOSOS-COB',
-      discipline: Discipline.COVERAGE,
+      codigoCliente: 'BSO100-VIARAPOSOS-HID',
+      discipline: Discipline.HYDRAULIC,
     };
     const plan = planGerarDisciplinasLote({
       origens: [arqBSO, arqBSO], // mesma origem repetida: a 2ª não recria o que a 1ª planejou
       destinos: [
-        { discipline: Discipline.COVERAGE, sigla: 'COB' },
+        { discipline: Discipline.HYDRAULIC, sigla: 'HID' },
         { discipline: Discipline.FOUNDATION, sigla: 'FUN' },
       ],
       existingReferencias: [arqBSO, cobExistente],
     });
-    // COB já existe (pulada nas duas passagens); FUN é criada uma única vez
+    // HID já existe (pulada nas duas passagens); FUN é criada uma única vez
     expect(plan.novas.map((n) => n.codigoCliente)).toEqual(['BSO100-VIARAPOSOS-FUN']);
-    expect(plan.puladas).toContain('BSO100-VIARAPOSOS-COB');
+    expect(plan.puladas).toContain('BSO100-VIARAPOSOS-HID');
   });
 
   it('catálogo de siglas cobre as disciplinas do contrato', () => {
     expect(DISCIPLINA_SIGLA[Discipline.ARCHITECTURE]).toBe('ARQ');
-    expect(DISCIPLINA_SIGLA[Discipline.COVERAGE]).toBe('COB');
+    expect(DISCIPLINA_SIGLA[Discipline.HYDRAULIC]).toBe('HID');
     expect(DISCIPLINA_SIGLA[Discipline.FIRE]).toBe('INC');
     expect(DISCIPLINA_SIGLA[Discipline.HVAC]).toBe('AC');
     expect(DISCIPLINA_SIGLA[Discipline.OTHER]).toBeUndefined(); // a preencher

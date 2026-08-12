@@ -143,6 +143,8 @@ export default function App() {
     handleBatchUpdate,
     handleBatchWorkflow,
     handleUpdateHolidays,
+    countLegacyDisciplines,
+    handleUnificarDisciplinaEstruturaCobertura,
   } = useAppData(projectFilter);
 
   // Obras de RODOVIA usam o fluxo Catálogo/Carteira (Referência → Conjunto → Prancha).
@@ -890,7 +892,12 @@ export default function App() {
         <div className="mt-6 print:mt-0">
           <Suspense fallback={<TabLoading />}>
             {isAdmin && activeTab === 'dashboard' && (
-              <DataMigration projects={projects} onUpdateProject={updateProject} />
+              <DataMigration
+                projects={projects}
+                onUpdateProject={updateProject}
+                legacyDisciplinesCount={countLegacyDisciplines()}
+                onUnificarDisciplinaEstruturaCobertura={handleUnificarDisciplinaEstruturaCobertura}
+              />
             )}
             {activeTab === 'dashboard' && (
               <div className="animate-in fade-in zoom-in-95 duration-200">

@@ -11,6 +11,7 @@ import {
   SupplyStatus,
   SiteType,
   TrashEntry,
+  Discipline,
 } from '../types';
 import {
   subscribeToProjects,
@@ -931,6 +932,42 @@ export function useAppData(projectFilter: ProjectFilterState) {
 
   const handleUpdateHolidays = (newHolidays: string[]) => saveHolidaysToDb(newHolidays);
 
+  // Migração pontual: 'Estrutura' e 'Cobertura' eram disciplinas separadas e viraram uma
+  // única (Discipline.STRUCTURE = 'Estrutura/Cobertura'). Documentos antigos no banco ainda
+  // têm a string literal antiga gravada — não é reconhecida por nenhum valor do enum atual
+  // até rodar esta migração. Varre Projetos (Canteiro) e Referências (Catálogo); Pranchas/
+  // Conjuntos não têm disciplina própria (herdam da Referência).
+  const LEGACY_DISCIPLINES = ['Estrutura', 'Cobertura'];
+  const countLegacyDisciplines = () => {
+    const isLegacy = (d: unknown) => LEGACY_DISCIPLINES.includes(d as string);
+    return {
+      projects: projects.filter((p) => isLegacy(p.discipline)).length,
+      referencias: referencias.filter((r) => isLegacy(r.discipline)).length,
+    };
+  };
+  const handleUnificarDisciplinaEstruturaCobertura = async () => {
+    const isLegacy = (d: unknown) => LEGACY_DISCIPLINES.includes(d as string);
+    const projectPatches = projects
+      .filter((p) => isLegacy(p.discipline))
+      .map((p) => ({ id: p.id, changes: { discipline: Discipline.STRUCTURE } }));
+    const referenciaPatches = referencias
+      .filter((r) => isLegacy(r.discipline))
+      .map((r) => ({ id: r.id, changes: { discipline: Discipline.STRUCTURE } }));
+    try {
+      if (projectPatches.length > 0) await batchUpdateProjectsInDb(projectPatches);
+      if (referenciaPatches.length > 0) await batchUpdateReferenciasInDb(referenciaPatches);
+    } catch (e) {
+      console.error('Erro ao unificar disciplinas Estrutura/Cobertura:', e);
+      alert(
+        'Erro ao aplicar a unificação. Verifique sua conexão e tente novamente — nada foi perdido, os documentos ainda não migrados continuam com o valor antigo.',
+      );
+      return;
+    }
+    alert(
+      `Unificação concluída: ${projectPatches.length} projeto(s) e ${referenciaPatches.length} referência(s) do catálogo atualizados para "Estrutura/Cobertura".`,
+    );
+  };
+
   return {
     projects,
     supplyOrders,
@@ -977,5 +1014,7 @@ export function useAppData(projectFilter: ProjectFilterState) {
     handleBatchUpdate,
     handleBatchWorkflow,
     handleUpdateHolidays,
+    countLegacyDisciplines,
+    handleUnificarDisciplinaEstruturaCobertura,
   };
 }

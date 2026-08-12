@@ -15,7 +15,6 @@ import {
 // partida; disciplinas fora do contrato basta desmarcar (ou excluir depois).
 
 export const DISCIPLINAS_GERAVEIS: { discipline: Discipline; sigla: string }[] = [
-  { discipline: Discipline.COVERAGE, sigla: DISCIPLINA_SIGLA[Discipline.COVERAGE]! },
   { discipline: Discipline.FOUNDATION, sigla: DISCIPLINA_SIGLA[Discipline.FOUNDATION]! },
   { discipline: Discipline.ELECTRICAL, sigla: DISCIPLINA_SIGLA[Discipline.ELECTRICAL]! },
   { discipline: Discipline.DATA, sigla: DISCIPLINA_SIGLA[Discipline.DATA]! },

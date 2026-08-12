@@ -184,7 +184,7 @@ export const getStatusColor = (status: string) => {
 export const detectDiscipline = (text: string): Discipline | null => {
   const normalized = text.toLowerCase();
   if (normalized.includes('arq')) return Discipline.ARCHITECTURE;
-  if (normalized.includes('estrut')) return Discipline.STRUCTURE;
+  if (normalized.includes('estrut') || normalized.includes('cober')) return Discipline.STRUCTURE;
   if (normalized.includes('fund')) return Discipline.FOUNDATION;
   if (normalized.includes('hidr')) return Discipline.HYDRAULIC;
   if (normalized.includes('eletr') || normalized.includes('elétr')) return Discipline.ELECTRICAL;
