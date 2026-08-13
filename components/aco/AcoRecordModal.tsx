@@ -11,7 +11,7 @@ import {
   totalCost,
   totalKg,
 } from '../../domain/steel';
-import { formatCurrencyBR, formatNumberBR } from '../../utils';
+import { formatCurrencyBR, formatDateDisplay, formatNumberBR } from '../../utils';
 import { SteelFormState, numbersChanged } from './acoShared';
 
 const REVISION_REASON_LABEL: Record<RevisionReason, string> = {
@@ -39,6 +39,7 @@ interface AcoRecordModalProps {
   clients: ClientDoc[];
   original?: SteelRecord | null;
   baseSuggestions: string[];
+  fabricationWindow: { start: string; end?: string } | null;
 }
 
 export function AcoRecordModal({
@@ -50,6 +51,7 @@ export function AcoRecordModal({
   clients,
   original,
   baseSuggestions,
+  fabricationWindow,
 }: AcoRecordModalProps) {
   const set = (patch: Partial<SteelFormState>) => onChange((prev) => ({ ...prev, ...patch }));
   const setMaterial = (m: SteelMaterial, patch: Partial<{ kg: number; pricePerKg: number }>) =>
@@ -126,28 +128,22 @@ export function AcoRecordModal({
                     ))}
                   </datalist>
                 </div>
-                <div>
-                  <Label>Início da Fabricação *</Label>
-                  <input
-                    required
-                    type="date"
-                    value={form.fabricationStartDate}
-                    onChange={(e) => set({ fabricationStartDate: e.target.value })}
-                    className={inputCls + ' dark:[color-scheme:dark]'}
-                  />
-                </div>
-                <div>
-                  <Label>Fim da Fabricação</Label>
-                  <input
-                    type="date"
-                    value={form.fabricationEndDate}
-                    min={form.fabricationStartDate || undefined}
-                    onChange={(e) => set({ fabricationEndDate: e.target.value })}
-                    className={inputCls + ' dark:[color-scheme:dark]'}
-                  />
-                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
-                    Deixe em branco se a fabricação ainda está em andamento.
-                  </p>
+                <div className="sm:col-span-2">
+                  <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2">
+                    <Factory size={13} className="flex-shrink-0 text-slate-400" />
+                    {fabricationWindow ? (
+                      <span>
+                        Fabricação: {formatDateDisplay(fabricationWindow.start)} →{' '}
+                        {fabricationWindow.end ? formatDateDisplay(fabricationWindow.end) : 'em andamento'}
+                      </span>
+                    ) : form.client ? (
+                      <span>
+                        Esta obra ainda não tem período de fabricação cadastrado — informe em Obras.
+                      </span>
+                    ) : (
+                      <span>Selecione a obra para ver o período de fabricação.</span>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <Label>Vento da Localidade (m/s)</Label>

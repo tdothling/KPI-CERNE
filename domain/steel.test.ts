@@ -20,6 +20,7 @@ import {
   MIN_FIT_SAMPLE,
   overallIntensityMedian,
   overallCostPerM2Median,
+  fabricationWindowOf,
 } from './steel';
 import { RevisionReason } from '../types';
 
@@ -37,7 +38,6 @@ const record = (overrides: Partial<SteelRecord>): SteelRecord => {
     id: `rec-${seq}`,
     client: 'Obra Teste',
     base: `Base ${seq}`,
-    fabricationStartDate: '2026-01-15',
     windSpeed: 30,
     areaLeve: 100,
     areaPesada: 0,
@@ -253,14 +253,46 @@ describe('bandStats', () => {
   });
 });
 
+describe('fabricationWindowOf', () => {
+  const clients = [
+    { name: 'Obra A', fabricationStartDate: '2026-01-01', fabricationEndDate: '2026-06-01' },
+    { name: 'Obra B', fabricationStartDate: '2026-02-01' },
+    { name: 'Obra Sem Data', fabricationStartDate: undefined },
+  ];
+
+  it('retorna início e fim quando cadastrados', () => {
+    expect(fabricationWindowOf('Obra A', clients)).toEqual({
+      start: '2026-01-01',
+      end: '2026-06-01',
+    });
+  });
+
+  it('retorna fim undefined quando a fabricação ainda está em andamento', () => {
+    expect(fabricationWindowOf('Obra B', clients)).toEqual({ start: '2026-02-01', end: undefined });
+  });
+
+  it('retorna null quando a obra não tem data de fabricação cadastrada', () => {
+    expect(fabricationWindowOf('Obra Sem Data', clients)).toBeNull();
+  });
+
+  it('retorna null quando a obra não é encontrada', () => {
+    expect(fabricationWindowOf('Obra Inexistente', clients)).toBeNull();
+  });
+});
+
 describe('timeSeries', () => {
-  it('agrupa por ano e faixa de vento, calculando a mediana', () => {
+  it('agrupa por ano e faixa de vento, calculando a mediana, usando o início de fabricação da obra', () => {
     const records = [
-      record({ fabricationStartDate: '2025-03-01', windSpeed: 32, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 800, pricePerKg: 8 } }) }),
-      record({ fabricationStartDate: '2025-08-01', windSpeed: 32, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 1000, pricePerKg: 8 } }) }),
-      record({ fabricationStartDate: '2026-01-01', windSpeed: 32, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 600, pricePerKg: 8 } }) }),
+      record({ client: 'Obra A', windSpeed: 32, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 800, pricePerKg: 8 } }) }),
+      record({ client: 'Obra B', windSpeed: 32, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 1000, pricePerKg: 8 } }) }),
+      record({ client: 'Obra C', windSpeed: 32, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 600, pricePerKg: 8 } }) }),
     ];
-    const series = timeSeries(records, 'leve', 'ANO');
+    const clients = [
+      { name: 'Obra A', fabricationStartDate: '2025-03-01' },
+      { name: 'Obra B', fabricationStartDate: '2025-08-01' },
+      { name: 'Obra C', fabricationStartDate: '2026-01-01' },
+    ];
+    const series = timeSeries(records, 'leve', 'ANO', clients);
     expect(series).toHaveLength(2);
     const y2025 = series.find((p) => p.periodKey === '2025')!;
     expect(y2025.mediana).toBe(9); // mediana de 8 e 10
@@ -269,11 +301,26 @@ describe('timeSeries', () => {
 
   it('separa semestres dentro do mesmo ano', () => {
     const records = [
-      record({ fabricationStartDate: '2026-02-01', windSpeed: 32, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 800, pricePerKg: 8 } }) }),
-      record({ fabricationStartDate: '2026-09-01', windSpeed: 32, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 1200, pricePerKg: 8 } }) }),
+      record({ client: 'Obra A', windSpeed: 32, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 800, pricePerKg: 8 } }) }),
+      record({ client: 'Obra B', windSpeed: 32, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 1200, pricePerKg: 8 } }) }),
     ];
-    const series = timeSeries(records, 'leve', 'SEMESTRE');
+    const clients = [
+      { name: 'Obra A', fabricationStartDate: '2026-02-01' },
+      { name: 'Obra B', fabricationStartDate: '2026-09-01' },
+    ];
+    const series = timeSeries(records, 'leve', 'SEMESTRE', clients);
     expect(series.map((p) => p.periodKey).sort()).toEqual(['2026-S1', '2026-S2']);
+  });
+
+  it('ignora obras sem data de fabricação cadastrada', () => {
+    const records = [
+      record({ client: 'Obra A', windSpeed: 32, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 800, pricePerKg: 8 } }) }),
+      record({ client: 'Obra Sem Data', windSpeed: 32, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 1200, pricePerKg: 8 } }) }),
+    ];
+    const clients = [{ name: 'Obra A', fabricationStartDate: '2026-02-01' }];
+    const series = timeSeries(records, 'leve', 'ANO', clients);
+    expect(series).toHaveLength(1);
+    expect(series[0].n).toBe(1);
   });
 });
 
@@ -289,7 +336,6 @@ describe('applySteelRevision', () => {
     const updated = applySteelRevision(
       current,
       {
-        fabricationStartDate: '2026-06-01',
         windSpeed: 35,
         areaLeve: 120,
         areaPesada: 0,

@@ -251,6 +251,13 @@ export interface ClientDoc {
   expectedCompletionDate?: string; // Fim da Obra (rótulo na UI; propriedade mantida p/ não migrar dado)
   projectDeadlineDate?: string; // Data Estipulada para Finalizar os Projetos — dirige o SLA/OTD
 
+  // Janela de fabricação do aço — informação do CONTRATO da obra (não varia por local).
+  // A aba Estruturas usa esta data para ancorar a série temporal de consumo por período
+  // (ano/semestre), sem precisar redigitar por local/base. fabricationEndDate em aberto
+  // (vazio) = fabricação ainda em andamento.
+  fabricationStartDate?: string;
+  fabricationEndDate?: string;
+
   // Data em que o PACOTE DE PROJETOS foi efetivamente entregue (cumprimento do prazo
   // contratual) — independe do status físico da obra (Canteiro pode seguir ACTIVE com os
   // projetos já entregues). Quando preenchida, o SLA fica "resolvido": deixa de crescer

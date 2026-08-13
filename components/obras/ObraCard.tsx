@@ -284,6 +284,11 @@ export function ObraCard({
               ? `${formatNumberBR(steelSummary.kg / 1000, 1)} t (${steelSummary.count} local${steelSummary.count !== 1 ? 'is' : ''})`
               : DASH}
           </Field>
+          <Field label="Fabricação do Aço" muted={!client.fabricationStartDate}>
+            {client.fabricationStartDate
+              ? `${format(parseISO(client.fabricationStartDate), 'dd/MM/yyyy')} → ${client.fabricationEndDate ? format(parseISO(client.fabricationEndDate), 'dd/MM/yyyy') : 'em andamento'}`
+              : DASH}
+          </Field>
           {isDone ? (
             <Field
               label={status === ObraStatus.CANCELLED ? 'Cancelada em' : 'Concluída em'}

@@ -199,6 +199,8 @@ export const ObrasPage: React.FC<ObrasPageProps> = ({
       expectedCompletionDate: formData.obraEndDate || undefined,
       projectDeadlineDate: formData.projectDeadlineDate || undefined,
       projectsDeliveredAt: formData.projectsDeliveredAt || undefined,
+      fabricationStartDate: formData.fabricationStartDate || undefined,
+      fabricationEndDate: formData.fabricationEndDate || undefined,
       // contractDate/deadlineDays (SLA antigo) propositalmente FORA do payload: são
       // somente-leitura no formulário, então não devem ser reescritos ao salvar — o
       // valor que já está em Firestore (se houver) é preservado pelo merge do updateDoc.

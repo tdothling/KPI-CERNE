@@ -11,7 +11,7 @@
 // de vento, porque a pressão dinâmica do vento cresce com o quadrado da velocidade (NBR
 // 6123) — por isso a curva esperada é ajustada em função de v², não de v.
 
-import { RevisionReason } from '../types';
+import { ClientDoc, RevisionReason } from '../types';
 
 // --- MATERIAIS ---
 
@@ -91,8 +91,6 @@ export const windBandOf = (windSpeed: number): WindBand =>
 // Fotografia dos valores ANTES de uma revisão — o registro pode mudar (aditivo, área
 // corrigida, novo levantamento) e o histórico precisa preservar o que valia antes.
 export interface SteelSnapshot {
-  fabricationStartDate: string;
-  fabricationEndDate?: string;
   windSpeed: number;
   areaLeve: number;
   areaPesada: number;
@@ -114,10 +112,6 @@ export interface SteelRecord {
   id: string;
   client: string; // obra — nome denormalizado, igual às demais coleções
   base: string; // local dentro da obra (ex.: "Base 1", "Galpão A", "KM 104")
-  // Janela real de fabricação (cronograma), não uma data arbitrária — é o que ancora a
-  // série temporal com precisão: o aço é consumido NESSE período, não num ponto solto.
-  fabricationStartDate: string; // ISO — eixo da série temporal (bucket = período do início)
-  fabricationEndDate?: string; // ISO — pode estar em aberto (fabricação ainda em andamento)
   windSpeed: number; // m/s
   areaLeve: number; // m²
   areaPesada: number; // m²
@@ -129,8 +123,6 @@ export interface SteelRecord {
 }
 
 const snapshotOf = (r: SteelRecord): SteelSnapshot => ({
-  fabricationStartDate: r.fabricationStartDate,
-  ...(r.fabricationEndDate ? { fabricationEndDate: r.fabricationEndDate } : {}),
   windSpeed: r.windSpeed,
   areaLeve: r.areaLeve,
   areaPesada: r.areaPesada,
@@ -399,19 +391,36 @@ const periodKeyOf = (isoDate: string, granularity: TimeSeriesGranularity): { key
   return { key: `${year}-S${semester}`, label: `${year} S${semester}` };
 };
 
+// Janela de fabricação da obra (contrato) — usada tanto para filtrar por período quanto
+// para exibir a data ao lado dos registros de um cliente na aba Estruturas. null quando a
+// obra não tem a data cadastrada (o cadastro fica na aba Obras, não aqui).
+export const fabricationWindowOf = (
+  clientName: string,
+  clients: Pick<ClientDoc, 'name' | 'fabricationStartDate' | 'fabricationEndDate'>[],
+): { start: string; end?: string } | null => {
+  const c = clients.find((c) => c.name === clientName);
+  if (!c?.fabricationStartDate) return null;
+  return { start: c.fabricationStartDate, end: c.fabricationEndDate };
+};
+
 // Mediana de kg/m² por período × faixa de vento — o gráfico de "a equipe vem reduzindo o
 // consumo", segmentado por faixa para não misturar obras de ventos diferentes na mesma linha.
-// O período é o do INÍCIO da fabricação: é quando o consumo daquele registro passa a contar,
-// sem supor como o kg se distribui ao longo da janela de fabricação.
+// O período é o do INÍCIO da fabricação — informação do CONTRATO (ClientDoc), não do
+// registro: é quando o consumo daquela obra passa a contar, sem supor como o kg se
+// distribui ao longo da janela. Obras sem a data cadastrada ficam de fora da série (não
+// há como posicioná-las no tempo).
 export const timeSeries = (
   records: SteelRecord[],
   kind: SteelKind,
   granularity: TimeSeriesGranularity,
+  clients: Pick<ClientDoc, 'name' | 'fabricationStartDate'>[],
 ): TimeSeriesPoint[] => {
+  const startByClient = new Map(clients.map((c) => [c.name, c.fabricationStartDate]));
   const groups = new Map<string, { periodKey: string; periodLabel: string; band: WindBand; values: number[] }>();
 
   records.forEach((r) => {
-    const period = periodKeyOf(r.fabricationStartDate, granularity);
+    const fabricationStart = startByClient.get(r.client);
+    const period = fabricationStart ? periodKeyOf(fabricationStart, granularity) : null;
     const value = intensity(r, kind);
     if (!period || value === null) return;
     const band = windBandOf(r.windSpeed);

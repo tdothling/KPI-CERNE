@@ -20,6 +20,7 @@ import {
   WIND_BANDS,
   bandStats,
   deviations,
+  fabricationWindowOf,
   fitExpectedCurve,
   timeSeries,
   totalCost,
@@ -128,24 +129,12 @@ export const AcoPage: React.FC<AcoPageProps> = ({
       return;
     }
 
-    if (
-      formData.fabricationEndDate &&
-      formData.fabricationEndDate < formData.fabricationStartDate
-    ) {
-      alert('O fim da fabricação não pode ser antes do início.');
-      return;
-    }
-
     const nextFields = {
-      fabricationStartDate: formData.fabricationStartDate,
       windSpeed: formData.windSpeed,
       areaLeve: formData.areaLeve,
       areaPesada: formData.areaPesada,
       areaCobertura: formData.areaCobertura,
       materials: formData.materials,
-      ...(formData.fabricationEndDate
-        ? { fabricationEndDate: formData.fabricationEndDate }
-        : {}),
       ...(formData.observacao ? { observacao: formData.observacao } : {}),
     };
 
@@ -210,24 +199,30 @@ export const AcoPage: React.FC<AcoPageProps> = ({
     [steelRecords],
   );
 
+  // Filtro de período usa a data de fabricação da OBRA (cadastrada em Obras), não um
+  // campo do registro — obras sem a data cadastrada ficam de fora quando o filtro está ativo.
   const filteredRecords = useMemo(
     () =>
       steelRecords.filter((r) => {
         if (filterClients.length > 0 && !filterClients.includes(r.client)) return false;
         if (filterBands.length > 0 && !filterBands.includes(windBandOf(r.windSpeed).key)) return false;
-        if (dateFrom && r.fabricationStartDate < dateFrom) return false;
-        if (dateTo && r.fabricationStartDate > dateTo) return false;
+        if (dateFrom || dateTo) {
+          const window = fabricationWindowOf(r.client, clients);
+          if (!window) return false;
+          if (dateFrom && window.start < dateFrom) return false;
+          if (dateTo && window.start > dateTo) return false;
+        }
         return true;
       }),
-    [steelRecords, filterClients, filterBands, dateFrom, dateTo],
+    [steelRecords, clients, filterClients, filterBands, dateFrom, dateTo],
   );
 
   const fit = useMemo(() => fitExpectedCurve(filteredRecords, kind), [filteredRecords, kind]);
   const devs = useMemo(() => deviations(filteredRecords, kind, fit), [filteredRecords, kind, fit]);
   const bands = useMemo(() => bandStats(filteredRecords, kind), [filteredRecords, kind]);
   const series = useMemo(
-    () => timeSeries(filteredRecords, kind, granularity),
-    [filteredRecords, kind, granularity],
+    () => timeSeries(filteredRecords, kind, granularity, clients),
+    [filteredRecords, kind, granularity, clients],
   );
 
   const byId = useMemo(() => new Map(steelRecords.map((r) => [r.id, r])), [steelRecords]);
@@ -310,6 +305,7 @@ export const AcoPage: React.FC<AcoPageProps> = ({
               {groupedByClient.map((group) => {
                 const kgTotal = group.records.reduce((s, r) => s + totalKg(r), 0);
                 const costTotal = group.records.reduce((s, r) => s + totalCost(r), 0);
+                const fabricationWindow = fabricationWindowOf(group.client, clients);
                 return (
                   <div
                     key={group.client}
@@ -323,6 +319,16 @@ export const AcoPage: React.FC<AcoPageProps> = ({
                         <p className="text-[11px] text-slate-500 dark:text-slate-400">
                           {group.records.length} local(is) · {formatNumberBR(kgTotal / 1000, 1)} t ·{' '}
                           {formatCurrencyBR(costTotal)}
+                          {fabricationWindow && (
+                            <>
+                              {' · '}
+                              <Factory size={10} className="inline-block mb-0.5 mr-0.5" />
+                              Fabricação: {formatDateDisplay(fabricationWindow.start)} →{' '}
+                              {fabricationWindow.end
+                                ? formatDateDisplay(fabricationWindow.end)
+                                : 'em andamento'}
+                            </>
+                          )}
                         </p>
                       </div>
                       {!readOnly && (
@@ -348,11 +354,7 @@ export const AcoPage: React.FC<AcoPageProps> = ({
                                   {r.base}
                                 </p>
                                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                  {formatDateDisplay(r.fabricationStartDate)}
-                                  {r.fabricationEndDate
-                                    ? ` → ${formatDateDisplay(r.fabricationEndDate)}`
-                                    : ' → em andamento'}{' '}
-                                  · Leve {formatNumberBR(r.areaLeve, 0)}m² · Pesada{' '}
+                                  Leve {formatNumberBR(r.areaLeve, 0)}m² · Pesada{' '}
                                   {formatNumberBR(r.areaPesada, 0)}m² · Cobertura{' '}
                                   {formatNumberBR(r.areaCobertura, 0)}m²
                                 </p>
@@ -606,6 +608,7 @@ export const AcoPage: React.FC<AcoPageProps> = ({
           clients={clients}
           original={editingRecord}
           baseSuggestions={baseSuggestions}
+          fabricationWindow={fabricationWindowOf(formData.client, clients)}
         />
       )}
 

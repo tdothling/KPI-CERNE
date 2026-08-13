@@ -1,7 +1,7 @@
 import React from 'react';
 import { Edit2, History, Trash2, AlertTriangle } from 'lucide-react';
 import { RecordDeviation, windBandOf } from '../../domain/steel';
-import { formatCurrencyBR, formatDateDisplay, formatNumberBR } from '../../utils';
+import { formatCurrencyBR, formatNumberBR } from '../../utils';
 import { WIND_BAND_BADGE_CLASS } from './acoShared';
 
 interface AcoRecordsTableProps {
@@ -62,7 +62,7 @@ export const AcoRecordsTable: React.FC<AcoRecordsTableProps> = ({
                         {d.record.client}
                       </p>
                       <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                        {d.record.base} · {formatDateDisplay(d.record.fabricationStartDate)}
+                        {d.record.base}
                       </p>
                     </div>
                   </div>

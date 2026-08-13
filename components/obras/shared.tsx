@@ -143,6 +143,8 @@ export interface FormState {
   obraEndDate: string; // mapeia para ClientDoc.expectedCompletionDate (mesma propriedade, rótulo novo)
   projectDeadlineDate: string;
   projectsDeliveredAt: string; // data em que o pacote de projetos foi entregue — fecha o SLA
+  fabricationStartDate: string; // início da fabricação do aço — alimenta a aba Estruturas
+  fabricationEndDate: string; // '' = fabricação ainda em andamento
   // SLA antigo (legado) — somente leitura no formulário; nenhum input escreve nestes campos,
   // então eles nunca entram no payload de salvar e o valor em Firestore é preservado.
   contractDate: string;
@@ -163,6 +165,8 @@ export const defaultForm: FormState = {
   obraEndDate: '',
   projectDeadlineDate: '',
   projectsDeliveredAt: '',
+  fabricationStartDate: '',
+  fabricationEndDate: '',
   contractDate: '',
   deadlineDays: undefined,
   obraStatus: ObraStatus.ACTIVE,
@@ -182,6 +186,8 @@ export function clientToForm(c: ClientDoc): FormState {
     obraEndDate: c.expectedCompletionDate || '',
     projectDeadlineDate: c.projectDeadlineDate || '',
     projectsDeliveredAt: c.projectsDeliveredAt || '',
+    fabricationStartDate: c.fabricationStartDate || '',
+    fabricationEndDate: c.fabricationEndDate || '',
     contractDate: c.contractDate || '',
     deadlineDays: c.deadlineDays,
     obraStatus: getEffectiveStatus(c),

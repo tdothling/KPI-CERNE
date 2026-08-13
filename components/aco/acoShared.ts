@@ -51,8 +51,6 @@ export const windBandColor = (bandKey: string, isDarkMode: boolean): string => {
 export interface SteelFormState {
   client: string;
   base: string;
-  fabricationStartDate: string;
-  fabricationEndDate: string; // '' = fabricação ainda em andamento
   windSpeed: number;
   areaLeve: number;
   areaPesada: number;
@@ -69,8 +67,6 @@ export interface SteelFormState {
 export const defaultSteelForm = (client = ''): SteelFormState => ({
   client,
   base: '',
-  fabricationStartDate: new Date().toISOString().split('T')[0],
-  fabricationEndDate: '',
   windSpeed: 30,
   areaLeve: 0,
   areaPesada: 0,
@@ -85,8 +81,6 @@ export const defaultSteelForm = (client = ''): SteelFormState => ({
 export const steelRecordToForm = (r: SteelRecord): SteelFormState => ({
   client: r.client,
   base: r.base,
-  fabricationStartDate: r.fabricationStartDate,
-  fabricationEndDate: r.fabricationEndDate || '',
   windSpeed: r.windSpeed,
   areaLeve: r.areaLeve,
   areaPesada: r.areaPesada,
@@ -102,8 +96,6 @@ export const steelRecordToForm = (r: SteelRecord): SteelFormState => ({
 // revisão ao abrir a edição — observação e reviseChange/reviseReason não contam.
 export const numbersChanged = (original: SteelRecord, form: SteelFormState): boolean => {
   if (
-    original.fabricationStartDate !== form.fabricationStartDate ||
-    (original.fabricationEndDate || '') !== form.fabricationEndDate ||
     original.windSpeed !== form.windSpeed ||
     original.areaLeve !== form.areaLeve ||
     original.areaPesada !== form.areaPesada ||

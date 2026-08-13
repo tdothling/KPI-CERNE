@@ -1,5 +1,5 @@
 import React from 'react';
-import { HardHat, X, MapPin, User, ChevronDown, Save } from 'lucide-react';
+import { HardHat, X, MapPin, User, ChevronDown, Save, Factory } from 'lucide-react';
 import { differenceInCalendarDays, isValid, parseISO } from 'date-fns';
 import { SiteType, ObraStatus } from '../../types';
 import { FormState, inputCls, Label, Section, today } from './shared';
@@ -279,6 +279,36 @@ export function ObraFormModal({
                   </p>
                 </div>
               )}
+            </Section>
+
+            {/* Fabricação do Aço */}
+            <Section title="Fabricação do Aço (Opcional)">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label>Início da Fabricação</Label>
+                  <input
+                    type="date"
+                    value={form.fabricationStartDate}
+                    onChange={(e) => set({ fabricationStartDate: e.target.value })}
+                    className={inputCls + ' dark:[color-scheme:dark]'}
+                  />
+                </div>
+                <div>
+                  <Label>Fim da Fabricação</Label>
+                  <input
+                    type="date"
+                    value={form.fabricationEndDate}
+                    min={form.fabricationStartDate || undefined}
+                    onChange={(e) => set({ fabricationEndDate: e.target.value })}
+                    className={inputCls + ' dark:[color-scheme:dark]'}
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 flex items-start gap-1.5">
+                <Factory size={12} className="mt-0.5 flex-shrink-0" />
+                Período contratual de fabricação do aço. A aba Estruturas usa esta data para
+                posicionar o consumo na série temporal — não precisa redigitar por local.
+              </p>
             </Section>
 
             {/* Status */}
