@@ -82,7 +82,7 @@ export const AcoPage: React.FC<AcoPageProps> = ({
   onRevise,
   onDelete,
 }) => {
-  const [subView, setSubView] = useState<'dados' | 'indicadores'>('dados');
+  const [subView, setSubView] = useState<'dados' | 'indicadores'>('indicadores');
 
   // --- Cadastro ---
   const [search, setSearch] = useState('');
@@ -246,16 +246,6 @@ export const AcoPage: React.FC<AcoPageProps> = ({
         <div className="flex items-center gap-2">
           <div className="flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-0.5">
             <button
-              onClick={() => setSubView('dados')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
-                subView === 'dados'
-                  ? 'bg-brand-700 text-white'
-                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
-              }`}
-            >
-              <LayoutList size={14} /> Dados
-            </button>
-            <button
               onClick={() => setSubView('indicadores')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
                 subView === 'indicadores'
@@ -264,6 +254,16 @@ export const AcoPage: React.FC<AcoPageProps> = ({
               }`}
             >
               <BarChart3 size={14} /> Indicadores
+            </button>
+            <button
+              onClick={() => setSubView('dados')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
+                subView === 'dados'
+                  ? 'bg-brand-700 text-white'
+                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+              }`}
+            >
+              <LayoutList size={14} /> Dados
             </button>
           </div>
           {!readOnly && (
