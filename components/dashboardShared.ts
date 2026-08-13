@@ -27,6 +27,7 @@ export const REASON_CATEGORY: Record<string, ReasonCategory> = {
   [RevisionReason.SCOPE_CHANGE]: 'Externa',
   [RevisionReason.PROJECT_CHANGE]: 'Externa',
   [RevisionReason.ADDENDUM]: 'Externa',
+  [RevisionReason.CERTIFICATION_ADJUSTMENT]: 'Externa',
   [RevisionReason.OTHER]: 'Outros',
 };
 

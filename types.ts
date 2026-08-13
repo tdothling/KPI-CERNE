@@ -33,6 +33,7 @@ export enum RevisionReason {
   PROJECT_CHANGE = 'Mudança de Projeto', // Novo
   ADDENDUM = 'Aditivo', // Novo
   COMPATIBILITY = 'Compatibilização',
+  CERTIFICATION_ADJUSTMENT = 'Ajuste para Certificadora',
   OTHER = 'Outros', // Novo
 }
 

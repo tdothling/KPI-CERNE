@@ -21,6 +21,7 @@ const REVISION_REASON_LABEL: Record<RevisionReason, string> = {
   [RevisionReason.PROJECT_CHANGE]: 'Mudança de Projeto',
   [RevisionReason.ADDENDUM]: 'Aditivo',
   [RevisionReason.COMPATIBILITY]: 'Compatibilização',
+  [RevisionReason.CERTIFICATION_ADJUSTMENT]: 'Ajuste para Certificadora',
   [RevisionReason.OTHER]: 'Outros',
 };
 
