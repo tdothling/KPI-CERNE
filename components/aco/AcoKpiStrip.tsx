@@ -4,8 +4,8 @@ import {
   RecordDeviation,
   SteelKind,
   SteelRecord,
-  overallCostPerM2Median,
-  overallIntensityMedian,
+  overallCostPerM2Mean,
+  overallIntensityMean,
   totalCost,
   totalKg,
 } from '../../domain/steel';
@@ -23,10 +23,10 @@ export const AcoKpiStrip: React.FC<AcoKpiStripProps> = ({ records, kind, devs })
   const stats = useMemo(() => {
     const kgTotal = records.reduce((s, r) => s + totalKg(r), 0);
     const costTotal = records.reduce((s, r) => s + totalCost(r), 0);
-    const medianKgM2 = overallIntensityMedian(records, kind);
-    const medianCostM2 = overallCostPerM2Median(records, kind);
+    const meanKgM2 = overallIntensityMean(records, kind);
+    const meanCostM2 = overallCostPerM2Mean(records, kind);
     const outliers = devs.filter((d) => d.isOutlier).length;
-    return { kgTotal, costTotal, medianKgM2, medianCostM2, outliers };
+    return { kgTotal, costTotal, meanKgM2, meanCostM2, outliers };
   }, [records, kind, devs]);
 
   return (
@@ -48,15 +48,15 @@ export const AcoKpiStrip: React.FC<AcoKpiStripProps> = ({ records, kind, devs })
       <KpiCard
         icon={<TrendingDown size={18} />}
         iconClass="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
-        label="Kg/m² Mediano"
-        value={stats.medianKgM2 > 0 ? `${formatNumberBR(stats.medianKgM2, 2)} kg/m²` : '-'}
+        label="Kg/m² Médio"
+        value={stats.meanKgM2 > 0 ? `${formatNumberBR(stats.meanKgM2, 2)} kg/m²` : '-'}
         hint="Eficiência física — não muda com o preço"
       />
       <KpiCard
         icon={<Gauge size={18} />}
         iconClass="bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400"
-        label="R$/m² Mediano"
-        value={stats.medianCostM2 > 0 ? formatCurrencyBR(stats.medianCostM2) : '-'}
+        label="R$/m² Médio"
+        value={stats.meanCostM2 > 0 ? formatCurrencyBR(stats.meanCostM2) : '-'}
         hint="Gasto — mistura consumo e preço de mercado"
       />
       <KpiCard

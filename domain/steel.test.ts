@@ -18,8 +18,8 @@ import {
   timeSeries,
   applySteelRevision,
   MIN_FIT_SAMPLE,
-  overallIntensityMedian,
-  overallCostPerM2Median,
+  overallIntensityMean,
+  overallCostPerM2Mean,
   fabricationWindowOf,
 } from './steel';
 import { RevisionReason } from '../types';
@@ -216,19 +216,28 @@ describe('deviations', () => {
   });
 });
 
-describe('overallIntensityMedian / overallCostPerM2Median', () => {
-  it('calcula a mediana ignorando registros sem área (null)', () => {
+describe('overallIntensityMean / overallCostPerM2Mean', () => {
+  it('calcula a média ponderada (total kg / total m²) ignorando registros sem área (null)', () => {
     const records = [
       record({ areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 800, pricePerKg: 8 } }) }), // 8 kg/m²
       record({ areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 1200, pricePerKg: 8 } }) }), // 12 kg/m²
       record({ areaLeve: 0, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 999, pricePerKg: 8 } }) }), // null — ignorado
     ];
-    expect(overallIntensityMedian(records, 'leve')).toBe(10);
-    expect(overallCostPerM2Median(records, 'leve')).toBe(80); // (8*8 e 12*8)/100 = 64 e 96 -> mediana 80
+    expect(overallIntensityMean(records, 'leve')).toBe(10); // (800+1200)/(100+100)
+    expect(overallCostPerM2Mean(records, 'leve')).toBe(80); // (6400+9600)/200
+  });
+
+  it('pondera pela área — um local pequeno não pesa igual a um local grande', () => {
+    const records = [
+      record({ areaLeve: 10, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 200, pricePerKg: 5 } }) }), // 20 kg/m², local pequeno
+      record({ areaLeve: 1000, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 8000, pricePerKg: 5 } }) }), // 8 kg/m², local grande
+    ];
+    // média simples dos dois kg/m² seria 14; a média ponderada reflete o volume real:
+    expect(overallIntensityMean(records, 'leve')).toBeCloseTo(8200 / 1010, 5);
   });
 
   it('retorna 0 sem nenhum registro válido', () => {
-    expect(overallIntensityMedian([], 'leve')).toBe(0);
+    expect(overallIntensityMean([], 'leve')).toBe(0);
   });
 });
 

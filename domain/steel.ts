@@ -263,13 +263,34 @@ const percentile = (values: number[], p: number): number => {
   return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
 };
 
-// Mediana de kg/m² (ou R$/m²) entre TODOS os registros filtrados, sem segmentar por
-// faixa de vento — visão geral para o KPI strip (não é "esperado", é "observado").
-export const overallIntensityMedian = (records: SteelRecord[], kind: SteelKind): number =>
-  median(records.map((r) => intensity(r, kind)).filter((v): v is number => v !== null));
+// Média de kg/m² (ou R$/m²) entre TODOS os registros filtrados, sem segmentar por faixa
+// de vento — visão geral para o KPI strip (não é "esperado", é "observado"). É a razão
+// ponderada total(kg)/total(m²), não a média simples dos kg/m² de cada local: um local de
+// 50 m² e outro de 5.000 m² não podem pesar igual, senão o local pequeno distorce a leitura
+// (é exatamente o problema de uma obra com poucos locais grandes vs. muitos locais pequenos).
+export const overallIntensityMean = (records: SteelRecord[], kind: SteelKind): number => {
+  let kgSum = 0;
+  let areaSum = 0;
+  records.forEach((r) => {
+    const area = areaOf(r, kind);
+    if (!area || area <= 0) return;
+    kgSum += kgOf(r, kind);
+    areaSum += area;
+  });
+  return areaSum > 0 ? kgSum / areaSum : 0;
+};
 
-export const overallCostPerM2Median = (records: SteelRecord[], kind: SteelKind): number =>
-  median(records.map((r) => costPerM2(r, kind)).filter((v): v is number => v !== null));
+export const overallCostPerM2Mean = (records: SteelRecord[], kind: SteelKind): number => {
+  let costSum = 0;
+  let areaSum = 0;
+  records.forEach((r) => {
+    const area = areaOf(r, kind);
+    if (!area || area <= 0) return;
+    costSum += costOf(r, kind);
+    areaSum += area;
+  });
+  return areaSum > 0 ? costSum / areaSum : 0;
+};
 
 export interface BandStats {
   band: WindBand;
