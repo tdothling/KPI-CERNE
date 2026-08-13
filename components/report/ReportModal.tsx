@@ -8,11 +8,12 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Copy, Check, Mail, Printer, X } from 'lucide-react';
+import { Copy, Check, Mail, Printer, Sparkles, X } from 'lucide-react';
 import { DashboardFilterState } from '../../hooks/useDashboardFilters';
 import { DashboardStats } from '../dashboardShared';
 import { ReportView, describePeriodo } from './ReportView';
 import { buildEmailBody, buildMailtoUrl, ReportSummaryInput } from './emailSummary';
+import { buildNarrativePayload, generateNarrative, NarrativeState } from './aiNarrative';
 
 interface ReportModalProps {
   stats: DashboardStats;
@@ -37,6 +38,28 @@ export function ReportModal({ stats, filters, totalProjects, onClose }: ReportMo
     }),
     [stats, filters, totalProjects, generatedAt],
   );
+
+  const [narrative, setNarrative] = useState<NarrativeState>({ status: 'loading' });
+
+  const runNarrativeGeneration = useCallback(async () => {
+    setNarrative({ status: 'loading' });
+    try {
+      const text = await generateNarrative(buildNarrativePayload(summaryInput));
+      setNarrative({ status: 'done', text });
+    } catch (e) {
+      setNarrative({
+        status: 'error',
+        message: e instanceof Error ? e.message : 'Não foi possível gerar a análise.',
+      });
+    }
+  }, [summaryInput]);
+
+  // Dispara a análise de IA uma única vez, quando o relatório é aberto — não a cada
+  // recálculo de summaryInput (o botão "Regenerar análise" cobre uma nova tentativa).
+  useEffect(() => {
+    runNarrativeGeneration();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Enquanto o relatório está aberto, Ctrl+P e o botão imprimem o relatório, não a tela
   useEffect(() => {
@@ -100,6 +123,14 @@ export function ReportModal({ stats, filters, totalProjects, onClose }: ReportMo
               {copiado ? 'Copiado' : 'Copiar resumo'}
             </button>
             <button
+              onClick={runNarrativeGeneration}
+              disabled={narrative.status === 'loading'}
+              className="flex items-center gap-2 rounded-lg border border-slate-600 px-3 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Sparkles size={16} />
+              {narrative.status === 'loading' ? 'Gerando análise…' : 'Regenerar análise'}
+            </button>
+            <button
               onClick={onClose}
               className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
               aria-label="Fechar relatório"
@@ -117,6 +148,14 @@ export function ReportModal({ stats, filters, totalProjects, onClose }: ReportMo
           Outlook abre com assunto e resumo já preenchidos;{' '}
           <span className="text-slate-400">3)</span> anexe o PDF salvo e escolha os destinatários.
         </div>
+
+        {narrative.status === 'error' && (
+          <div className="mx-auto mt-2 max-w-4xl rounded-lg border border-amber-700/60 bg-amber-950/40 px-3 py-2 text-[11px] leading-relaxed text-amber-200">
+            Não foi possível gerar a análise executiva com IA agora ({narrative.message}). O
+            relatório segue completo sem ela — use <strong>Regenerar análise</strong> para tentar de
+            novo.
+          </div>
+        )}
       </div>
 
       {/* Moldura cinza só na tela; na impressão o documento vira o fluxo da página */}
@@ -127,6 +166,7 @@ export function ReportModal({ stats, filters, totalProjects, onClose }: ReportMo
             filters={filters}
             totalProjects={totalProjects}
             generatedAt={generatedAt}
+            narrative={narrative}
           />
         </div>
       </div>

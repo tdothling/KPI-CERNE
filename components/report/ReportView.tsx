@@ -13,6 +13,7 @@ import { format, isValid, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { DashboardFilterState } from '../../hooks/useDashboardFilters';
 import { DashboardStats, META_IAPR, META_OTD } from '../dashboardShared';
+import { NarrativeState } from './aiNarrative';
 import {
   ClientResponseChart,
   CycleTimeChart,
@@ -40,6 +41,7 @@ export interface ReportViewProps {
   /** Quantidade de arquivos que passaram pelos filtros — base de cálculo do relatório. */
   totalProjects: number;
   generatedAt: Date;
+  narrative: NarrativeState;
 }
 
 function formatDay(iso: string): string {
@@ -56,7 +58,13 @@ export function describePeriodo(filters: DashboardFilterState): string {
   return 'Todo o histórico registrado';
 }
 
-export function ReportView({ stats, filters, totalProjects, generatedAt }: ReportViewProps) {
+export function ReportView({
+  stats,
+  filters,
+  totalProjects,
+  generatedAt,
+  narrative,
+}: ReportViewProps) {
   const atrasados = stats.alerts.filter((a) => a.slaStatus === 'ATRASADO');
   const vencendo = stats.alerts.filter((a) => a.slaStatus === 'VENCENDO');
   const deliveryDelta = stats.deliveries30 - stats.deliveriesPrev30;
@@ -143,6 +151,33 @@ export function ReportView({ stats, filters, totalProjects, generatedAt }: Repor
           </p>
         )}
       </div>
+
+      {/* ================= Análise executiva (IA) ================= */}
+      {narrative.status !== 'error' && (
+        <ReportCard title="Análise Executiva (IA)" className="mt-3">
+          {narrative.status === 'loading' && (
+            <p className="text-[10px] italic text-slate-400">Gerando análise com IA…</p>
+          )}
+          {narrative.status === 'done' && (
+            <>
+              <div className="space-y-2">
+                {narrative.text
+                  .split('\n')
+                  .filter((paragrafo) => paragrafo.trim())
+                  .map((paragrafo, i) => (
+                    <p key={i} className="text-[10.5px] leading-relaxed text-slate-700">
+                      {paragrafo}
+                    </p>
+                  ))}
+              </div>
+              <p className="mt-2.5 text-[9px] italic text-slate-400">
+                Texto gerado por IA (Gemini) a partir dos indicadores deste período — revise antes
+                de enviar.
+              </p>
+            </>
+          )}
+        </ReportCard>
+      )}
 
       {/* ================= Sumário executivo ================= */}
       <ReportSection label="Sumário Executivo" />
