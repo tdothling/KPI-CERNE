@@ -128,13 +128,24 @@ export const AcoPage: React.FC<AcoPageProps> = ({
       return;
     }
 
+    if (
+      formData.fabricationEndDate &&
+      formData.fabricationEndDate < formData.fabricationStartDate
+    ) {
+      alert('O fim da fabricação não pode ser antes do início.');
+      return;
+    }
+
     const nextFields = {
-      referenceDate: formData.referenceDate,
+      fabricationStartDate: formData.fabricationStartDate,
       windSpeed: formData.windSpeed,
       areaLeve: formData.areaLeve,
       areaPesada: formData.areaPesada,
       areaCobertura: formData.areaCobertura,
       materials: formData.materials,
+      ...(formData.fabricationEndDate
+        ? { fabricationEndDate: formData.fabricationEndDate }
+        : {}),
       ...(formData.observacao ? { observacao: formData.observacao } : {}),
     };
 
@@ -204,8 +215,8 @@ export const AcoPage: React.FC<AcoPageProps> = ({
       steelRecords.filter((r) => {
         if (filterClients.length > 0 && !filterClients.includes(r.client)) return false;
         if (filterBands.length > 0 && !filterBands.includes(windBandOf(r.windSpeed).key)) return false;
-        if (dateFrom && r.referenceDate < dateFrom) return false;
-        if (dateTo && r.referenceDate > dateTo) return false;
+        if (dateFrom && r.fabricationStartDate < dateFrom) return false;
+        if (dateTo && r.fabricationStartDate > dateTo) return false;
         return true;
       }),
     [steelRecords, filterClients, filterBands, dateFrom, dateTo],
@@ -337,8 +348,11 @@ export const AcoPage: React.FC<AcoPageProps> = ({
                                   {r.base}
                                 </p>
                                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                  {formatDateDisplay(r.referenceDate)} · Leve{' '}
-                                  {formatNumberBR(r.areaLeve, 0)}m² · Pesada{' '}
+                                  {formatDateDisplay(r.fabricationStartDate)}
+                                  {r.fabricationEndDate
+                                    ? ` → ${formatDateDisplay(r.fabricationEndDate)}`
+                                    : ' → em andamento'}{' '}
+                                  · Leve {formatNumberBR(r.areaLeve, 0)}m² · Pesada{' '}
                                   {formatNumberBR(r.areaPesada, 0)}m² · Cobertura{' '}
                                   {formatNumberBR(r.areaCobertura, 0)}m²
                                 </p>
@@ -468,7 +482,7 @@ export const AcoPage: React.FC<AcoPageProps> = ({
 
             <div className="flex items-center gap-3 flex-wrap">
               <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                Período (data de referência):
+                Período (início da fabricação):
               </span>
               <input
                 type="date"

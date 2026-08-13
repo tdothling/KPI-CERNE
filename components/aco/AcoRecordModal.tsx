@@ -127,13 +127,27 @@ export function AcoRecordModal({
                   </datalist>
                 </div>
                 <div>
-                  <Label>Data de Referência</Label>
+                  <Label>Início da Fabricação *</Label>
                   <input
+                    required
                     type="date"
-                    value={form.referenceDate}
-                    onChange={(e) => set({ referenceDate: e.target.value })}
+                    value={form.fabricationStartDate}
+                    onChange={(e) => set({ fabricationStartDate: e.target.value })}
                     className={inputCls + ' dark:[color-scheme:dark]'}
                   />
+                </div>
+                <div>
+                  <Label>Fim da Fabricação</Label>
+                  <input
+                    type="date"
+                    value={form.fabricationEndDate}
+                    min={form.fabricationStartDate || undefined}
+                    onChange={(e) => set({ fabricationEndDate: e.target.value })}
+                    className={inputCls + ' dark:[color-scheme:dark]'}
+                  />
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                    Deixe em branco se a fabricação ainda está em andamento.
+                  </p>
                 </div>
                 <div>
                   <Label>Vento da Localidade (m/s)</Label>

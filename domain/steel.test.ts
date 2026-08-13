@@ -37,7 +37,7 @@ const record = (overrides: Partial<SteelRecord>): SteelRecord => {
     id: `rec-${seq}`,
     client: 'Obra Teste',
     base: `Base ${seq}`,
-    referenceDate: '2026-01-15',
+    fabricationStartDate: '2026-01-15',
     windSpeed: 30,
     areaLeve: 100,
     areaPesada: 0,
@@ -256,9 +256,9 @@ describe('bandStats', () => {
 describe('timeSeries', () => {
   it('agrupa por ano e faixa de vento, calculando a mediana', () => {
     const records = [
-      record({ referenceDate: '2025-03-01', windSpeed: 32, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 800, pricePerKg: 8 } }) }),
-      record({ referenceDate: '2025-08-01', windSpeed: 32, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 1000, pricePerKg: 8 } }) }),
-      record({ referenceDate: '2026-01-01', windSpeed: 32, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 600, pricePerKg: 8 } }) }),
+      record({ fabricationStartDate: '2025-03-01', windSpeed: 32, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 800, pricePerKg: 8 } }) }),
+      record({ fabricationStartDate: '2025-08-01', windSpeed: 32, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 1000, pricePerKg: 8 } }) }),
+      record({ fabricationStartDate: '2026-01-01', windSpeed: 32, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 600, pricePerKg: 8 } }) }),
     ];
     const series = timeSeries(records, 'leve', 'ANO');
     expect(series).toHaveLength(2);
@@ -269,8 +269,8 @@ describe('timeSeries', () => {
 
   it('separa semestres dentro do mesmo ano', () => {
     const records = [
-      record({ referenceDate: '2026-02-01', windSpeed: 32, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 800, pricePerKg: 8 } }) }),
-      record({ referenceDate: '2026-09-01', windSpeed: 32, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 1200, pricePerKg: 8 } }) }),
+      record({ fabricationStartDate: '2026-02-01', windSpeed: 32, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 800, pricePerKg: 8 } }) }),
+      record({ fabricationStartDate: '2026-09-01', windSpeed: 32, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 1200, pricePerKg: 8 } }) }),
     ];
     const series = timeSeries(records, 'leve', 'SEMESTRE');
     expect(series.map((p) => p.periodKey).sort()).toEqual(['2026-S1', '2026-S2']);
@@ -289,7 +289,7 @@ describe('applySteelRevision', () => {
     const updated = applySteelRevision(
       current,
       {
-        referenceDate: '2026-06-01',
+        fabricationStartDate: '2026-06-01',
         windSpeed: 35,
         areaLeve: 120,
         areaPesada: 0,

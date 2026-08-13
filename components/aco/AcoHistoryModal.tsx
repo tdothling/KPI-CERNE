@@ -18,6 +18,16 @@ const REVISION_REASON_LABEL: Record<string, string> = {
 // pelo que foi alterado, não pelo estado inteiro repetido.
 function diffFields(before: SteelSnapshot, after: SteelSnapshot): { label: string; from: string; to: string }[] {
   const out: { label: string; from: string; to: string }[] = [];
+  if (
+    before.fabricationStartDate !== after.fabricationStartDate ||
+    (before.fabricationEndDate || '') !== (after.fabricationEndDate || '')
+  ) {
+    const fmt = (s: SteelSnapshot) =>
+      s.fabricationEndDate
+        ? `${formatDateDisplay(s.fabricationStartDate)} → ${formatDateDisplay(s.fabricationEndDate)}`
+        : `${formatDateDisplay(s.fabricationStartDate)} → em andamento`;
+    out.push({ label: 'Fabricação', from: fmt(before), to: fmt(after) });
+  }
   if (before.windSpeed !== after.windSpeed) {
     out.push({ label: 'Vento', from: `${formatNumberBR(before.windSpeed, 1)} m/s`, to: `${formatNumberBR(after.windSpeed, 1)} m/s` });
   }
@@ -52,7 +62,8 @@ export function AcoHistoryModal({
       i + 1 < record.revisions.length
         ? record.revisions[i + 1].snapshot
         : {
-            referenceDate: record.referenceDate,
+            fabricationStartDate: record.fabricationStartDate,
+            ...(record.fabricationEndDate ? { fabricationEndDate: record.fabricationEndDate } : {}),
             windSpeed: record.windSpeed,
             areaLeve: record.areaLeve,
             areaPesada: record.areaPesada,

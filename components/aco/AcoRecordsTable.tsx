@@ -62,7 +62,7 @@ export const AcoRecordsTable: React.FC<AcoRecordsTableProps> = ({
                         {d.record.client}
                       </p>
                       <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                        {d.record.base} · {formatDateDisplay(d.record.referenceDate)}
+                        {d.record.base} · {formatDateDisplay(d.record.fabricationStartDate)}
                       </p>
                     </div>
                   </div>
