@@ -30,6 +30,7 @@ import {
   PranchaStatus,
   canPranchaTransition,
   planMoverPranchasLote,
+  planRevisarPranchasLote,
   carteiraKpis,
   conjuntosKpis,
   rollupConjunto,
@@ -84,6 +85,13 @@ interface CarteiraPageProps {
     reason: RevisionReason,
     comment: string,
   ) => void;
+  onAbrirRevisaoPranchasLote: (
+    pranchas: Prancha[],
+    date: string,
+    period: Period,
+    reason: RevisionReason,
+    comment: string,
+  ) => Promise<{ revisadas: number; puladas: number; erros: string[] }>;
   onUpdatePrancha: (id: string, changes: Partial<Prancha>) => void;
   onAddPrancha: (p: Omit<Prancha, 'id'>) => void;
   onDeletePrancha: (p: Prancha) => void;
@@ -105,6 +113,7 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
   onMovePrancha,
   onMovePranchasLote,
   onAbrirRevisaoPrancha,
+  onAbrirRevisaoPranchasLote,
   onUpdatePrancha,
   onAddPrancha,
   onDeletePrancha,
@@ -298,6 +307,8 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
   const countMovable = (list: Prancha[], to: PranchaStatus) =>
     list.filter((p) => canPranchaTransition(p.status, to)).length;
 
+  const countRevisaveis = (list: Prancha[]) => planRevisarPranchasLote(list).revisaveis.length;
+
   const askMovePrancha = (p: Prancha, to: PranchaStatus) => {
     const isRevisao = to === PranchaStatus.EM_ANDAMENTO && p.status === PranchaStatus.REPROVADO;
     const cfg: Partial<
@@ -442,6 +453,37 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
           temRevisao ? { reason, comment } : comment ? { comment } : undefined,
         );
         if (r.erros.length > 0) alert(`Falha ao mover as pranchas:\n${r.erros.join('\n')}`);
+        aoConcluir?.();
+      },
+    });
+  };
+
+  // Nova revisão em LOTE — mesmo motivo/comentário para todas as pranchas
+  // selecionadas, independente de status (só A_FAZER é pulada, nada a
+  // revisar). Caso de uso: um pacote inteiro precisa reabrir pelo mesmo
+  // motivo (ex.: uma correção de cadastro que afeta todos os documentos).
+  const askRevisaoLote = (alvo: Prancha[], aoConcluir?: () => void) => {
+    const plan = planRevisarPranchasLote(alvo);
+    if (plan.revisaveis.length === 0) {
+      alert('Nenhuma das pranchas selecionadas foi iniciada — não há o que revisar.');
+      return;
+    }
+    setDateAction({
+      title: `Nova revisão de ${plan.revisaveis.length} prancha(s)`,
+      confirmLabel: 'Abrir Revisão',
+      tone: 'brand',
+      withReason: true,
+      withComment: true,
+      description:
+        `${plan.revisaveis.length} de ${alvo.length} prancha(s) selecionada(s) serão revisadas — ` +
+        'o ciclo atual de cada uma encerra em snapshot no histórico e reabre em execução como R+1. ' +
+        'Mesmo motivo/comentário vale para todas.' +
+        (plan.puladas.length > 0
+          ? ` ${plan.puladas.length} será(ão) pulada(s) por ainda não terem sido iniciadas.`
+          : ''),
+      onConfirm: async (date, period, comment, reason) => {
+        const r = await onAbrirRevisaoPranchasLote(plan.revisaveis, date, period, reason, comment);
+        if (r.erros.length > 0) alert(`Falha ao revisar as pranchas:\n${r.erros.join('\n')}`);
         aoConcluir?.();
       },
     });
@@ -1190,6 +1232,14 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
               askMoveLote(selPranchas, PranchaStatus.REPROVADO, 'selecionada(s)', () =>
                 setSelecionadas(new Set()),
               )
+            }
+          />
+          <LoteBtn
+            label="Revisar"
+            count={countRevisaveis(selPranchas)}
+            tone="text-amber-600 dark:text-amber-400"
+            onClick={() =>
+              askRevisaoLote(selPranchas, () => setSelecionadas(new Set()))
             }
           />
           <span className="w-px h-4 bg-slate-200 dark:bg-slate-700"></span>

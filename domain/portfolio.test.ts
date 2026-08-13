@@ -15,6 +15,7 @@ import {
   inferPranchaStatusFromDates,
   planInstanciacaoLote,
   planMoverPranchasLote,
+  planRevisarPranchasLote,
   swapDisciplinaSigla,
   gerarReferenciasDisciplinas,
   planGerarDisciplinasLote,
@@ -500,6 +501,38 @@ describe('planMoverPranchasLote', () => {
   it('lote vazio produz plano vazio', () => {
     const plan = planMoverPranchasLote([], PranchaStatus.ENVIADO);
     expect(plan.moviveis).toHaveLength(0);
+    expect(plan.puladas).toHaveLength(0);
+  });
+});
+
+// --- (c3) Abrir revisão em lote: qualquer status iniciado, só A_FAZER pula ---
+
+describe('planRevisarPranchasLote', () => {
+  const makePrancha = (id: string, status: PranchaStatus): Prancha => ({
+    id,
+    conjuntoId: 'c1',
+    papel: `Folha ${id}`,
+    codigoCompleto: '',
+    status,
+    revisao: 0,
+  });
+
+  it('separa as já iniciadas (revisáveis) das ainda em A_FAZER (puladas)', () => {
+    const alvo = [
+      makePrancha('p1', PranchaStatus.A_FAZER),
+      makePrancha('p2', PranchaStatus.EM_ANDAMENTO),
+      makePrancha('p3', PranchaStatus.ENVIADO),
+      makePrancha('p4', PranchaStatus.APROVADO),
+      makePrancha('p5', PranchaStatus.REPROVADO),
+    ];
+    const plan = planRevisarPranchasLote(alvo);
+    expect(plan.revisaveis.map((p) => p.id)).toEqual(['p2', 'p3', 'p4', 'p5']);
+    expect(plan.puladas.map((p) => p.id)).toEqual(['p1']);
+  });
+
+  it('lote vazio produz plano vazio', () => {
+    const plan = planRevisarPranchasLote([]);
+    expect(plan.revisaveis).toHaveLength(0);
     expect(plan.puladas).toHaveLength(0);
   });
 });

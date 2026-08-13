@@ -595,6 +595,24 @@ export const planMoverPranchasLote = (
   return plan;
 };
 
+// --- ABRIR REVISÃO EM PRANCHAS EM LOTE (planejador puro) ---
+//
+// Mesma regra do "Nova revisão" unitário: qualquer status já iniciado pode
+// revisar, só A_FAZER não tem o que revisar (nada ainda foi produzido).
+
+export interface RevisarPranchasLotePlan {
+  revisaveis: Prancha[]; // já iniciada — pode abrir revisão
+  puladas: Prancha[]; // ainda em A_FAZER — nada a revisar
+}
+
+export const planRevisarPranchasLote = (pranchas: Prancha[]): RevisarPranchasLotePlan => {
+  const plan: RevisarPranchasLotePlan = { revisaveis: [], puladas: [] };
+  pranchas.forEach((p) =>
+    (p.status !== PranchaStatus.A_FAZER ? plan.revisaveis : plan.puladas).push(p),
+  );
+  return plan;
+};
+
 export interface MoverReferenciasLotePlan {
   moviveis: Referencia[]; // transição permitida a partir do status atual
   puladas: Referencia[]; // status atual não permite ir para o destino

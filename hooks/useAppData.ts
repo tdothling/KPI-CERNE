@@ -67,6 +67,7 @@ import {
   instanciarConjunto,
   planInstanciacaoLote,
   planMoverPranchasLote,
+  planRevisarPranchasLote,
   planMoverReferenciasLote,
   slugify,
   refStatusAposInstanciar,
@@ -679,6 +680,39 @@ export function useAppData(projectFilter: ProjectFilterState) {
   // (nada é sobrescrito, os dados antigos ficam em revisions[].snapshot) e a
   // prancha reabre em execução como R+1. Mesma mecânica de buildPranchaMoveChanges
   // no braço de revisão, só que disparável a partir de qualquer status iniciado.
+  // Monta o patch de abertura de revisão — usado no braço unitário e no lote,
+  // mesma razão de buildPranchaMoveChanges: as duas vias aplicam EXATAMENTE a
+  // mesma regra.
+  const buildAbrirRevisaoChanges = (
+    prancha: Prancha,
+    date: string,
+    period: Period,
+    reason: RevisionReason,
+    comment: string,
+  ): Record<string, any> => ({
+    status: PranchaStatus.EM_ANDAMENTO,
+    revisao: (prancha.revisao || 0) + 1,
+    startDate: date,
+    startPeriod: period,
+    endDate: '',
+    endPeriod: '',
+    sendDate: '',
+    sendPeriod: '',
+    feedbackDate: '',
+    feedbackPeriod: '',
+    blockedDays: 0,
+    revisions: [
+      ...(prancha.revisions || []),
+      {
+        id: crypto.randomUUID(),
+        date,
+        reason,
+        comment,
+        snapshot: buildCycleSnapshot(prancha),
+      },
+    ],
+  });
+
   const handleAbrirRevisaoPrancha = (
     prancha: Prancha,
     date: string,
@@ -690,32 +724,38 @@ export function useAppData(projectFilter: ProjectFilterState) {
       alert('Esta prancha ainda não foi iniciada — não há o que revisar.');
       return;
     }
-    const changes: Record<string, any> = {
-      status: PranchaStatus.EM_ANDAMENTO,
-      revisao: (prancha.revisao || 0) + 1,
-      startDate: date,
-      startPeriod: period,
-      endDate: '',
-      endPeriod: '',
-      sendDate: '',
-      sendPeriod: '',
-      feedbackDate: '',
-      feedbackPeriod: '',
-      blockedDays: 0,
-      revisions: [
-        ...(prancha.revisions || []),
-        {
-          id: crypto.randomUUID(),
-          date,
-          reason,
-          comment,
-          snapshot: buildCycleSnapshot(prancha),
-        },
-      ],
-    };
-    patchPranchaInDb(prancha.id, changes).catch((e) =>
-      alert('Erro ao abrir revisão: ' + (e?.message || e)),
-    );
+    patchPranchaInDb(
+      prancha.id,
+      buildAbrirRevisaoChanges(prancha, date, period, reason, comment),
+    ).catch((e) => alert('Erro ao abrir revisão: ' + (e?.message || e)));
+  };
+
+  // Abre a MESMA revisão (mesmo motivo/comentário) em várias pranchas de uma
+  // vez — caso de uso: um pacote inteiro precisa ser revisado pelo mesmo
+  // motivo (ex.: uma correção de cadastro que afeta todos os documentos).
+  // planRevisarPranchasLote separa o que pode (já iniciada) do que não pode
+  // (A_FAZER) — nunca força, só pula; batchUpdatePranchasInDb faz chunking de
+  // até 400 docs por writeBatch, cobrindo pacotes grandes numa única operação.
+  const handleAbrirRevisaoPranchasLote = async (
+    alvo: Prancha[],
+    date: string,
+    period: Period,
+    reason: RevisionReason,
+    comment: string,
+  ): Promise<{ revisadas: number; puladas: number; erros: string[] }> => {
+    const plan = planRevisarPranchasLote(alvo);
+    if (plan.revisaveis.length === 0)
+      return { revisadas: 0, puladas: plan.puladas.length, erros: [] };
+    const patches = plan.revisaveis.map((p) => ({
+      id: p.id,
+      changes: buildAbrirRevisaoChanges(p, date, period, reason, comment),
+    }));
+    try {
+      await batchUpdatePranchasInDb(patches);
+      return { revisadas: patches.length, puladas: plan.puladas.length, erros: [] };
+    } catch (e: any) {
+      return { revisadas: 0, puladas: plan.puladas.length, erros: [e?.message || String(e)] };
+    }
   };
 
   const handleUpdatePrancha = (id: string, changes: Partial<Prancha>) => {
@@ -1059,6 +1099,7 @@ export function useAppData(projectFilter: ProjectFilterState) {
     handleMovePrancha,
     handleMovePranchasLote,
     handleAbrirRevisaoPrancha,
+    handleAbrirRevisaoPranchasLote,
     handleUpdatePrancha,
     handleAddPrancha,
     handleDeletePrancha,
