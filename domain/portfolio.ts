@@ -386,6 +386,7 @@ export const instanciarConjunto = (input: InstanciarInput): InstanciarResult => 
 
 export const DISCIPLINA_SIGLA: Partial<Record<Discipline, string>> = {
   [Discipline.ARCHITECTURE]: 'ARQ',
+  [Discipline.STRUCTURE]: 'COB',
   [Discipline.FOUNDATION]: 'FUN',
   [Discipline.ELECTRICAL]: 'ELE',
   [Discipline.DATA]: 'DAD',
