@@ -11,7 +11,12 @@ import { auth } from '../../firebase';
 import { META_IAPR, META_OTD } from '../dashboardShared';
 import { ReportSummaryInput } from './emailSummary';
 
-const REPORT_API_URL = import.meta.env.VITE_REPORT_API_URL as string | undefined;
+// URL pública da API (protegida por login do Firebase, não pela URL em si) — fixa no
+// código para não depender de um .env presente no momento do build. VITE_REPORT_API_URL
+// continua funcionando como override, útil para testar contra um deploy de preview.
+const DEFAULT_REPORT_API_URL = 'https://kpi-cerne-report-api.vercel.app/api/generate-report-narrative';
+const REPORT_API_URL =
+  (import.meta.env.VITE_REPORT_API_URL as string | undefined) || DEFAULT_REPORT_API_URL;
 
 /** Quantos atrasados mandar como exemplo para a IA — mesmo teto usado no email. */
 const MAX_ATRASADOS_NO_PROMPT = 5;
@@ -88,7 +93,6 @@ export type NarrativeState =
 
 /** Chama a API de análise e retorna o texto gerado. Lança em caso de falha. */
 export async function generateNarrative(payload: NarrativePayload): Promise<string> {
-  if (!REPORT_API_URL) throw new Error('VITE_REPORT_API_URL não configurada.');
   if (!auth?.currentUser) throw new Error('Usuário não autenticado.');
 
   const idToken = await auth.currentUser.getIdToken();
