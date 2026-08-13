@@ -1,9 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-/** Origens autorizadas a chamar a API — o hosting do app e o dev server local. */
+/** Origens autorizadas a chamar a API — hosts onde o app roda em produção + dev local. */
 const ALLOWED_ORIGINS = [
   'https://kpi---engenharia-cerne.web.app',
   'https://kpi---engenharia-cerne.firebaseapp.com',
+  'https://kpi-cerne.vercel.app',
   'http://localhost:3000',
 ];
 
