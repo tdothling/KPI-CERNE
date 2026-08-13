@@ -371,7 +371,11 @@ export const deviations = (
 
 // --- SÉRIE TEMPORAL ---
 
-export type TimeSeriesGranularity = 'ANO' | 'SEMESTRE';
+export type TimeSeriesGranularity = 'MES' | 'ANO' | 'SEMESTRE';
+
+const MONTH_LABEL = [
+  'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez',
+];
 
 export interface TimeSeriesPoint {
   periodKey: string; // '2026' ou '2026-S1'
@@ -387,6 +391,9 @@ const periodKeyOf = (isoDate: string, granularity: TimeSeriesGranularity): { key
   const month = Number(isoDate.slice(5, 7));
   if (!year || !month) return null;
   if (granularity === 'ANO') return { key: String(year), label: String(year) };
+  if (granularity === 'MES') {
+    return { key: `${year}-${String(month).padStart(2, '0')}`, label: `${MONTH_LABEL[month - 1]}/${String(year).slice(2)}` };
+  }
   const semester = month <= 6 ? 1 : 2;
   return { key: `${year}-S${semester}`, label: `${year} S${semester}` };
 };

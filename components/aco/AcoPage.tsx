@@ -189,7 +189,7 @@ export const AcoPage: React.FC<AcoPageProps> = ({
   const [filterBands, setFilterBands] = useState<string[]>([]);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [granularity, setGranularity] = useState<'ANO' | 'SEMESTRE'>('ANO');
+  const [granularity, setGranularity] = useState<'MES' | 'ANO' | 'SEMESTRE'>('MES');
 
   const availableClients = useMemo(
     () =>
@@ -546,7 +546,7 @@ export const AcoPage: React.FC<AcoPageProps> = ({
                   Evolução no Tempo
                 </h3>
                 <div className="flex items-center bg-slate-100 dark:bg-slate-700 rounded-lg p-0.5">
-                  {(['ANO', 'SEMESTRE'] as const).map((g) => (
+                  {(['MES', 'SEMESTRE', 'ANO'] as const).map((g) => (
                     <button
                       key={g}
                       onClick={() => setGranularity(g)}
@@ -556,7 +556,7 @@ export const AcoPage: React.FC<AcoPageProps> = ({
                           : 'text-slate-500 dark:text-slate-400'
                       }`}
                     >
-                      {g === 'ANO' ? 'Anual' : 'Semestral'}
+                      {g === 'MES' ? 'Mensal' : g === 'ANO' ? 'Anual' : 'Semestral'}
                     </button>
                   ))}
                 </div>
