@@ -822,8 +822,10 @@ export function useAppData(projectFilter: ProjectFilterState) {
   const handleMigrateLegacyPurchases = () =>
     migrateLegacyPurchasesToSupply(currentUser?.email ? formatUsername(currentUser.email) : '');
 
-  const handleAddClient = (client: Omit<ClientDoc, 'id'>) => addClient(client);
-  const handleUpdateClient = (client: ClientDoc) => updateClientInDb(client);
+  const handleAddClient = (client: Omit<ClientDoc, 'id'>) =>
+    addClient(client).catch((e) => alert('Erro ao cadastrar a obra: ' + (e?.message || e)));
+  const handleUpdateClient = (client: ClientDoc) =>
+    updateClientInDb(client).catch((e) => alert('Erro ao salvar a obra: ' + (e?.message || e)));
 
   const handleDeleteClient = async (id: string) => {
     const clientToDelete = clients.find((c) => c.id === id);

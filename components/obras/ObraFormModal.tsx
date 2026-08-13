@@ -156,7 +156,8 @@ export function ObraFormModal({
                   <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-2">
                     Estas bases aparecem para seleção ao instanciar referências na aba Projetos
                     Referências. Registre aqui para padronizar a grafia (evita duplicidade como "KM
-                    104" e "104+000").
+                    104" e "104+000"). Cole uma lista ou use "Gerar" para criar várias de uma vez, e
+                    arraste os cartões para colocá-los na ordem de prioridade da obra.
                   </p>
                   <BasesEditor bases={form.bases} onChange={(bases) => set({ bases })} />
                 </div>
