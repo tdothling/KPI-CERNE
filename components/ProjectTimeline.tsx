@@ -34,6 +34,7 @@ import {
   calculateBusinessDaysWithHolidays,
   calculateNetExecutionDuration,
   addBusinessDaysWithHolidays,
+  isProjectsSlaClosed,
 } from '../utils';
 
 interface ProjectTimelineProps {
@@ -747,8 +748,10 @@ export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({
           stats.relevantFiles > 0
             ? Math.round((stats.deliveredFiles / stats.relevantFiles) * 100)
             : 0;
-        const isOverdue = !!deadline && today > deadline && progress < 100;
-        const isFinished = stats.relevantFiles > 0 && progress >= 100;
+        const isOverdue =
+          !!deadline && !isProjectsSlaClosed(clientDoc) && today > deadline && progress < 100;
+        const isFinished =
+          (stats.relevantFiles > 0 && progress >= 100) || !!clientDoc?.projectsDeliveredAt;
 
         // Previsão de conclusão: ritmo de entregas nos últimos 45 dias corridos
         const WINDOW_DAYS = 45;

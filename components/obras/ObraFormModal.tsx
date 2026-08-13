@@ -1,5 +1,6 @@
 import React from 'react';
 import { HardHat, X, MapPin, User, ChevronDown, Save } from 'lucide-react';
+import { differenceInCalendarDays, isValid, parseISO } from 'date-fns';
 import { SiteType, ObraStatus } from '../../types';
 import { FormState, inputCls, Label, Section, today } from './shared';
 import { BasesEditor } from './BasesEditor';
@@ -22,6 +23,31 @@ export function ObraFormModal({
   const set = (patch: Partial<FormState>) => onChange((prev) => ({ ...prev, ...patch }));
   const needsDate =
     form.obraStatus === ObraStatus.COMPLETED || form.obraStatus === ObraStatus.CANCELLED;
+
+  // Prévia do veredito de SLA: comparação fixa entrega x prazo (não muda mais com o tempo).
+  const deliveryVerdict = (() => {
+    if (!form.projectsDeliveredAt || !isValid(parseISO(form.projectsDeliveredAt))) return null;
+    if (!form.projectDeadlineDate || !isValid(parseISO(form.projectDeadlineDate))) {
+      return {
+        late: false,
+        text: 'Entrega marcada. Cadastre a "Data Estipulada" acima para calcular se foi no prazo.',
+      };
+    }
+    const days = differenceInCalendarDays(
+      parseISO(form.projectsDeliveredAt),
+      parseISO(form.projectDeadlineDate),
+    );
+    if (days <= 0) {
+      return {
+        late: false,
+        text:
+          days === 0
+            ? 'Entregue no prazo (no próprio dia do vencimento).'
+            : `Entregue no prazo, ${Math.abs(days)} dia${Math.abs(days) !== 1 ? 's' : ''} antes do vencimento.`,
+      };
+    }
+    return { late: true, text: `Entregue com ${days} dia${days !== 1 ? 's' : ''} de atraso.` };
+  })();
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
@@ -200,6 +226,45 @@ export function ObraFormModal({
                 industrial. Entregas posteriores (revisão pós-certificadora) não usam esta data —
                 configure a meta de cada uma no próprio arquivo, na Carteira ou no Canteiro.
               </p>
+
+              <div className="bg-brand-50/60 dark:bg-brand-900/10 border border-brand-100 dark:border-brand-900/30 rounded-lg p-3">
+                <Label>Entrega dos Projetos (fecha o SLA)</Label>
+                <div className="flex flex-wrap items-center gap-3">
+                  <input
+                    type="date"
+                    value={form.projectsDeliveredAt}
+                    onChange={(e) => set({ projectsDeliveredAt: e.target.value })}
+                    max={today}
+                    className={inputCls + ' dark:[color-scheme:dark] w-auto'}
+                  />
+                  {form.projectsDeliveredAt && (
+                    <button
+                      type="button"
+                      onClick={() => set({ projectsDeliveredAt: '' })}
+                      className="text-xs font-medium text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                    >
+                      Remover marcação
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5">
+                  {deliveryVerdict ? (
+                    <span
+                      className={
+                        deliveryVerdict.late
+                          ? 'text-amber-700 dark:text-amber-400 font-medium'
+                          : 'text-emerald-700 dark:text-emerald-400 font-medium'
+                      }
+                    >
+                      {deliveryVerdict.text}
+                    </span>
+                  ) : (
+                    'Marque quando o pacote completo de projetos foi entregue ao cliente. A ' +
+                    'partir dessa data, Canteiro/Catálogo/Carteira param de contar atraso de ' +
+                    'SLA — o que roda depois é fluxo de revisão.'
+                  )}
+                </p>
+              </div>
 
               {(form.contractDate || form.deadlineDays !== undefined) && (
                 <div className="bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2">

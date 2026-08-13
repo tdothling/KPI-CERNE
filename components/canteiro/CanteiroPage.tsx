@@ -8,7 +8,6 @@ import {
   Period,
   RevisionReason,
   SiteType,
-  ObraStatus,
 } from '../../types';
 import { useObraAtiva, ObraSelectScreen, ObraAtivaBar, ObraCardStat } from '../ObraGate';
 import {
@@ -30,7 +29,7 @@ import {
   formatDateDisplay,
   resolveEntregavelDeadline,
   isEntregavelOverdue,
-  getEffectiveStatus,
+  isProjectsSlaClosed,
   getRevisionNumber,
 } from '../../utils';
 import { parseISO, isValid } from 'date-fns';
@@ -211,12 +210,16 @@ function CanteiroInner({
   const obraDoc = useMemo(() => clients.find((c) => c.name === obraAtiva), [clients, obraAtiva]);
 
   // Atraso pelo prazo de entrega dos projetos — mesma régua dos Indicadores e de Projetos
-  // Locais (obra pausada, concluída ou cancelada não gera atraso; revisão posterior sem
-  // meta própria não é medida)
+  // Locais (obra pausada, concluída, cancelada ou com entrega de projetos já marcada não
+  // gera atraso; revisão posterior sem meta própria não é medida)
   const isOverdue = (p: ProjectFile): boolean => {
-    if (!obraDoc || getEffectiveStatus(obraDoc) !== ObraStatus.ACTIVE) return false;
+    if (!obraDoc || isProjectsSlaClosed(obraDoc)) return false;
     const isFirstCycle = (p.revision ?? getRevisionNumber(p.filename)) === 0;
-    const deadline = resolveEntregavelDeadline(p.targetDate, isFirstCycle, obraDoc.projectDeadlineDate);
+    const deadline = resolveEntregavelDeadline(
+      p.targetDate,
+      isFirstCycle,
+      obraDoc.projectDeadlineDate,
+    );
     return isEntregavelOverdue(
       deadline,
       p.endDate,
@@ -634,15 +637,23 @@ function CanteiroInner({
       ))}
 
       {/* Aviso do prazo de entrega dos projetos, quando cadastrado */}
-      {obraDoc?.projectDeadlineDate && (
-        <p className="flex items-center gap-1.5 text-[11px] text-slate-400 dark:text-slate-500">
-          <AlertTriangle size={12} className="text-amber-500" />
-          Data Estipulada para Finalizar os Projetos:{' '}
-          {formatDateDisplay(obraDoc.projectDeadlineDate)} — a 1ª entrega de cada projeto além
-          dessa data é marcada como Atrasada. Revisões posteriores só contam se tiverem meta
-          própria configurada.
-        </p>
-      )}
+      {obraDoc?.projectDeadlineDate &&
+        (obraDoc.projectsDeliveredAt ? (
+          <p className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400">
+            <CheckCircle2 size={12} />
+            Projetos entregues em {formatDateDisplay(obraDoc.projectsDeliveredAt)} — o prazo
+            contratual está resolvido. O que roda a partir daqui é fluxo de revisão e não conta mais
+            como atraso de SLA.
+          </p>
+        ) : (
+          <p className="flex items-center gap-1.5 text-[11px] text-slate-400 dark:text-slate-500">
+            <AlertTriangle size={12} className="text-amber-500" />
+            Data Estipulada para Finalizar os Projetos:{' '}
+            {formatDateDisplay(obraDoc.projectDeadlineDate)} — a 1ª entrega de cada projeto além
+            dessa data é marcada como Atrasada. Revisões posteriores só contam se tiverem meta
+            própria configurada. Marque a entrega dos projetos na aba Obras para fechar o SLA.
+          </p>
+        ))}
 
       {/* --- Modais --- */}
       {dateAction && <DateActionModal request={dateAction} onClose={() => setDateAction(null)} />}

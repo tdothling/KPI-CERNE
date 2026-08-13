@@ -22,7 +22,7 @@ import {
   CheckSquare,
   Square,
 } from 'lucide-react';
-import { ClientDoc, Discipline, ObraStatus, Period, RevisionReason } from '../../types';
+import { ClientDoc, Discipline, Period, RevisionReason } from '../../types';
 import {
   Referencia,
   Conjunto,
@@ -47,7 +47,7 @@ import {
   resolveEntregavelDeadline,
   isEntregavelOverdue,
   formatDateDisplay,
-  getEffectiveStatus,
+  isProjectsSlaClosed,
 } from '../../utils';
 import { useObraAtiva, ObraSelectScreen, ObraAtivaBar, ObraCardStat } from '../ObraGate';
 import { AddPranchaModal } from './AddPranchaModal';
@@ -168,11 +168,16 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
   }, [pranchas]);
 
   // Atraso pelo prazo de entrega dos projetos (mesma régua dos Indicadores: obra pausada,
-  // concluída ou cancelada não gera atraso; revisão posterior sem meta própria não é medida)
+  // concluída, cancelada ou com entrega de projetos já marcada não gera atraso; revisão
+  // posterior sem meta própria não é medida)
   const isPranchaOverdue = (p: Prancha, conjunto: Conjunto): boolean => {
     const obra = clientsMap[conjunto.client];
-    if (!obra || getEffectiveStatus(obra) !== ObraStatus.ACTIVE) return false;
-    const deadline = resolveEntregavelDeadline(p.targetDate, p.revisao === 0, obra.projectDeadlineDate);
+    if (!obra || isProjectsSlaClosed(obra)) return false;
+    const deadline = resolveEntregavelDeadline(
+      p.targetDate,
+      p.revisao === 0,
+      obra.projectDeadlineDate,
+    );
     return isEntregavelOverdue(
       deadline,
       p.endDate,

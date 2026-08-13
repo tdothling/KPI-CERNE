@@ -99,13 +99,15 @@ export const ObrasPage: React.FC<ObrasPageProps> = ({
   const [formData, setFormData] = useState<FormState>(defaultForm);
   const [completingId, setCompletingId] = useState<string | null>(null);
   const [completingDate, setCompletingDate] = useState(today);
+  const [deliveringId, setDeliveringId] = useState<string | null>(null);
+  const [deliveringDate, setDeliveringDate] = useState(today);
 
   // ── stats ──────────────────────────────────────────────────────────────────
   const stats = useMemo(() => {
     const active = clients.filter((c) => getEffectiveStatus(c) === ObraStatus.ACTIVE);
     const atRisk = active.filter((c) => {
       const sla = getSlaInfo(c);
-      return sla && (sla.isOverdue || sla.isAtRisk);
+      return sla && sla.resolved === false && (sla.isOverdue || sla.isAtRisk);
     });
     return {
       total: clients.length,
@@ -125,7 +127,7 @@ export const ObrasPage: React.FC<ObrasPageProps> = ({
         if (filterTab === 'AT_RISK') {
           if (getEffectiveStatus(c) !== ObraStatus.ACTIVE) return false;
           const sla = getSlaInfo(c);
-          if (!sla || !(sla.isOverdue || sla.isAtRisk)) return false;
+          if (!sla || sla.resolved === true || !(sla.isOverdue || sla.isAtRisk)) return false;
         } else if (filterTab !== 'ALL' && getEffectiveStatus(c) !== filterTab) {
           return false;
         }
@@ -194,6 +196,7 @@ export const ObrasPage: React.FC<ObrasPageProps> = ({
       obraStartDate: formData.obraStartDate || undefined,
       expectedCompletionDate: formData.obraEndDate || undefined,
       projectDeadlineDate: formData.projectDeadlineDate || undefined,
+      projectsDeliveredAt: formData.projectsDeliveredAt || undefined,
       // contractDate/deadlineDays (SLA antigo) propositalmente FORA do payload: são
       // somente-leitura no formulário, então não devem ser reescritos ao salvar — o
       // valor que já está em Firestore (se houver) é preservado pelo merge do updateDoc.
@@ -229,6 +232,22 @@ export const ObrasPage: React.FC<ObrasPageProps> = ({
     if (!confirm(`Reativar a obra "${client.name}"?\n\nOs alertas de SLA voltarão a ser exibidos.`))
       return;
     onUpdateClient({ ...client, obraStatus: ObraStatus.ACTIVE, completedAt: '' });
+  };
+
+  // ── entrega dos projetos (fecha o SLA) ────────────────────────────────────
+  const startDelivering = (client: ClientDoc) => {
+    setDeliveringId(client.id);
+    setDeliveringDate(client.projectsDeliveredAt || today);
+  };
+  const cancelDelivering = () => setDeliveringId(null);
+  const confirmDelivering = (client: ClientDoc) => {
+    onUpdateClient({ ...client, projectsDeliveredAt: deliveringDate || today });
+    setDeliveringId(null);
+  };
+  const clearDelivering = (client: ClientDoc) => {
+    if (!confirm(`Remover a marcação de entrega dos projetos de "${client.name}"?`)) return;
+    onUpdateClient({ ...client, projectsDeliveredAt: '' });
+    setDeliveringId(null);
   };
 
   // ── render ─────────────────────────────────────────────────────────────────
@@ -325,6 +344,13 @@ export const ObrasPage: React.FC<ObrasPageProps> = ({
               onConfirmComplete={() => confirmComplete(client)}
               onCancelComplete={cancelCompleting}
               onReactivate={() => reactivate(client)}
+              isDelivering={deliveringId === client.id}
+              deliveringDate={deliveringDate}
+              onDeliveringDateChange={setDeliveringDate}
+              onStartDelivering={() => startDelivering(client)}
+              onConfirmDelivering={() => confirmDelivering(client)}
+              onCancelDelivering={cancelDelivering}
+              onClearDelivering={() => clearDelivering(client)}
               onEdit={() => openEdit(client)}
               onDelete={() => onDeleteClient(client.id)}
             />

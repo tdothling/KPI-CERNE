@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   Clock,
   FileText,
+  PackageCheck,
 } from 'lucide-react';
 import { ClientDoc, SiteType, ObraStatus } from '../../types';
 import { format, parseISO } from 'date-fns';
@@ -92,6 +93,13 @@ interface ObraCardProps {
   onConfirmComplete: () => void;
   onCancelComplete: () => void;
   onReactivate: () => void;
+  isDelivering: boolean;
+  deliveringDate: string;
+  onDeliveringDateChange: (d: string) => void;
+  onStartDelivering: () => void;
+  onConfirmDelivering: () => void;
+  onCancelDelivering: () => void;
+  onClearDelivering: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }
@@ -106,6 +114,13 @@ export function ObraCard({
   onConfirmComplete,
   onCancelComplete,
   onReactivate,
+  isDelivering,
+  deliveringDate,
+  onDeliveringDateChange,
+  onStartDelivering,
+  onConfirmDelivering,
+  onCancelDelivering,
+  onClearDelivering,
   onEdit,
   onDelete,
 }: ObraCardProps) {
@@ -116,13 +131,18 @@ export function ObraCard({
   const schedule = getScheduleInfo(client);
   const isActive = status === ObraStatus.ACTIVE;
   const isDone = status === ObraStatus.COMPLETED || status === ObraStatus.CANCELLED;
+  const slaResolved = sla?.resolved === true;
 
   const tone: Tone = isActive
-    ? sla?.isOverdue
-      ? 'rose'
-      : sla?.isAtRisk
+    ? slaResolved
+      ? sla && sla.resolved === true && sla.isLate
         ? 'amber'
-        : 'blue'
+        : 'emerald'
+      : sla && sla.resolved === false && sla.isOverdue
+        ? 'rose'
+        : sla && sla.resolved === false && sla.isAtRisk
+          ? 'amber'
+          : 'blue'
     : status === ObraStatus.PAUSED
       ? 'amber'
       : status === ObraStatus.COMPLETED
@@ -135,8 +155,15 @@ export function ObraCard({
       ? `${type.label} · ${baseCount} base${baseCount !== 1 ? 's' : ''}`
       : type.label;
 
-  // Preenchimento da régua: obra concluída fecha em 100%, o resto acompanha "hoje".
-  const fillPct = status === ObraStatus.COMPLETED ? 100 : (schedule?.todayPct ?? 0);
+  // Preenchimento da régua: obra concluída fecha em 100%; SLA resolvido fecha na marca de
+  // entrega; o resto (SLA ainda aberto) acompanha "hoje".
+  const deliveredMarkPct = schedule?.marks.find((m) => m.key === 'delivered')?.pct;
+  const fillPct =
+    status === ObraStatus.COMPLETED
+      ? 100
+      : slaResolved
+        ? (deliveredMarkPct ?? 100)
+        : (schedule?.todayPct ?? 0);
 
   return (
     <article
@@ -166,12 +193,24 @@ export function ObraCard({
                 >
                   {badge.label}
                 </span>
-                {isActive && sla?.isOverdue && (
+                {isActive && sla?.resolved && (
+                  <span
+                    className={`flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap ${
+                      sla.isLate
+                        ? 'text-amber-700 bg-amber-100 border-amber-300 dark:bg-amber-900/40 dark:border-amber-700 dark:text-amber-400'
+                        : 'text-emerald-700 bg-emerald-100 border-emerald-300 dark:bg-emerald-900/40 dark:border-emerald-700 dark:text-emerald-400'
+                    }`}
+                  >
+                    <PackageCheck size={10} />
+                    Projetos entregues{sla.isLate ? ` (${sla.daysLate}d atraso)` : ''}
+                  </span>
+                )}
+                {isActive && sla && sla.resolved === false && sla.isOverdue && (
                   <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap text-rose-700 bg-rose-100 border-rose-300 dark:bg-rose-900/40 dark:border-rose-700 dark:text-rose-400">
                     <AlertTriangle size={10} /> Atraso {Math.abs(sla.remaining)}d
                   </span>
                 )}
-                {isActive && sla?.isAtRisk && (
+                {isActive && sla && sla.resolved === false && sla.isAtRisk && (
                   <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap text-amber-700 bg-amber-100 border-amber-300 dark:bg-amber-900/40 dark:border-amber-700 dark:text-amber-400">
                     <Clock size={10} /> Em risco
                   </span>
@@ -185,6 +224,15 @@ export function ObraCard({
           </div>
 
           <div className="flex items-center gap-0.5 flex-shrink-0">
+            {!isDone && !isDelivering && (
+              <IconAction
+                onClick={onStartDelivering}
+                label={slaResolved ? 'Editar entrega dos projetos' : 'Marcar entrega dos projetos'}
+                className="hover:bg-brand-50 dark:hover:bg-brand-900/20 hover:text-brand-600 dark:hover:text-brand-400"
+              >
+                <PackageCheck size={16} />
+              </IconAction>
+            )}
             {isActive && !isCompleting && (
               <IconAction
                 onClick={onStartComplete}
@@ -236,14 +284,25 @@ export function ObraCard({
             >
               {client.completedAt ? format(parseISO(client.completedAt), 'dd/MM/yyyy') : DASH}
             </Field>
+          ) : sla?.resolved ? (
+            <Field
+              label="Entrega dos projetos"
+              className={
+                sla.isLate
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-emerald-600 dark:text-emerald-400'
+              }
+            >
+              {format(sla.deliveredAt, 'dd/MM/yyyy')}
+            </Field>
           ) : (
             <Field
               label="Prazo dos projetos"
               muted={!client.projectDeadlineDate}
               className={
-                sla?.isOverdue
+                sla && sla.resolved === false && sla.isOverdue
                   ? 'text-rose-600 dark:text-rose-400'
-                  : sla?.isAtRisk
+                  : sla && sla.resolved === false && sla.isAtRisk
                     ? 'text-amber-600 dark:text-amber-400'
                     : undefined
               }
@@ -262,7 +321,23 @@ export function ObraCard({
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                 Cronograma
               </span>
-              {isActive && sla && (
+              {isActive && sla?.resolved && (
+                <span
+                  className={`text-[11px] font-semibold ${
+                    sla.isLate
+                      ? 'text-amber-600 dark:text-amber-400'
+                      : 'text-emerald-600 dark:text-emerald-400'
+                  }`}
+                >
+                  Entregue em {format(sla.deliveredAt, 'dd/MM/yyyy')}
+                  {sla.end
+                    ? sla.isLate
+                      ? ` — atraso de ${sla.daysLate} dias`
+                      : ' — no prazo'
+                    : ''}
+                </span>
+              )}
+              {isActive && sla && sla.resolved === false && (
                 <span
                   className={`text-[11px] font-semibold ${
                     sla.isOverdue
@@ -292,11 +367,13 @@ export function ObraCard({
                   className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-2 h-2 rounded-full ring-2 ring-white dark:ring-slate-800 ${
                     m.key === 'deadline'
                       ? 'bg-brand-600 dark:bg-brand-400'
-                      : 'bg-slate-300 dark:bg-slate-500'
+                      : m.key === 'delivered'
+                        ? 'bg-emerald-500 dark:bg-emerald-400'
+                        : 'bg-slate-300 dark:bg-slate-500'
                   }`}
                 />
               ))}
-              {isActive && schedule.hasStarted && !schedule.hasEnded && (
+              {isActive && !slaResolved && schedule.hasStarted && !schedule.hasEnded && (
                 <span
                   title="Hoje"
                   style={{ left: `${schedule.todayPct}%` }}
@@ -384,6 +461,42 @@ export function ObraCard({
           >
             Cancelar
           </button>
+        </div>
+      )}
+
+      {/* Faixa de marcação de entrega dos projetos */}
+      {isDelivering && (
+        <div className="pl-5 pr-4 py-3 bg-brand-50/60 dark:bg-brand-900/10 border-t border-brand-100 dark:border-brand-900/30 flex flex-wrap items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-150">
+          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+            Data de entrega dos projetos:
+          </span>
+          <input
+            type="date"
+            value={deliveringDate}
+            onChange={(e) => onDeliveringDateChange(e.target.value)}
+            max={today}
+            className="border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-brand-500 dark:[color-scheme:dark]"
+          />
+          <button
+            onClick={onConfirmDelivering}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-700 hover:bg-brand-800 text-white text-xs font-bold rounded-lg transition-colors"
+          >
+            <PackageCheck size={13} /> Confirmar
+          </button>
+          <button
+            onClick={onCancelDelivering}
+            className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+          >
+            Cancelar
+          </button>
+          {slaResolved && (
+            <button
+              onClick={onClearDelivering}
+              className="px-3 py-1.5 text-xs font-medium text-rose-500 hover:text-rose-700 dark:hover:text-rose-400 transition-colors ml-auto"
+            >
+              Remover marcação
+            </button>
+          )}
         </div>
       )}
     </article>

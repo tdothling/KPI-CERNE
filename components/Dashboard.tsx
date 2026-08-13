@@ -17,7 +17,7 @@ import {
   ComposedChart,
   LabelList,
 } from 'recharts';
-import { ProjectFile, Discipline, Status, ProjectPhase, ClientDoc, ObraStatus } from '../types';
+import { ProjectFile, Discipline, Status, ProjectPhase, ClientDoc } from '../types';
 import {
   format,
   parseISO,
@@ -47,7 +47,7 @@ import {
   calculateBusinessDaysWithHolidays,
   calculateNetExecutionDuration,
   resolveEntregavelDeadline,
-  getEffectiveStatus,
+  isProjectsSlaClosed,
 } from '../utils';
 import { useDashboardFilters } from '../hooks/useDashboardFilters';
 import { DashboardFilters } from './DashboardFilters';
@@ -262,13 +262,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           clientData?.projectDeadlineDate,
         );
         if (deadline) {
-          const effectiveObraStatus = clientData
-            ? getEffectiveStatus(clientData)
-            : ObraStatus.ACTIVE;
-          const obraCompleted =
-            effectiveObraStatus === ObraStatus.COMPLETED ||
-            effectiveObraStatus === ObraStatus.CANCELLED ||
-            effectiveObraStatus === ObraStatus.PAUSED;
+          const slaClosed = isProjectsSlaClosed(clientData);
           const isDone = project.status === Status.DONE || project.status === Status.APPROVED;
 
           if (isDone && project.feedbackDate && isValid(parseISO(project.feedbackDate))) {
@@ -280,7 +274,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             if (!otdMonthly[mKey]) otdMonthly[mKey] = { measured: 0, onTime: 0 };
             otdMonthly[mKey].measured++;
             if (onTime) otdMonthly[mKey].onTime++;
-          } else if (!obraCompleted && project.status === Status.IN_PROGRESS) {
+          } else if (!slaClosed && project.status === Status.IN_PROGRESS) {
             // REVISED (superado) e WAITING_APPROVAL (na mão do cliente) não penalizam
             if (isAfter(today, deadline)) {
               totalSlaMeasured++;

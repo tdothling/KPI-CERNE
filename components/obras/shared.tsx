@@ -6,8 +6,45 @@ import { getEffectiveStatus } from '../../utils';
 export const today = new Date().toISOString().split('T')[0];
 
 // --- SLA (prazo de entrega dos projetos) ---
+//
+// Duas formas de resultado:
+//   - "em aberto" (resolved: false): SLA vivo, cresce contra o dia de hoje — é o que existia
+//     antes. isOverdue/isAtRisk/progress fazem sentido aqui.
+//   - "resolvido" (resolved: true): a entrega dos projetos foi marcada (projectsDeliveredAt).
+//     O veredito fica fixo na data da entrega — não cresce mais contra "hoje". isOverdue/
+//     isAtRisk somem (o prazo contratual foi cumprido ou não NAQUELE dia, ponto final); o que
+//     roda depois é revisão.
 
-export function getSlaInfo(client: ClientDoc) {
+export interface SlaOpen {
+  resolved: false;
+  end: Date;
+  remaining: number;
+  progress: number | null;
+  isOverdue: boolean;
+  isAtRisk: boolean;
+}
+
+export interface SlaResolved {
+  resolved: true;
+  end: Date | null; // prazo contratual, se cadastrado (pode faltar em obras antigas)
+  deliveredAt: Date;
+  isLate: boolean; // só é significativo quando `end` existe
+  daysLate: number; // >0 = dias de atraso na entrega; <=0 = entregue no prazo (0 = no dia)
+}
+
+export type SlaInfo = SlaOpen | SlaResolved;
+
+export function getSlaInfo(client: ClientDoc): SlaInfo | null {
+  if (client.projectsDeliveredAt && isValid(parseISO(client.projectsDeliveredAt))) {
+    const deliveredAt = parseISO(client.projectsDeliveredAt);
+    const end =
+      client.projectDeadlineDate && isValid(parseISO(client.projectDeadlineDate))
+        ? parseISO(client.projectDeadlineDate)
+        : null;
+    const daysLate = end ? differenceInDays(deliveredAt, end) : 0;
+    return { resolved: true, end, deliveredAt, isLate: daysLate > 0, daysLate };
+  }
+
   if (!client.projectDeadlineDate || !isValid(parseISO(client.projectDeadlineDate))) return null;
   try {
     const end = parseISO(client.projectDeadlineDate);
@@ -28,7 +65,14 @@ export function getSlaInfo(client: ClientDoc) {
         ? Math.min(100, Math.max(0, (differenceInDays(now, start) / totalSpan) * 100))
         : null;
 
-    return { end, remaining, progress, isOverdue, isAtRisk: !isOverdue && remaining <= 7 };
+    return {
+      resolved: false,
+      end,
+      remaining,
+      progress,
+      isOverdue,
+      isAtRisk: !isOverdue && remaining <= 7,
+    };
   } catch {
     return null;
   }
@@ -42,7 +86,7 @@ export function getSlaInfo(client: ClientDoc) {
 // marcos não há linha do tempo para desenhar e a função devolve null.
 
 export interface ScheduleMark {
-  key: 'start' | 'deadline' | 'end';
+  key: 'start' | 'deadline' | 'delivered' | 'end';
   label: string;
   date: Date;
   pct: number; // 0-100 na escala da régua
@@ -60,6 +104,7 @@ export function getScheduleInfo(client: ClientDoc): ScheduleInfo | null {
   const candidates: { key: ScheduleMark['key']; label: string; date: Date | null }[] = [
     { key: 'start', label: 'Início da obra', date: parse(client.obraStartDate) },
     { key: 'deadline', label: 'Prazo dos projetos', date: parse(client.projectDeadlineDate) },
+    { key: 'delivered', label: 'Entrega dos projetos', date: parse(client.projectsDeliveredAt) },
     { key: 'end', label: 'Fim da obra', date: parse(client.expectedCompletionDate) },
   ];
 
@@ -97,6 +142,7 @@ export interface FormState {
   obraStartDate: string;
   obraEndDate: string; // mapeia para ClientDoc.expectedCompletionDate (mesma propriedade, rótulo novo)
   projectDeadlineDate: string;
+  projectsDeliveredAt: string; // data em que o pacote de projetos foi entregue — fecha o SLA
   // SLA antigo (legado) — somente leitura no formulário; nenhum input escreve nestes campos,
   // então eles nunca entram no payload de salvar e o valor em Firestore é preservado.
   contractDate: string;
@@ -116,6 +162,7 @@ export const defaultForm: FormState = {
   obraStartDate: '',
   obraEndDate: '',
   projectDeadlineDate: '',
+  projectsDeliveredAt: '',
   contractDate: '',
   deadlineDays: undefined,
   obraStatus: ObraStatus.ACTIVE,
@@ -134,6 +181,7 @@ export function clientToForm(c: ClientDoc): FormState {
     obraStartDate: c.obraStartDate || '',
     obraEndDate: c.expectedCompletionDate || '',
     projectDeadlineDate: c.projectDeadlineDate || '',
+    projectsDeliveredAt: c.projectsDeliveredAt || '',
     contractDate: c.contractDate || '',
     deadlineDays: c.deadlineDays,
     obraStatus: getEffectiveStatus(c),

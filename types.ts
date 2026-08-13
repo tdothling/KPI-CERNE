@@ -251,6 +251,15 @@ export interface ClientDoc {
   expectedCompletionDate?: string; // Fim da Obra (rótulo na UI; propriedade mantida p/ não migrar dado)
   projectDeadlineDate?: string; // Data Estipulada para Finalizar os Projetos — dirige o SLA/OTD
 
+  // Data em que o PACOTE DE PROJETOS foi efetivamente entregue (cumprimento do prazo
+  // contratual) — independe do status físico da obra (Canteiro pode seguir ACTIVE com os
+  // projetos já entregues). Quando preenchida, o SLA fica "resolvido": deixa de crescer
+  // contra o dia de hoje e vira um veredito fixo (no prazo/atrasado em N dias) na data
+  // marcada; entregáveis (Canteiro, Catálogo, Carteira) ainda em aberto DEPOIS dela deixam
+  // de contar como atraso de SLA — o que roda depois é fluxo de revisão, não descumprimento
+  // de prazo. Ver utils.ts `isProjectsSlaClosed`.
+  projectsDeliveredAt?: string;
+
   // SLA antigo (legado) — mantido só para exibição somente-leitura; não editável, não usado em cálculo.
   // Media o prazo da OBRA INTEIRA (contrato + N dias corridos), por isso o OTD nunca refletia atraso real.
   contractDate?: string;

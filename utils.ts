@@ -17,6 +17,23 @@ export const getEffectiveStatus = (client: ClientDoc): ObraStatus => {
   return ObraStatus.ACTIVE;
 };
 
+// SLA dos projetos "resolvido" — entregáveis (Canteiro, Catálogo, Carteira) ainda em
+// aberto deixam de contar como atraso de OTD. Isso acontece quando a obra inteira foi
+// concluída/cancelada/pausada (como já era) OU quando a entrega do pacote de projetos foi
+// marcada manualmente (projectsDeliveredAt): o prazo contratual foi cumprido naquela data,
+// e qualquer coisa que rode depois é revisão, não descumprimento de prazo. Único ponto de
+// verdade — usado por Indicadores, Canteiro, Carteira e Cronograma para nunca divergir.
+export const isProjectsSlaClosed = (client: ClientDoc | undefined | null): boolean => {
+  if (!client) return false;
+  if (client.projectsDeliveredAt) return true;
+  const status = getEffectiveStatus(client);
+  return (
+    status === ObraStatus.COMPLETED ||
+    status === ObraStatus.CANCELLED ||
+    status === ObraStatus.PAUSED
+  );
+};
+
 export const getProjectBaseName = (filename: string): string => {
   const nameWithoutExt = filename.replace(/\.[^/.]+$/, '');
   const match = nameWithoutExt.match(/^(.*?)\s\[R\d+\]$/);
