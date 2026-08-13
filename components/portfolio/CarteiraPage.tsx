@@ -16,6 +16,7 @@ import {
   Trash2,
   X,
   RotateCcw,
+  Undo2,
   Database,
   Timer,
   Plus,
@@ -31,6 +32,7 @@ import {
   canPranchaTransition,
   planMoverPranchasLote,
   planRevisarPranchasLote,
+  planDesfazerRevisaoLote,
   carteiraKpis,
   conjuntosKpis,
   rollupConjunto,
@@ -92,6 +94,10 @@ interface CarteiraPageProps {
     reason: RevisionReason,
     comment: string,
   ) => Promise<{ revisadas: number; puladas: number; erros: string[] }>;
+  onDesfazerRevisaoPrancha: (p: Prancha) => void;
+  onDesfazerRevisaoPranchasLote: (
+    pranchas: Prancha[],
+  ) => Promise<{ desfeitas: number; puladas: number; ambiguas: string[]; erros: string[] }>;
   onUpdatePrancha: (id: string, changes: Partial<Prancha>) => void;
   onAddPrancha: (p: Omit<Prancha, 'id'>) => void;
   onDeletePrancha: (p: Prancha) => void;
@@ -114,6 +120,8 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
   onMovePranchasLote,
   onAbrirRevisaoPrancha,
   onAbrirRevisaoPranchasLote,
+  onDesfazerRevisaoPrancha,
+  onDesfazerRevisaoPranchasLote,
   onUpdatePrancha,
   onAddPrancha,
   onDeletePrancha,
@@ -308,6 +316,7 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
     list.filter((p) => canPranchaTransition(p.status, to)).length;
 
   const countRevisaveis = (list: Prancha[]) => planRevisarPranchasLote(list).revisaveis.length;
+  const countDesfaziveis = (list: Prancha[]) => planDesfazerRevisaoLote(list).desfaziveis.length;
 
   const askMovePrancha = (p: Prancha, to: PranchaStatus) => {
     const isRevisao = to === PranchaStatus.EM_ANDAMENTO && p.status === PranchaStatus.REPROVADO;
@@ -486,6 +495,51 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
         if (r.erros.length > 0) alert(`Falha ao revisar as pranchas:\n${r.erros.join('\n')}`);
         aoConcluir?.();
       },
+    });
+  };
+
+  // Corrige uma revisão aberta por engano: desfaz só a última de cada
+  // prancha, restaurando status/datas do snapshot fotografado antes dela.
+  // Sem data/período a escolher — é uma correção, não uma ação de fluxo —
+  // por isso usa confirm() simples em vez do DateActionModal.
+  const askDesfazerRevisaoPrancha = (p: Prancha) => {
+    if (
+      !confirm(
+        `Desfazer a última revisão de "${p.codigoCompleto || p.papel}"? ` +
+          'Os dados voltam ao que estava salvo antes dela (status, datas). Essa ação não pode ser desfeita de volta.',
+      )
+    )
+      return;
+    onDesfazerRevisaoPrancha(p);
+  };
+
+  const askDesfazerRevisaoLote = (alvo: Prancha[], aoConcluir?: () => void) => {
+    const plan = planDesfazerRevisaoLote(alvo);
+    if (plan.desfaziveis.length === 0) {
+      alert('Nenhuma das pranchas selecionadas tem revisão no histórico para desfazer.');
+      return;
+    }
+    if (
+      !confirm(
+        `Desfazer a última revisão de ${plan.desfaziveis.length} prancha(s)? ` +
+          'Cada uma volta ao status/datas de antes da revisão mais recente dela. ' +
+          (plan.puladas.length > 0
+            ? `${plan.puladas.length} será(ão) pulada(s) por não ter revisão no histórico. `
+            : '') +
+          'Essa ação não pode ser desfeita de volta.',
+      )
+    )
+      return;
+    onDesfazerRevisaoPranchasLote(plan.desfaziveis).then((r) => {
+      if (r.erros.length > 0) alert(`Falha ao desfazer as revisões:\n${r.erros.join('\n')}`);
+      if (r.ambiguas.length > 0) {
+        alert(
+          `${r.ambiguas.length} prancha(s) voltaram com status "Enviado" mas o ciclo desfeito ` +
+            'já tinha envio E feedback do cliente — não dá para saber pelo histórico se era ' +
+            `Aprovado ou Reprovado. Confira manualmente:\n${r.ambiguas.join('\n')}`,
+        );
+      }
+      aoConcluir?.();
     });
   };
 
@@ -1146,6 +1200,15 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
                                               <RotateCcw size={13} />
                                             </PranchaBtn>
                                           )}
+                                        {(p.revisions?.length ?? 0) > 0 && (
+                                          <PranchaBtn
+                                            title="Desfazer última revisão — restaura status/datas de antes dela"
+                                            tone="text-slate-500"
+                                            onClick={() => askDesfazerRevisaoPrancha(p)}
+                                          >
+                                            <Undo2 size={13} />
+                                          </PranchaBtn>
+                                        )}
                                         <PranchaBtn
                                           title="Editar papel/código"
                                           onClick={() => setEditingPrancha(p)}
@@ -1240,6 +1303,14 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
             tone="text-amber-600 dark:text-amber-400"
             onClick={() =>
               askRevisaoLote(selPranchas, () => setSelecionadas(new Set()))
+            }
+          />
+          <LoteBtn
+            label="Desfazer Revisão"
+            count={countDesfaziveis(selPranchas)}
+            tone="text-slate-500 dark:text-slate-400"
+            onClick={() =>
+              askDesfazerRevisaoLote(selPranchas, () => setSelecionadas(new Set()))
             }
           />
           <span className="w-px h-4 bg-slate-200 dark:bg-slate-700"></span>

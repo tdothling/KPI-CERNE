@@ -138,6 +138,8 @@ export default function App() {
     handleMovePranchasLote,
     handleAbrirRevisaoPrancha,
     handleAbrirRevisaoPranchasLote,
+    handleDesfazerRevisaoPrancha,
+    handleDesfazerRevisaoPranchasLote,
     handleUpdatePrancha,
     handleAddPrancha,
     handleDeletePrancha,
@@ -1003,6 +1005,8 @@ export default function App() {
                   onMovePranchasLote={handleMovePranchasLote}
                   onAbrirRevisaoPrancha={handleAbrirRevisaoPrancha}
                   onAbrirRevisaoPranchasLote={handleAbrirRevisaoPranchasLote}
+                  onDesfazerRevisaoPrancha={handleDesfazerRevisaoPrancha}
+                  onDesfazerRevisaoPranchasLote={handleDesfazerRevisaoPranchasLote}
                   onUpdatePrancha={handleUpdatePrancha}
                   onAddPrancha={handleAddPrancha}
                   onDeletePrancha={handleDeletePrancha}

@@ -68,6 +68,8 @@ import {
   planInstanciacaoLote,
   planMoverPranchasLote,
   planRevisarPranchasLote,
+  planDesfazerRevisaoLote,
+  buildDesfazerRevisaoChanges,
   planMoverReferenciasLote,
   slugify,
   refStatusAposInstanciar,
@@ -758,6 +760,57 @@ export function useAppData(projectFilter: ProjectFilterState) {
     }
   };
 
+  // Corrige uma revisão aberta por engano: desfaz APENAS a mais recente de
+  // cada prancha, restaurando os campos do snapshot fotografado antes dela
+  // (ver buildDesfazerRevisaoChanges). `ambiguas` sinaliza pranchas cujo
+  // status restaurado pode não ser o real (empate Aprovado/Reprovado que o
+  // snapshot não guarda) — quem chama deve revisar essas manualmente.
+  const handleDesfazerRevisaoPrancha = (prancha: Prancha) => {
+    const undo = buildDesfazerRevisaoChanges(prancha);
+    if (!undo) {
+      alert('Esta prancha não tem revisão no histórico para desfazer.');
+      return;
+    }
+    patchPranchaInDb(prancha.id, undo.changes)
+      .then(() => {
+        if (undo.ambiguo) {
+          alert(
+            `"${prancha.codigoCompleto || prancha.papel}": status restaurado como "Enviado" — ` +
+              'o ciclo desfeito já tinha envio e feedback do cliente, e não dá para saber pelo ' +
+              'histórico se era Aprovado ou Reprovado. Confira e ajuste manualmente se preciso.',
+          );
+        }
+      })
+      .catch((e) => alert('Erro ao desfazer revisão: ' + (e?.message || e)));
+  };
+
+  const handleDesfazerRevisaoPranchasLote = async (
+    alvo: Prancha[],
+  ): Promise<{ desfeitas: number; puladas: number; ambiguas: string[]; erros: string[] }> => {
+    const plan = planDesfazerRevisaoLote(alvo);
+    if (plan.desfaziveis.length === 0)
+      return { desfeitas: 0, puladas: plan.puladas.length, ambiguas: [], erros: [] };
+    const patches: { id: string; changes: Record<string, any> }[] = [];
+    const ambiguas: string[] = [];
+    plan.desfaziveis.forEach((p) => {
+      const undo = buildDesfazerRevisaoChanges(p);
+      if (!undo) return;
+      patches.push({ id: p.id, changes: undo.changes });
+      if (undo.ambiguo) ambiguas.push(p.codigoCompleto || p.papel);
+    });
+    try {
+      await batchUpdatePranchasInDb(patches);
+      return { desfeitas: patches.length, puladas: plan.puladas.length, ambiguas, erros: [] };
+    } catch (e: any) {
+      return {
+        desfeitas: 0,
+        puladas: plan.puladas.length,
+        ambiguas: [],
+        erros: [e?.message || String(e)],
+      };
+    }
+  };
+
   const handleUpdatePrancha = (id: string, changes: Partial<Prancha>) => {
     const patch: Record<string, any> = { ...changes };
     if (['sendDate', 'sendPeriod', 'feedbackDate', 'feedbackPeriod'].some((k) => k in changes)) {
@@ -1100,6 +1153,8 @@ export function useAppData(projectFilter: ProjectFilterState) {
     handleMovePranchasLote,
     handleAbrirRevisaoPrancha,
     handleAbrirRevisaoPranchasLote,
+    handleDesfazerRevisaoPrancha,
+    handleDesfazerRevisaoPranchasLote,
     handleUpdatePrancha,
     handleAddPrancha,
     handleDeletePrancha,

@@ -613,6 +613,73 @@ export const planRevisarPranchasLote = (pranchas: Prancha[]): RevisarPranchasLot
   return plan;
 };
 
+// --- DESFAZER REVISÃO (caminho inverso do "Nova revisão") ---
+//
+// Corrige uma abertura de revisão feita por engano: remove a última entrada
+// de revisions[] e devolve os campos ao que estava no snapshot fotografado
+// antes dela (mesma mecânica de refStatusAposDesinstanciar). Só serve para
+// desfazer a revisão MAIS RECENTE — uma cadeia de várias exige repetir a ação.
+//
+// Ambiguidade conhecida: se o snapshot tem sendDate E feedbackDate, não dá
+// para saber se o veredito daquele ciclo era Aprovado ou Reprovado (o status
+// em si nunca foi salvo no snapshot, só as datas) — cai em Enviado e exige
+// confirmação manual de quem está desfazendo.
+export interface RevisionUndo {
+  revisions: Revision[];
+  changes: Record<string, any>;
+  ambiguo: boolean; // sendDate + feedbackDate no snapshot — status pode não ser o real
+}
+
+export const buildDesfazerRevisaoChanges = (prancha: Prancha): RevisionUndo | null => {
+  const revisions = prancha.revisions || [];
+  if (revisions.length === 0) return null;
+  const last = revisions[revisions.length - 1];
+  const remaining = revisions.slice(0, -1);
+  const s = last.snapshot;
+  if (!s) {
+    // Entrada antiga sem snapshot (ou revisão herdada da aba Projetos) — só dá
+    // para tirar do histórico, os dados do ciclo anterior não foram guardados.
+    return { revisions: remaining, changes: { revisions: remaining }, ambiguo: false };
+  }
+  const dates = {
+    startDate: s.startDate,
+    endDate: s.endDate,
+    sendDate: s.sendDate,
+    feedbackDate: s.feedbackDate,
+  };
+  return {
+    revisions: remaining,
+    changes: {
+      revisions: remaining,
+      revisao: s.revisao,
+      status: inferPranchaStatusFromDates(dates, PranchaStatus.ENVIADO),
+      startDate: s.startDate || '',
+      startPeriod: s.startPeriod || '',
+      endDate: s.endDate || '',
+      endPeriod: s.endPeriod || '',
+      sendDate: s.sendDate || '',
+      sendPeriod: s.sendPeriod || '',
+      feedbackDate: s.feedbackDate || '',
+      feedbackPeriod: s.feedbackPeriod || '',
+      blockedDays: s.blockedDays || 0,
+    },
+    ambiguo: !!(s.sendDate && s.feedbackDate),
+  };
+};
+
+export interface DesfazerRevisaoLotePlan {
+  desfaziveis: Prancha[]; // tem pelo menos uma revisão no histórico
+  puladas: Prancha[]; // nunca foi revisada — nada a desfazer
+}
+
+export const planDesfazerRevisaoLote = (pranchas: Prancha[]): DesfazerRevisaoLotePlan => {
+  const plan: DesfazerRevisaoLotePlan = { desfaziveis: [], puladas: [] };
+  pranchas.forEach((p) =>
+    ((p.revisions?.length ?? 0) > 0 ? plan.desfaziveis : plan.puladas).push(p),
+  );
+  return plan;
+};
+
 export interface MoverReferenciasLotePlan {
   moviveis: Referencia[]; // transição permitida a partir do status atual
   puladas: Referencia[]; // status atual não permite ir para o destino
