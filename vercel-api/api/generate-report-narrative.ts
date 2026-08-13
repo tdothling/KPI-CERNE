@@ -27,9 +27,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  // A variável está cadastrada como GEMINI no projeto da Vercel; GEMINI_API_KEY é
+  // aceita também para o caso de ela ser renomeada para o nome mais descritivo.
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI;
   if (!apiKey) {
-    console.error('GEMINI_API_KEY não configurada no ambiente da Vercel.');
+    console.error('Chave do Gemini (GEMINI ou GEMINI_API_KEY) não configurada na Vercel.');
     res.status(500).json({ error: 'Serviço de IA não configurado.' });
     return;
   }
