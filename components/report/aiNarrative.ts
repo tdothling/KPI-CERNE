@@ -77,7 +77,11 @@ export function buildNarrativePayload(input: ReportSummaryInput): NarrativePaylo
       meta: META_IAPR,
       ciclosConcluidos: stats.closedGroups,
     },
-    cargaTrabalho: stats.volumeResumo,
+    cargaTrabalho: {
+      arquivos: stats.volumeResumo.files,
+      obras: stats.volumeResumo.obras,
+      reemissoes: stats.volumeResumo.revisoes,
+    },
     motivosRevisao: Object.entries(stats.reasonCategoryTotals).map(([categoria, quantidade]) => ({
       categoria,
       quantidade,
