@@ -39,7 +39,7 @@ export function ReportModal({ stats, filters, totalProjects, onClose }: ReportMo
     [stats, filters, totalProjects, generatedAt],
   );
 
-  const [narrative, setNarrative] = useState<NarrativeState>({ status: 'loading' });
+  const [narrative, setNarrative] = useState<NarrativeState>({ status: 'idle' });
 
   const runNarrativeGeneration = useCallback(async () => {
     setNarrative({ status: 'loading' });
@@ -53,13 +53,6 @@ export function ReportModal({ stats, filters, totalProjects, onClose }: ReportMo
       });
     }
   }, [summaryInput]);
-
-  // Dispara a análise de IA uma única vez, quando o relatório é aberto — não a cada
-  // recálculo de summaryInput (o botão "Regenerar análise" cobre uma nova tentativa).
-  useEffect(() => {
-    runNarrativeGeneration();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Enquanto o relatório está aberto, Ctrl+P e o botão imprimem o relatório, não a tela
   useEffect(() => {
@@ -128,7 +121,11 @@ export function ReportModal({ stats, filters, totalProjects, onClose }: ReportMo
               className="flex items-center gap-2 rounded-lg border border-slate-600 px-3 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Sparkles size={16} />
-              {narrative.status === 'loading' ? 'Gerando análise…' : 'Regenerar análise'}
+              {narrative.status === 'loading'
+                ? 'Gerando análise…'
+                : narrative.status === 'idle'
+                  ? 'Gerar análise com IA'
+                  : 'Regenerar análise'}
             </button>
             <button
               onClick={onClose}

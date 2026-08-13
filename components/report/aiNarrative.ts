@@ -91,6 +91,7 @@ export function buildNarrativePayload(input: ReportSummaryInput): NarrativePaylo
 }
 
 export type NarrativeState =
+  | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'done'; text: string }
   | { status: 'error'; message: string };

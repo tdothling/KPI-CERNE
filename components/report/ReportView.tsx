@@ -153,7 +153,8 @@ export function ReportView({
       </div>
 
       {/* ================= Análise executiva (IA) ================= */}
-      {narrative.status !== 'error' && (
+      {/* "idle" e "error" não aparecem no documento — nada a mostrar ou nada pra imprimir */}
+      {(narrative.status === 'loading' || narrative.status === 'done') && (
         <ReportCard title="Análise Executiva (IA)" className="mt-3">
           {narrative.status === 'loading' && (
             <p className="text-[10px] italic text-slate-400">Gerando análise com IA…</p>
