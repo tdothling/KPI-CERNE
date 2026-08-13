@@ -335,3 +335,20 @@ export const isEntregavelOverdue = (
   if (isOpenStatus) return new Date().toISOString().split('T')[0] > deadlineStr;
   return false;
 };
+
+// --- Formatação numérica (pt-BR) ---
+// Único ponto do app que formata número/moeda — usado pelo módulo de Consumo de Aço.
+
+export const formatNumberBR = (value: number, decimals = 1): string =>
+  new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(value);
+
+export const formatCurrencyBR = (value: number): string =>
+  new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);

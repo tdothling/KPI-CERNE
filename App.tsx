@@ -44,6 +44,7 @@ import {
   Trash2,
   Route,
   Building2,
+  Factory,
 } from 'lucide-react';
 
 // Code-splitting por aba: cada tela pesada vira um chunk próprio (o Dashboard carrega
@@ -69,6 +70,7 @@ const CatalogoPage = lazy(() =>
 const CarteiraPage = lazy(() =>
   import('./components/portfolio/CarteiraPage').then((m) => ({ default: m.CarteiraPage })),
 );
+const AcoPage = lazy(() => import('./components/aco/AcoPage').then((m) => ({ default: m.AcoPage })));
 
 const TabLoading = () => (
   <div className="flex items-center justify-center py-24 text-slate-400 text-sm">
@@ -83,9 +85,17 @@ import { useAppData } from './hooks/useAppData';
 import { useAppFilters } from './hooks/useAppFilters';
 import { addProject } from './services/db';
 import { portfolioToProjectFiles } from './domain/portfolio';
+import { totalKg } from './domain/steel';
 
 type Tab =
-  'dashboard' | 'timeline' | 'obras' | 'projects' | 'catalogo' | 'carteira' | 'suprimentos';
+  | 'dashboard'
+  | 'timeline'
+  | 'obras'
+  | 'projects'
+  | 'catalogo'
+  | 'carteira'
+  | 'suprimentos'
+  | 'estruturas';
 type EntryMode = 'FILES' | 'PASTE';
 
 export default function App() {
@@ -145,6 +155,11 @@ export default function App() {
     handleUpdateHolidays,
     countLegacyDisciplines,
     handleUnificarDisciplinaEstruturaCobertura,
+    steelRecords,
+    handleAddSteelRecord,
+    handleUpdateSteelRecord,
+    handleReviseSteelRecord,
+    handleDeleteSteelRecord,
   } = useAppData(projectFilter);
 
   // Obras de RODOVIA usam o fluxo Catálogo/Carteira (Referência → Conjunto → Prancha).
@@ -701,6 +716,12 @@ export default function App() {
               icon={<Truck size={16} className="min-w-[16px]" />}
               label="Suprimentos"
             />
+            <NavTab
+              active={activeTab === 'estruturas'}
+              onClick={() => setActiveTab('estruturas')}
+              icon={<Factory size={16} className="min-w-[16px]" />}
+              label="Estruturas"
+            />
           </nav>
 
           <div className="flex items-center gap-2 flex-shrink-0 pl-2">
@@ -919,6 +940,11 @@ export default function App() {
                 <ObrasPage
                   clients={clients}
                   projectCount={(name) => projects.filter((p) => p.client === name).length}
+                  steelSummary={(name) => {
+                    const recs = steelRecords.filter((r) => r.client === name);
+                    if (recs.length === 0) return null;
+                    return { count: recs.length, kg: recs.reduce((s, r) => s + totalKg(r), 0) };
+                  }}
                   onAddClient={handleAddClient}
                   onUpdateClient={handleUpdateClient}
                   onDeleteClient={handleDeleteClient}
@@ -997,6 +1023,20 @@ export default function App() {
                   onMoveStatus={handleMoveSupplyStatus}
                   onToggleItem={handleToggleSupplyItem}
                   onMigrateLegacy={handleMigrateLegacyPurchases}
+                />
+              </div>
+            )}
+            {activeTab === 'estruturas' && (
+              <div className="animate-in fade-in zoom-in-95 duration-200">
+                <AcoPage
+                  clients={clients}
+                  steelRecords={steelRecords}
+                  isDarkMode={isDarkMode}
+                  readOnly={isReadOnly}
+                  onAdd={handleAddSteelRecord}
+                  onUpdate={handleUpdateSteelRecord}
+                  onRevise={handleReviseSteelRecord}
+                  onDelete={handleDeleteSteelRecord}
                 />
               </div>
             )}

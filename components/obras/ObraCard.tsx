@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { ClientDoc, SiteType, ObraStatus } from '../../types';
 import { format, parseISO } from 'date-fns';
-import { getEffectiveStatus } from '../../utils';
+import { getEffectiveStatus, formatNumberBR } from '../../utils';
 import { getSlaInfo, getScheduleInfo, today } from './shared';
 
 // A linha da obra separa três canais de informação para não competirem entre si:
@@ -86,6 +86,7 @@ interface ObraCardProps {
   key?: string; // sem @types/react instalado, o TS não injeta o atributo especial "key" automaticamente
   client: ClientDoc;
   projCount: number;
+  steelSummary?: { count: number; kg: number } | null;
   isCompleting: boolean;
   completingDate: string;
   onCompletingDateChange: (d: string) => void;
@@ -107,6 +108,7 @@ interface ObraCardProps {
 export function ObraCard({
   client,
   projCount,
+  steelSummary,
   isCompleting,
   completingDate,
   onCompletingDateChange,
@@ -276,6 +278,11 @@ export function ObraCard({
           </Field>
           <Field label="Projetos vinculados" muted={projCount === 0}>
             {projCount > 0 ? `${projCount} projeto${projCount !== 1 ? 's' : ''}` : 'Nenhum'}
+          </Field>
+          <Field label="Aço registrado" muted={!steelSummary}>
+            {steelSummary
+              ? `${formatNumberBR(steelSummary.kg / 1000, 1)} t (${steelSummary.count} local${steelSummary.count !== 1 ? 'is' : ''})`
+              : DASH}
           </Field>
           {isDone ? (
             <Field

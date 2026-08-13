@@ -38,6 +38,7 @@ import {
   refStatusAposInstanciar,
   refStatusAposDesinstanciar,
 } from '../domain/portfolio';
+import { SteelRecord } from '../domain/steel';
 
 const COLL_PROJECTS = 'projects';
 const COLL_MATERIALS = 'materials';
@@ -50,6 +51,7 @@ const COLL_REFERENCIAS = 'references';
 const COLL_CONJUNTOS = 'conjuntos';
 const COLL_PRANCHAS = 'pranchas';
 const COLL_TRASH = 'trash';
+const COLL_STEEL = 'steelRecords';
 
 const isDbActive = () => {
   if (!db) return false;
@@ -721,6 +723,31 @@ export const migrateProjectsToPortfolio = async (
   };
 };
 
+// --- CONSUMO DE AÇO (Estruturas) ---
+// Um registro por LOCAL da obra (domain/steel.ts SteelRecord). Mesma mecânica de
+// Referencia/Prancha: add + patch parcial + delete com passagem pela lixeira.
+
+export const subscribeToSteelRecords = subscribeToCollection<SteelRecord>(
+  COLL_STEEL,
+  'client',
+  2000,
+);
+
+export const addSteelRecordToDb = async (record: Omit<SteelRecord, 'id'>) => {
+  if (!isDbActive() || !checkAuth()) throw new Error('Acesso negado.');
+  await addDoc(collection(db, COLL_STEEL), sanitizeData(record));
+};
+
+export const patchSteelRecordInDb = async (id: string, changes: Record<string, any>) => {
+  if (!isDbActive() || !checkAuth()) throw new Error('Acesso negado.');
+  await updateDoc(doc(db, COLL_STEEL, id), sanitizeData(changes));
+};
+
+export const deleteSteelRecordFromDb = async (id: string) => {
+  if (!isDbActive() || !checkAuth()) throw new Error('Acesso negado.');
+  await deleteWithTrash(COLL_STEEL, id);
+};
+
 export const subscribeToClients = (callback: (data: ClientDoc[]) => void) => {
   if (!isDbActive()) return () => {};
   const q = query(collection(db, COLL_CLIENTS), orderBy('name'), limit(100));
@@ -775,13 +802,14 @@ export const updateClientInDb = async (client: ClientDoc) => {
       // capitalização/espaçamento diferente — que continuavam aparecendo com o nome antigo.
       // Inclui as coleções legadas (materials/purchases): os dados preservados
       // continuam consistentes se a obra for renomeada.
-      const [pSnap, mSnap, cSnap, sSnap, rSnap, cjSnap] = await Promise.all([
+      const [pSnap, mSnap, cSnap, sSnap, rSnap, cjSnap, stSnap] = await Promise.all([
         getDocs(collection(db, COLL_PROJECTS)),
         getDocs(collection(db, COLL_MATERIALS)),
         getDocs(collection(db, COLL_PURCHASES)),
         getDocs(collection(db, COLL_SUPPLY)),
         getDocs(collection(db, COLL_REFERENCIAS)),
         getDocs(collection(db, COLL_CONJUNTOS)),
+        getDocs(collection(db, COLL_STEEL)),
       ]);
 
       const updatePromises: Promise<void>[] = [];
@@ -798,6 +826,7 @@ export const updateClientInDb = async (client: ClientDoc) => {
       collectMatches(sSnap);
       collectMatches(rSnap);
       collectMatches(cjSnap);
+      collectMatches(stSnap);
 
       if (updatePromises.length > 0) {
         await Promise.all(updatePromises);
@@ -819,14 +848,22 @@ export const updateClientInDb = async (client: ClientDoc) => {
 // sempre sem o usuário conseguir agir.
 export const countLinkedRecords = async (
   clientName: string,
-): Promise<{ projects: number; supplyOrders: number; referencias: number; conjuntos: number }> => {
-  if (!isDbActive()) return { projects: 0, supplyOrders: 0, referencias: 0, conjuntos: 0 };
+): Promise<{
+  projects: number;
+  supplyOrders: number;
+  referencias: number;
+  conjuntos: number;
+  steelRecords: number;
+}> => {
+  if (!isDbActive())
+    return { projects: 0, supplyOrders: 0, referencias: 0, conjuntos: 0, steelRecords: 0 };
   const target = normalizeName(clientName);
-  const [pSnap, sSnap, rSnap, cjSnap] = await Promise.all([
+  const [pSnap, sSnap, rSnap, cjSnap, stSnap] = await Promise.all([
     getDocs(collection(db, COLL_PROJECTS)),
     getDocs(collection(db, COLL_SUPPLY)),
     getDocs(collection(db, COLL_REFERENCIAS)),
     getDocs(collection(db, COLL_CONJUNTOS)),
+    getDocs(collection(db, COLL_STEEL)),
   ]);
   const count = (snap: QuerySnapshot<DocumentData>) =>
     snap.docs.filter((d) => normalizeName((d.data() as any).client) === target).length;
@@ -835,6 +872,7 @@ export const countLinkedRecords = async (
     supplyOrders: count(sSnap),
     referencias: count(rSnap),
     conjuntos: count(cjSnap),
+    steelRecords: count(stSnap),
   };
 };
 

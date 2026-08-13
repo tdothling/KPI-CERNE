@@ -51,6 +51,10 @@ import {
   subscribeToTrash,
   restoreFromTrash,
   purgeTrashEntries,
+  subscribeToSteelRecords,
+  addSteelRecordToDb,
+  patchSteelRecordInDb,
+  deleteSteelRecordFromDb,
 } from '../services/db';
 import {
   Referencia,
@@ -75,6 +79,7 @@ import { db } from '../firebase';
 import { User } from 'firebase/auth';
 import { canTransitionTo, getExecutiveMatchKey, calculateBusinessDaysWithHolidays } from '../utils';
 import { parseISO, isValid } from 'date-fns';
+import { SteelRecord, applySteelRevision } from '../domain/steel';
 
 export interface ProjectBatchPatch {
   id: string;
@@ -97,6 +102,9 @@ export function useAppData(projectFilter: ProjectFilterState) {
   // Lixeira: cópias de tudo que foi excluído, restauráveis pela tela Lixeira
   const [trashItems, setTrashItems] = useState<TrashEntry[]>([]);
 
+  // Consumo de Aço (Estruturas): um registro por local de obra
+  const [steelRecords, setSteelRecords] = useState<SteelRecord[]>([]);
+
   useEffect(() => {
     if (!db) {
       setDbConnected(false);
@@ -112,6 +120,7 @@ export function useAppData(projectFilter: ProjectFilterState) {
     const unsubConjuntos = subscribeToConjuntos(setConjuntos);
     const unsubPranchas = subscribeToPranchas(setPranchas);
     const unsubTrash = subscribeToTrash(setTrashItems);
+    const unsubSteel = subscribeToSteelRecords(setSteelRecords);
     const unsubAuth = subscribeToAuth((user) => {
       setCurrentUser(user);
     });
@@ -125,6 +134,7 @@ export function useAppData(projectFilter: ProjectFilterState) {
       unsubConjuntos();
       unsubPranchas();
       unsubTrash();
+      unsubSteel();
       unsubAuth();
     };
   }, [projectFilter]);
@@ -822,6 +832,50 @@ export function useAppData(projectFilter: ProjectFilterState) {
   const handleMigrateLegacyPurchases = () =>
     migrateLegacyPurchasesToSupply(currentUser?.email ? formatUsername(currentUser.email) : '');
 
+  // --- CONSUMO DE AÇO (Estruturas) ---
+
+  const handleAddSteelRecord = (record: Omit<SteelRecord, 'id'>) => {
+    addSteelRecordToDb(record).catch((e) =>
+      alert('Erro ao cadastrar o consumo de aço: ' + (e?.message || e)),
+    );
+  };
+
+  // Correção simples (sem abrir revisão): grava o patch direto, nada vai para o histórico.
+  const handleUpdateSteelRecord = (id: string, changes: Record<string, any>) => {
+    patchSteelRecordInDb(id, changes).catch((e) =>
+      alert('Erro ao salvar o consumo de aço: ' + (e?.message || e)),
+    );
+  };
+
+  // Edição registrada como revisão: empilha o estado atual em revisions (com motivo e
+  // autor) e grava os valores novos — mesma mecânica de handleAbrirRevisaoPrancha.
+  const handleReviseSteelRecord = (
+    current: SteelRecord,
+    next: Omit<SteelRecord, 'id' | 'client' | 'base' | 'revisao' | 'revisions'>,
+    reason: RevisionReason,
+    comment: string,
+  ) => {
+    const date = new Date().toISOString().split('T')[0];
+    const updated = applySteelRevision(current, next, {
+      reason,
+      comment,
+      date,
+      user: currentUser?.email ? formatUsername(currentUser.email) : undefined,
+      id: crypto.randomUUID(),
+    });
+    const { id, client, base, ...changes } = updated;
+    patchSteelRecordInDb(id, changes).catch((e) =>
+      alert('Erro ao registrar a revisão de aço: ' + (e?.message || e)),
+    );
+  };
+
+  const handleDeleteSteelRecord = (record: SteelRecord) => {
+    if (!confirm(`Excluir o registro de aço da base "${record.base}"?`)) return;
+    deleteSteelRecordFromDb(record.id).catch((e) =>
+      alert('Erro ao excluir o registro de aço: ' + (e?.message || e)),
+    );
+  };
+
   const handleAddClient = (client: Omit<ClientDoc, 'id'>) =>
     addClient(client).catch((e) => alert('Erro ao cadastrar a obra: ' + (e?.message || e)));
   const handleUpdateClient = (client: ClientDoc) =>
@@ -843,10 +897,15 @@ export function useAppData(projectFilter: ProjectFilterState) {
       return;
     }
 
-    const total = counts.projects + counts.supplyOrders + counts.referencias + counts.conjuntos;
+    const total =
+      counts.projects +
+      counts.supplyOrders +
+      counts.referencias +
+      counts.conjuntos +
+      counts.steelRecords;
     if (total > 0) {
       alert(
-        `Não é possível excluir a obra "${clientToDelete.name}".\n\nExistem registros vinculados:\n- ${counts.projects} Projetos\n- ${counts.referencias} Referências (Catálogo)\n- ${counts.conjuntos} Conjuntos (Carteira)\n- ${counts.supplyOrders} Pedidos de Suprimentos\n\nPor favor, exclua ou reatribua esses registros antes de remover a obra.`,
+        `Não é possível excluir a obra "${clientToDelete.name}".\n\nExistem registros vinculados:\n- ${counts.projects} Projetos\n- ${counts.referencias} Referências (Catálogo)\n- ${counts.conjuntos} Conjuntos (Carteira)\n- ${counts.supplyOrders} Pedidos de Suprimentos\n- ${counts.steelRecords} Registros de Consumo de Aço\n\nPor favor, exclua ou reatribua esses registros antes de remover a obra.`,
       );
       return;
     }
@@ -1010,6 +1069,11 @@ export function useAppData(projectFilter: ProjectFilterState) {
     handleMoveSupplyStatus,
     handleToggleSupplyItem,
     handleMigrateLegacyPurchases,
+    steelRecords,
+    handleAddSteelRecord,
+    handleUpdateSteelRecord,
+    handleReviseSteelRecord,
+    handleDeleteSteelRecord,
     handleAddClient,
     handleUpdateClient,
     handleDeleteClient,

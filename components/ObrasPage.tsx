@@ -80,6 +80,7 @@ const FILTERS: {
 interface ObrasPageProps {
   clients: ClientDoc[];
   projectCount: (clientName: string) => number;
+  steelSummary?: (clientName: string) => { count: number; kg: number } | null;
   onAddClient: (client: Omit<ClientDoc, 'id'>) => void;
   onUpdateClient: (client: ClientDoc) => void;
   onDeleteClient: (id: string) => void;
@@ -88,6 +89,7 @@ interface ObrasPageProps {
 export const ObrasPage: React.FC<ObrasPageProps> = ({
   clients,
   projectCount,
+  steelSummary,
   onAddClient,
   onUpdateClient,
   onDeleteClient,
@@ -337,6 +339,7 @@ export const ObrasPage: React.FC<ObrasPageProps> = ({
               key={client.id}
               client={client}
               projCount={projectCount(client.name)}
+              steelSummary={steelSummary?.(client.name) ?? null}
               isCompleting={completingId === client.id}
               completingDate={completingDate}
               onCompletingDateChange={setCompletingDate}

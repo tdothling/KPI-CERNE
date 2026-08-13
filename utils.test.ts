@@ -4,6 +4,8 @@ import {
   calculateBusinessDaysWithHolidays,
   resolveEntregavelDeadline,
   isEntregavelOverdue,
+  formatNumberBR,
+  formatCurrencyBR,
 } from './utils';
 
 describe('calculateNetExecutionDuration', () => {
@@ -153,5 +155,22 @@ describe('isEntregavelOverdue', () => {
 
   it('sem endDate, status fechado (não aberto), não está atrasado', () => {
     expect(isEntregavelOverdue(deadline, undefined, false)).toBe(false);
+  });
+});
+
+describe('formatNumberBR', () => {
+  it('formata com vírgula decimal e 1 casa por padrão', () => {
+    expect(formatNumberBR(1234.5)).toBe('1.234,5');
+  });
+
+  it('respeita o número de casas decimais informado', () => {
+    expect(formatNumberBR(8, 2)).toBe('8,00');
+    expect(formatNumberBR(8.256, 0)).toBe('8');
+  });
+});
+
+describe('formatCurrencyBR', () => {
+  it('formata como moeda brasileira com 2 casas', () => {
+    expect(formatCurrencyBR(1234.5)).toBe('R$ 1.234,50');
   });
 });

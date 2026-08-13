@@ -62,6 +62,20 @@ service cloud.firestore {
       allow read, write: if isCerneInternalUser();
     }
 
+    // Consumo de Aço (Estruturas): um registro por LOCAL de obra
+    match /steelRecords/{steelId} {
+      allow read: if isCerneInternalUser();
+
+      allow create: if isCerneInternalUser()
+                    && request.resource.data.keys().hasAll(['client', 'base', 'materials'])
+                    && request.resource.data.client is string
+                    && request.resource.data.base is string
+                    && request.resource.data.materials is map;
+
+      allow update: if isCerneInternalUser();
+      allow delete: if isCerneInternalUser();
+    }
+
     // --- CARTEIRA DE RODOVIA (Referência → Conjunto → Prancha) ---
 
     // Referências (Catálogo): molde por tipo de obra, com gabarito de entregáveis
