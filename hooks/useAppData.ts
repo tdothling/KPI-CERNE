@@ -811,6 +811,25 @@ export function useAppData(projectFilter: ProjectFilterState) {
     }
   };
 
+  // Define a mesma meta de entrega (targetDate) para várias pranchas de uma
+  // vez — caso de uso: revisão pós-certificadora aplicada a um pacote inteiro,
+  // com uma nova data combinada com o cliente, diferente do prazo padrão da
+  // 1ª entrega (ver resolveEntregavelDeadline em utils.ts). Sem essa data, a
+  // revisão fica de fora da medição de SLA/OTD.
+  const handleSetTargetDatePranchasLote = async (
+    alvo: Prancha[],
+    targetDate: string,
+  ): Promise<{ atualizadas: number; erros: string[] }> => {
+    if (alvo.length === 0) return { atualizadas: 0, erros: [] };
+    const patches = alvo.map((p) => ({ id: p.id, changes: { targetDate } }));
+    try {
+      await batchUpdatePranchasInDb(patches);
+      return { atualizadas: patches.length, erros: [] };
+    } catch (e: any) {
+      return { atualizadas: 0, erros: [e?.message || String(e)] };
+    }
+  };
+
   const handleUpdatePrancha = (id: string, changes: Partial<Prancha>) => {
     const patch: Record<string, any> = { ...changes };
     if (['sendDate', 'sendPeriod', 'feedbackDate', 'feedbackPeriod'].some((k) => k in changes)) {
@@ -1155,6 +1174,7 @@ export function useAppData(projectFilter: ProjectFilterState) {
     handleAbrirRevisaoPranchasLote,
     handleDesfazerRevisaoPrancha,
     handleDesfazerRevisaoPranchasLote,
+    handleSetTargetDatePranchasLote,
     handleUpdatePrancha,
     handleAddPrancha,
     handleDeletePrancha,

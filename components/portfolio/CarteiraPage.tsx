@@ -44,6 +44,7 @@ import {
   DateActionModal,
   DateActionRequest,
   RevisionHistoryModal,
+  TargetDateInput,
   execDaysOf,
 } from './shared';
 import {
@@ -98,6 +99,10 @@ interface CarteiraPageProps {
   onDesfazerRevisaoPranchasLote: (
     pranchas: Prancha[],
   ) => Promise<{ desfeitas: number; puladas: number; ambiguas: string[]; erros: string[] }>;
+  onSetTargetDatePranchasLote: (
+    pranchas: Prancha[],
+    targetDate: string,
+  ) => Promise<{ atualizadas: number; erros: string[] }>;
   onUpdatePrancha: (id: string, changes: Partial<Prancha>) => void;
   onAddPrancha: (p: Omit<Prancha, 'id'>) => void;
   onDeletePrancha: (p: Prancha) => void;
@@ -122,6 +127,7 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
   onAbrirRevisaoPranchasLote,
   onDesfazerRevisaoPrancha,
   onDesfazerRevisaoPranchasLote,
+  onSetTargetDatePranchasLote,
   onUpdatePrancha,
   onAddPrancha,
   onDeletePrancha,
@@ -134,6 +140,7 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
   const [dateAction, setDateAction] = useState<DateActionRequest | null>(null);
   const [editingPrancha, setEditingPrancha] = useState<Prancha | null>(null);
   const [historicoDe, setHistoricoDe] = useState<Prancha | null>(null);
+  const [metaEntregaLoteAlvo, setMetaEntregaLoteAlvo] = useState<Prancha[] | null>(null);
   const [addingTo, setAddingTo] = useState<Conjunto | null>(null); // conjunto recebendo prancha avulsa
 
   // Navegação por obra — MESMA chave do Catálogo: a obra ativa é compartilhada
@@ -1313,6 +1320,12 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
               askDesfazerRevisaoLote(selPranchas, () => setSelecionadas(new Set()))
             }
           />
+          <LoteBtn
+            label="Meta de Entrega"
+            count={selPranchas.length}
+            tone="text-brand-600 dark:text-brand-400"
+            onClick={() => setMetaEntregaLoteAlvo(selPranchas)}
+          />
           <span className="w-px h-4 bg-slate-200 dark:bg-slate-700"></span>
           <button
             onClick={() => setSelecionadas(new Set())}
@@ -1348,6 +1361,19 @@ export const CarteiraPage: React.FC<CarteiraPageProps> = ({
             setHistoricoDe({ ...historicoDe, revisions: updated });
           }}
           onClose={() => setHistoricoDe(null)}
+        />
+      )}
+
+      {metaEntregaLoteAlvo && (
+        <MetaEntregaLoteModal
+          pranchas={metaEntregaLoteAlvo}
+          onClose={() => setMetaEntregaLoteAlvo(null)}
+          onConfirm={async (date) => {
+            const r = await onSetTargetDatePranchasLote(metaEntregaLoteAlvo, date);
+            if (r.erros.length > 0) alert(`Falha ao definir a meta de entrega:\n${r.erros.join('\n')}`);
+            setMetaEntregaLoteAlvo(null);
+            setSelecionadas(new Set());
+          }}
         />
       )}
 
@@ -1411,5 +1437,58 @@ function LoteBtn({
     >
       {label} ({count})
     </button>
+  );
+}
+
+// Mesma meta de entrega (targetDate) para várias pranchas de uma vez — caso
+// de uso: revisão pós-certificadora (ou qualquer reabertura combinada à
+// parte) aplicada a um pacote inteiro, com uma data de entrega própria,
+// diferente do prazo padrão da 1ª entrega da obra. Ver TargetDateInput.
+function MetaEntregaLoteModal({
+  pranchas,
+  onClose,
+  onConfirm,
+}: {
+  pranchas: Prancha[];
+  onClose: () => void;
+  onConfirm: (targetDate: string) => void;
+}) {
+  const [date, setDate] = useState('');
+  return (
+    <div className="fixed inset-0 bg-black/60 dark:bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-md w-full p-6 border dark:border-slate-700 animate-in fade-in zoom-in-95 duration-150">
+        <div className="flex justify-between items-center mb-1">
+          <h3 className="text-lg font-bold text-slate-800 dark:text-white">
+            Meta de Entrega em Lote
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+            aria-label="Fechar"
+          >
+            <X size={20} />
+          </button>
+        </div>
+        <p className="text-xs text-slate-400 dark:text-slate-500 mb-2">
+          {pranchas.length} prancha(s) selecionada(s) receberão a data abaixo.
+        </p>
+        <TargetDateInput value={date} onChange={setDate} />
+        <div className="flex justify-end gap-2 mt-5">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg font-medium"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={() => date && onConfirm(date)}
+            disabled={!date}
+            className="px-4 py-2 text-sm text-white bg-brand-700 hover:bg-brand-800 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg font-semibold"
+          >
+            Aplicar a {pranchas.length} prancha(s)
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
