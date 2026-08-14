@@ -443,11 +443,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }));
 
     const volumeData = Object.values(volumeMap).sort((a: any, b: any) => b.total - a.total);
-    // Resumo da carga: massa total de arquivos, obras no filtro e retrabalho (R01+)
+    // Resumo da carga: massa total de arquivos, obras no filtro e retrabalho (R01+).
+    // uniqueDeliverables usa o mesmo agrupamento de fileGroups (cliente|disciplina|nome-base|fase)
+    // já usado para OTD/IAPR — é a contagem de carteira (escopo), sem inflar por revisão.
     const volumeResumo = {
       files: volumeData.reduce((acc: number, v: any) => acc + v.total, 0),
       obras: volumeData.length,
       revisoes: volumeRevisoes,
+      uniqueDeliverables: Object.keys(fileGroups).length,
     };
 
     const reasonsData = Object.entries(reasonsMap)
@@ -1325,12 +1328,21 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <p className="text-xs text-slate-400 mb-2">
             Arquivos por disciplina — inclui revisões (esforço real da equipe)
           </p>
-          <div className="flex flex-wrap gap-x-5 gap-y-1 mb-4 text-xs text-slate-500 dark:text-slate-400">
+          <div className="flex flex-wrap gap-x-5 gap-y-1.5 mb-4 text-xs text-slate-500 dark:text-slate-400">
+            <span>
+              <b className="text-brand-700 dark:text-brand-400 text-sm">
+                {stats.volumeResumo.uniqueDeliverables}
+              </b>{' '}
+              entregáve{stats.volumeResumo.uniqueDeliverables !== 1 ? 'is únicos' : 'l único'}{' '}
+              <span className="text-slate-400">(carteira)</span>
+            </span>
             <span>
               <b className="text-slate-700 dark:text-slate-200 text-sm">
                 {stats.volumeResumo.files}
               </b>{' '}
-              arquivos no total
+              registro{stats.volumeResumo.files !== 1 ? 's' : ''} processado
+              {stats.volumeResumo.files !== 1 ? 's' : ''}{' '}
+              <span className="text-slate-400">(revisões inclusas)</span>
             </span>
             <span>
               <b className="text-slate-700 dark:text-slate-200 text-sm">
