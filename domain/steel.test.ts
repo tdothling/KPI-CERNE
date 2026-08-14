@@ -12,6 +12,7 @@ import {
   kgOf,
   totalKg,
   totalCost,
+  materialBreakdown,
   fitExpectedCurve,
   expectedIntensity,
   deviations,
@@ -124,6 +125,53 @@ describe('kgOf / totalKg / totalCost', () => {
     expect(kgOf(r, 'cobertura')).toBe(50);
     expect(totalKg(r)).toBe(150);
     expect(totalCost(r)).toBe(100 * 8 + 50 * 6);
+  });
+});
+
+describe('materialBreakdown', () => {
+  it('soma kg e custo por material, somando entre registros, mesmo materiais do mesmo kind separados', () => {
+    const records = [
+      record({
+        materials: materials({
+          [SteelMaterial.GALV_ESTRUTURAL]: { kg: 100, pricePerKg: 8 },
+          [SteelMaterial.GALV_COMUM]: { kg: 50, pricePerKg: 5 },
+        }),
+      }),
+      record({
+        materials: materials({
+          [SteelMaterial.GALV_ESTRUTURAL]: { kg: 200, pricePerKg: 8 },
+        }),
+      }),
+    ];
+    const breakdown = materialBreakdown(records);
+    expect(breakdown).toHaveLength(4); // sempre os 4 materiais, mesmo os zerados
+
+    const estrutural = breakdown.find((b) => b.material === SteelMaterial.GALV_ESTRUTURAL)!;
+    expect(estrutural.kg).toBe(300);
+    expect(estrutural.cost).toBe(300 * 8);
+    expect(estrutural.pricePerKgAvg).toBe(8);
+    expect(estrutural.kind).toBe('leve');
+
+    const comum = breakdown.find((b) => b.material === SteelMaterial.GALV_COMUM)!;
+    expect(comum.kg).toBe(50);
+    expect(comum.cost).toBe(250);
+
+    const galpao = breakdown.find((b) => b.material === SteelMaterial.GALPAO)!;
+    expect(galpao.kg).toBe(0);
+    expect(galpao.cost).toBe(0);
+    expect(galpao.pricePerKgAvg).toBe(0); // sem divisão por zero
+  });
+
+  it('pricePerKgAvg é a média ponderada quando o mesmo material tem preços diferentes entre registros', () => {
+    const records = [
+      record({ materials: materials({ [SteelMaterial.GALVALUME]: { kg: 100, pricePerKg: 10 } }) }),
+      record({ materials: materials({ [SteelMaterial.GALVALUME]: { kg: 300, pricePerKg: 6 } }) }),
+    ];
+    const breakdown = materialBreakdown(records);
+    const galvalume = breakdown.find((b) => b.material === SteelMaterial.GALVALUME)!;
+    expect(galvalume.kg).toBe(400);
+    expect(galvalume.cost).toBe(100 * 10 + 300 * 6);
+    expect(galvalume.pricePerKgAvg).toBeCloseTo((1000 + 1800) / 400, 6);
   });
 });
 

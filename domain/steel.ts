@@ -186,6 +186,31 @@ export const totalKg = (r: Pick<SteelRecord, 'materials'>): number =>
 export const totalCost = (r: Pick<SteelRecord, 'materials'>): number =>
   ALL_MATERIALS.reduce((sum, m) => sum + (r.materials[m]?.kg || 0) * (r.materials[m]?.pricePerKg || 0), 0);
 
+export interface MaterialBreakdown {
+  material: SteelMaterial;
+  kind: SteelKind;
+  kg: number;
+  cost: number;
+  pricePerKgAvg: number; // cost / kg ponderado pelos registros — 0 quando kg é 0
+}
+
+// "Aço Registrado" e "Custo Total" do KPI strip são a SOMA dos 4 materiais — cada um com
+// seu próprio preço de mercado. Sem segregar por material, o peso de cada insumo na
+// análise fica escondido dentro de um total só. Sempre retorna os 4 materiais, mesmo
+// zerados, para a UI poder listá-los na mesma ordem independente do filtro.
+export const materialBreakdown = (records: SteelRecord[]): MaterialBreakdown[] =>
+  ALL_MATERIALS.map((material) => {
+    let kg = 0;
+    let cost = 0;
+    records.forEach((r) => {
+      const entry = r.materials[material];
+      if (!entry) return;
+      kg += entry.kg || 0;
+      cost += (entry.kg || 0) * (entry.pricePerKg || 0);
+    });
+    return { material, kind: MATERIAL_TARGET[material], kg, cost, pricePerKgAvg: kg > 0 ? cost / kg : 0 };
+  });
+
 // kg/m² — null quando a área é 0 (nunca dividir por zero, nunca contar como 0 nas medianas:
 // um 0 espúrio puxaria a mediana para baixo e mascararia consumo real).
 export const intensity = (

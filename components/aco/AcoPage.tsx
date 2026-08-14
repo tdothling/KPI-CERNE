@@ -22,6 +22,7 @@ import {
   deviations,
   fabricationWindowOf,
   fitExpectedCurve,
+  materialBreakdown,
   timeSeries,
   totalCost,
   totalKg,
@@ -39,6 +40,7 @@ import {
 import { AcoRecordModal } from './AcoRecordModal';
 import { AcoHistoryModal } from './AcoHistoryModal';
 import { AcoKpiStrip } from './AcoKpiStrip';
+import { AcoMaterialBreakdown } from './AcoMaterialBreakdown';
 import { AcoRecordsTable } from './AcoRecordsTable';
 import { SteelBandChart, SteelScatterChart, SteelTimeSeriesChart } from './AcoCharts';
 
@@ -226,6 +228,7 @@ export const AcoPage: React.FC<AcoPageProps> = ({
     () => timeSeries(filteredRecords, kind, granularity, clients),
     [filteredRecords, kind, granularity, clients],
   );
+  const materials = useMemo(() => materialBreakdown(filteredRecords), [filteredRecords]);
 
   const byId = useMemo(() => new Map(steelRecords.map((r) => [r.id, r])), [steelRecords]);
 
@@ -529,6 +532,8 @@ export const AcoPage: React.FC<AcoPageProps> = ({
           </div>
 
           <AcoKpiStrip records={filteredRecords} kind={kind} devs={devs} />
+
+          <AcoMaterialBreakdown data={materials} />
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
