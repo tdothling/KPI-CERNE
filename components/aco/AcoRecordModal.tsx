@@ -157,6 +157,22 @@ export function AcoRecordModal({
                     className={inputCls}
                   />
                 </div>
+                <div>
+                  <Label>Locais Representados</Label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={form.locationCount || ''}
+                    onChange={(e) => set({ locationCount: parseInt(e.target.value, 10) || 1 })}
+                    className={inputCls}
+                  />
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                    Deixe 1 para um local só. Se este registro já é o total compilado de
+                    vários locais (ex.: 6 bases somadas), informe quantos — isso pesa
+                    corretamente na curva e nos outliers.
+                  </p>
+                </div>
               </div>
             </Section>
 

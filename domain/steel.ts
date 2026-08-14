@@ -4,8 +4,11 @@
 // cálculo (intensidade, curva esperada por vento, outliers) seja testável isoladamente.
 //
 // Um SteelRecord é o consumo de aço de UM LOCAL de uma obra (ex.: "Base 1" da Austra).
-// Uma obra com N locais tem N registros — nunca um agregado só, porque cada local pode
-// ter vento e configuração de edificação diferentes (ver types.ts ClientDoc.bases).
+// O ideal é uma obra com N locais ter N registros, porque cada local pode ter vento e
+// configuração de edificação diferentes (ver types.ts ClientDoc.bases). Quando isso não é
+// viável e o usuário lança o total já compilado de vários locais num registro só,
+// `locationCount` registra quantos locais reais aquele número representa — sem isso, um
+// registro assim pesaria na curva/estatística como se fosse 1 local só, distorcendo tudo.
 //
 // Ponto central do módulo: comparar kg/m² entre obras só é honesto dentro do MESMO regime
 // de vento, porque a pressão dinâmica do vento cresce com o quadrado da velocidade (NBR
@@ -96,6 +99,7 @@ export interface SteelSnapshot {
   areaPesada: number;
   areaCobertura: number;
   materials: SteelMaterials;
+  locationCount?: number;
 }
 
 export interface SteelRevision {
@@ -120,7 +124,15 @@ export interface SteelRecord {
   revisao: number;
   revisions: SteelRevision[];
   observacao?: string;
+  // Quantos locais reais este registro representa, quando ele é um total compilado de
+  // vários (ex.: 6 bases somadas em 1 lançamento). undefined/1 = local único, o padrão.
+  locationCount?: number;
 }
+
+// Peso estatístico do registro — quantas amostras reais ele representa na curva, nas
+// faixas de vento e na população de resíduos usada para achar outliers. Sempre ≥ 1.
+export const weightOf = (r: Pick<SteelRecord, 'locationCount'>): number =>
+  Math.max(1, Math.round(r.locationCount || 1));
 
 const snapshotOf = (r: SteelRecord): SteelSnapshot => ({
   windSpeed: r.windSpeed,
@@ -128,6 +140,7 @@ const snapshotOf = (r: SteelRecord): SteelSnapshot => ({
   areaPesada: r.areaPesada,
   areaCobertura: r.areaCobertura,
   materials: r.materials,
+  ...(r.locationCount ? { locationCount: r.locationCount } : {}),
 });
 
 // Aplica uma revisão: empilha o estado ANTIGO em `revisions` (com o motivo/comentário desta
@@ -215,9 +228,14 @@ export const MIN_FIT_DISTINCT_WINDS = 3;
 // cresce com o quadrado da velocidade — a curva fica fisicamente coerente e continua sendo
 // uma regressão linear simples nessa variável transformada.
 export const fitExpectedCurve = (records: SteelRecord[], kind: SteelKind): SteelFit | null => {
-  const points = records
-    .map((r) => ({ x: r.windSpeed * r.windSpeed, y: intensity(r, kind) }))
-    .filter((p): p is { x: number; y: number } => p.y !== null && Number.isFinite(p.x));
+  // Registros com locationCount > 1 (total compilado de vários locais) entram repetidos
+  // `weight` vezes — pesam na regressão como as várias amostras reais que representam,
+  // em vez de contar como 1 local só.
+  const points = records.flatMap((r) => {
+    const y = intensity(r, kind);
+    if (y === null || !Number.isFinite(r.windSpeed)) return [];
+    return Array(weightOf(r)).fill({ x: r.windSpeed * r.windSpeed, y });
+  });
 
   const distinctWinds = new Set(records.map((r) => r.windSpeed)).size;
   if (points.length < MIN_FIT_SAMPLE || distinctWinds < MIN_FIT_DISTINCT_WINDS) return null;
@@ -305,8 +323,10 @@ export const bandStats = (records: SteelRecord[], kind: SteelKind): BandStats[] 
   WIND_BANDS.map((band) => {
     const values = records
       .filter((r) => windBandOf(r.windSpeed).key === band.key)
-      .map((r) => intensity(r, kind))
-      .filter((v): v is number => v !== null);
+      .flatMap((r) => {
+        const v = intensity(r, kind);
+        return v === null ? [] : Array(weightOf(r)).fill(v);
+      });
     return {
       band,
       n: values.length,
@@ -338,9 +358,13 @@ const OUTLIER_BAND_FALLBACK_PCT = 0.25; // sem curva: 25% acima da mediana da fa
 // z-score robusto: mediana + MAD (median absolute deviation) × 1.4826 (fator que torna o MAD
 // comparável ao desvio-padrão sob normalidade). Preferido a média/desvio-padrão comuns porque
 // esses são distorcidos justamente pelos outliers que este cálculo tenta encontrar.
-const robustZScores = (residuals: number[]): number[] => {
-  const med = median(residuals);
-  const absDevs = residuals.map((r) => Math.abs(r - med));
+// `weights` pondera a população usada para achar a mediana/MAD (um registro que representa
+// vários locais entra repetido nela), mas cada residual de entrada ainda recebe exatamente
+// um z de volta — não duplica linhas na tabela de desvios.
+const robustZScores = (residuals: number[], weights: number[]): number[] => {
+  const population = residuals.flatMap((r, i) => Array(weights[i]).fill(r));
+  const med = median(population);
+  const absDevs = population.map((r) => Math.abs(r - med));
   const mad = median(absDevs);
   const scale = mad * 1.4826;
   if (scale === 0) return residuals.map(() => 0);
@@ -368,7 +392,10 @@ export const deviations = (
     return { record, real, esperado, esperadoSource, desvio, desvioPct };
   });
 
-  const zScores = robustZScores(raw.map((r) => r.desvio));
+  const zScores = robustZScores(
+    raw.map((r) => r.desvio),
+    raw.map((r) => weightOf(r.record)),
+  );
 
   return raw.map((r, i) => {
     const z = zScores[i];
@@ -453,11 +480,12 @@ export const timeSeries = (
     if (!period || value === null) return;
     const band = windBandOf(r.windSpeed);
     const groupKey = `${period.key}|${band.key}`;
+    const weightedValues = Array(weightOf(r)).fill(value);
     const existing = groups.get(groupKey);
     if (existing) {
-      existing.values.push(value);
+      existing.values.push(...weightedValues);
     } else {
-      groups.set(groupKey, { periodKey: period.key, periodLabel: period.label, band, values: [value] });
+      groups.set(groupKey, { periodKey: period.key, periodLabel: period.label, band, values: weightedValues });
     }
   });
 

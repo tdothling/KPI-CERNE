@@ -8,6 +8,7 @@ import {
   overallIntensityMean,
   totalCost,
   totalKg,
+  weightOf,
 } from '../../domain/steel';
 import { formatCurrencyBR, formatNumberBR } from '../../utils';
 
@@ -26,7 +27,8 @@ export const AcoKpiStrip: React.FC<AcoKpiStripProps> = ({ records, kind, devs })
     const meanKgM2 = overallIntensityMean(records, kind);
     const meanCostM2 = overallCostPerM2Mean(records, kind);
     const outliers = devs.filter((d) => d.isOutlier).length;
-    return { kgTotal, costTotal, meanKgM2, meanCostM2, outliers };
+    const totalLocations = records.reduce((s, r) => s + weightOf(r), 0);
+    return { kgTotal, costTotal, meanKgM2, meanCostM2, outliers, totalLocations };
   }, [records, kind, devs]);
 
   return (
@@ -36,7 +38,11 @@ export const AcoKpiStrip: React.FC<AcoKpiStripProps> = ({ records, kind, devs })
         iconClass="bg-brand-50 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400"
         label="Aço Registrado"
         value={`${formatNumberBR(stats.kgTotal / 1000, 1)} t`}
-        hint={`${records.length} local(is) no filtro atual`}
+        hint={
+          stats.totalLocations === records.length
+            ? `${records.length} local(is) no filtro atual`
+            : `${records.length} registro(s) · ${stats.totalLocations} locais no filtro atual`
+        }
       />
       <KpiCard
         icon={<Wallet size={18} />}

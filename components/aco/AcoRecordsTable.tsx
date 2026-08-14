@@ -1,6 +1,6 @@
 import React from 'react';
 import { Edit2, History, Trash2, AlertTriangle } from 'lucide-react';
-import { RecordDeviation, windBandOf } from '../../domain/steel';
+import { RecordDeviation, weightOf, windBandOf } from '../../domain/steel';
 import { formatCurrencyBR, formatNumberBR } from '../../utils';
 import { WIND_BAND_BADGE_CLASS } from './acoShared';
 
@@ -61,8 +61,16 @@ export const AcoRecordsTable: React.FC<AcoRecordsTableProps> = ({
                       <p className="font-semibold text-slate-800 dark:text-slate-200 truncate">
                         {d.record.client}
                       </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate flex items-center gap-1.5">
                         {d.record.base}
+                        {weightOf(d.record) > 1 && (
+                          <span
+                            title="Total compilado de vários locais"
+                            className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-400 flex-shrink-0"
+                          >
+                            {weightOf(d.record)} locais
+                          </span>
+                        )}
                       </p>
                     </div>
                   </div>

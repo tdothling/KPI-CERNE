@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   SteelMaterial,
   SteelRecord,
+  SteelFit,
   emptyMaterials,
   MATERIAL_TARGET,
   windBandOf,
@@ -18,9 +19,11 @@ import {
   timeSeries,
   applySteelRevision,
   MIN_FIT_SAMPLE,
+  MIN_FIT_DISTINCT_WINDS,
   overallIntensityMean,
   overallCostPerM2Mean,
   fabricationWindowOf,
+  weightOf,
 } from './steel';
 import { RevisionReason } from '../types';
 
@@ -162,6 +165,37 @@ describe('fitExpectedCurve', () => {
 
     expect(expectedIntensity(fit!, 30)).toBeCloseTo(a + b * 900, 6);
   });
+
+  it('pesa um registro agregado (locationCount) como várias amostras na guarda de tamanho mínimo', () => {
+    // 1 registro compilado (locationCount=5) + 2 registros normais = só 3 registros de
+    // fato, mas MIN_FIT_SAMPLE (5) é alcançado pelo peso, e MIN_FIT_DISTINCT_WINDS (3)
+    // pelos 3 ventos distintos.
+    const aggregated = record({
+      windSpeed: 30,
+      areaLeve: 100,
+      materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 1000, pricePerKg: 8 } }),
+      locationCount: 5,
+    });
+    const others = [35, 40].map((v) =>
+      record({ windSpeed: v, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 1000, pricePerKg: 8 } }) }),
+    );
+    const records = [aggregated, ...others];
+    expect(records.length).toBeLessThan(MIN_FIT_SAMPLE);
+    expect(new Set(records.map((r) => r.windSpeed)).size).toBe(MIN_FIT_DISTINCT_WINDS);
+    expect(fitExpectedCurve(records, 'leve')).not.toBeNull();
+  });
+});
+
+describe('weightOf', () => {
+  it('default (sem locationCount) é 1', () => {
+    expect(weightOf(record({}))).toBe(1);
+  });
+
+  it('arredonda e nunca cai abaixo de 1', () => {
+    expect(weightOf(record({ locationCount: 6 }))).toBe(6);
+    expect(weightOf(record({ locationCount: 3.6 }))).toBe(4);
+    expect(weightOf(record({ locationCount: 0 }))).toBe(1);
+  });
 });
 
 describe('deviations', () => {
@@ -195,6 +229,28 @@ describe('deviations', () => {
     expect(normalDev.isOutlier).toBe(false);
     expect(outlierDev.kgExcedente).toBeGreaterThan(0);
     expect(outlierDev.custoExcedente).toBeGreaterThan(0);
+  });
+
+  it('locationCount atenua o z-score de um registro agregado, pois ele pesa mais na própria população de referência', () => {
+    const fit: SteelFit = { a: 0, b: 0, r2: 1, n: 100 }; // esperado = 0 sempre -> desvio = intensidade real
+    const normalIntensities = [0.8, 0.9, 1.0, 1.1, 1.2, 1.3];
+    const normals = normalIntensities.map((v) =>
+      record({ windSpeed: 30, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: v * 100, pricePerKg: 8 } }) }),
+    );
+    const devFor = (locationCount?: number) => {
+      const aggregate = record({
+        windSpeed: 30,
+        areaLeve: 100,
+        materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 1000, pricePerKg: 8 } }), // 10 kg/m²
+        ...(locationCount ? { locationCount } : {}),
+      });
+      const devs = deviations([...normals, aggregate], 'leve', fit);
+      return devs.find((d) => d.record.id === aggregate.id)!;
+    };
+    const devWeight1 = devFor();
+    const devWeight3 = devFor(3);
+    expect(devWeight1.isOutlier).toBe(true);
+    expect(Math.abs(devWeight3.z)).toBeLessThan(Math.abs(devWeight1.z));
   });
 
   it('kgExcedente é negativo quando o consumo real é menor que o esperado (ganho de eficiência)', () => {
@@ -259,6 +315,15 @@ describe('bandStats', () => {
     const records = [record({ windSpeed: 32, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 800, pricePerKg: 8 } }) })];
     const stats = bandStats(records, 'leve');
     expect(stats.every((s) => s.n > 0)).toBe(true);
+  });
+
+  it('um registro com locationCount conta várias vezes em n, sem duplicar o cadastro', () => {
+    const records = [
+      record({ windSpeed: 32, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 800, pricePerKg: 8 } }), locationCount: 6 }),
+    ];
+    const stats = bandStats(records, 'leve');
+    expect(stats[0].n).toBe(6);
+    expect(stats[0].mediana).toBe(8); // mediana de 6 valores iguais continua 8
   });
 });
 
@@ -330,6 +395,15 @@ describe('timeSeries', () => {
     const series = timeSeries(records, 'leve', 'ANO', clients);
     expect(series).toHaveLength(1);
     expect(series[0].n).toBe(1);
+  });
+
+  it('um registro com locationCount conta várias vezes em n na série temporal', () => {
+    const records = [
+      record({ client: 'Obra A', windSpeed: 32, areaLeve: 100, materials: materials({ [SteelMaterial.GALV_ESTRUTURAL]: { kg: 800, pricePerKg: 8 } }), locationCount: 6 }),
+    ];
+    const clients = [{ name: 'Obra A', fabricationStartDate: '2026-02-01' }];
+    const series = timeSeries(records, 'leve', 'ANO', clients);
+    expect(series[0].n).toBe(6);
   });
 });
 

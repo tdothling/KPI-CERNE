@@ -30,6 +30,9 @@ function diffFields(before: SteelSnapshot, after: SteelSnapshot): { label: strin
   if (before.areaCobertura !== after.areaCobertura) {
     out.push({ label: 'Área Cobertura', from: `${formatNumberBR(before.areaCobertura, 1)} m²`, to: `${formatNumberBR(after.areaCobertura, 1)} m²` });
   }
+  if ((before.locationCount || 1) !== (after.locationCount || 1)) {
+    out.push({ label: 'Locais Representados', from: String(before.locationCount || 1), to: String(after.locationCount || 1) });
+  }
   const kgBefore = totalKg({ materials: before.materials });
   const kgAfter = totalKg({ materials: after.materials });
   if (kgBefore !== kgAfter) {
@@ -57,6 +60,7 @@ export function AcoHistoryModal({
             areaPesada: record.areaPesada,
             areaCobertura: record.areaCobertura,
             materials: record.materials,
+            locationCount: record.locationCount,
           };
     return { rev, diffs: diffFields(rev.snapshot, afterSnapshot) };
   });

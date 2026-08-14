@@ -25,6 +25,7 @@ import {
   timeSeries,
   totalCost,
   totalKg,
+  weightOf,
   windBandOf,
 } from '../../domain/steel';
 import {
@@ -135,6 +136,7 @@ export const AcoPage: React.FC<AcoPageProps> = ({
       areaPesada: formData.areaPesada,
       areaCobertura: formData.areaCobertura,
       materials: formData.materials,
+      locationCount: formData.locationCount,
       ...(formData.observacao ? { observacao: formData.observacao } : {}),
     };
 
@@ -305,6 +307,7 @@ export const AcoPage: React.FC<AcoPageProps> = ({
               {groupedByClient.map((group) => {
                 const kgTotal = group.records.reduce((s, r) => s + totalKg(r), 0);
                 const costTotal = group.records.reduce((s, r) => s + totalCost(r), 0);
+                const totalLocations = group.records.reduce((s, r) => s + weightOf(r), 0);
                 const fabricationWindow = fabricationWindowOf(group.client, clients);
                 return (
                   <div
@@ -317,8 +320,10 @@ export const AcoPage: React.FC<AcoPageProps> = ({
                           {group.client}
                         </h3>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                          {group.records.length} local(is) · {formatNumberBR(kgTotal / 1000, 1)} t ·{' '}
-                          {formatCurrencyBR(costTotal)}
+                          {totalLocations === group.records.length
+                            ? `${group.records.length} local(is)`
+                            : `${group.records.length} registro(s) · ${totalLocations} locais`}{' '}
+                          · {formatNumberBR(kgTotal / 1000, 1)} t · {formatCurrencyBR(costTotal)}
                           {fabricationWindow && (
                             <>
                               {' · '}
@@ -350,8 +355,16 @@ export const AcoPage: React.FC<AcoPageProps> = ({
                           >
                             <div className="min-w-0 flex items-center gap-3">
                               <div>
-                                <p className="font-semibold text-sm text-slate-700 dark:text-slate-200">
+                                <p className="font-semibold text-sm text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
                                   {r.base}
+                                  {weightOf(r) > 1 && (
+                                    <span
+                                      title="Total compilado de vários locais — pesa proporcionalmente na curva e nos outliers"
+                                      className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-400"
+                                    >
+                                      {weightOf(r)} locais
+                                    </span>
+                                  )}
                                 </p>
                                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
                                   Leve {formatNumberBR(r.areaLeve, 0)}m² · Pesada{' '}

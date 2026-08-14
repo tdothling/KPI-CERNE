@@ -57,6 +57,9 @@ export interface SteelFormState {
   areaCobertura: number;
   materials: SteelMaterials;
   observacao: string;
+  // Quantos locais reais este registro representa, quando é o total já compilado de vários
+  // (ex.: 6 bases somadas em 1 lançamento). 1 = local único, o caso comum.
+  locationCount: number;
   // Só é lido quando o registro está sendo EDITADO — decide se a mudança vira uma
   // revisão (entra no histórico) ou uma correção simples (sobrescreve sem rastro).
   reviseChange: boolean;
@@ -73,6 +76,7 @@ export const defaultSteelForm = (client = ''): SteelFormState => ({
   areaCobertura: 0,
   materials: emptyMaterials(),
   observacao: '',
+  locationCount: 1,
   reviseChange: true,
   reviseReason: RevisionReason.ADDENDUM,
   reviseComment: '',
@@ -87,6 +91,7 @@ export const steelRecordToForm = (r: SteelRecord): SteelFormState => ({
   areaCobertura: r.areaCobertura,
   materials: r.materials,
   observacao: r.observacao || '',
+  locationCount: r.locationCount || 1,
   reviseChange: true,
   reviseReason: RevisionReason.ADDENDUM,
   reviseComment: '',
@@ -99,7 +104,8 @@ export const numbersChanged = (original: SteelRecord, form: SteelFormState): boo
     original.windSpeed !== form.windSpeed ||
     original.areaLeve !== form.areaLeve ||
     original.areaPesada !== form.areaPesada ||
-    original.areaCobertura !== form.areaCobertura
+    original.areaCobertura !== form.areaCobertura ||
+    (original.locationCount || 1) !== form.locationCount
   )
     return true;
   return (Object.keys(form.materials) as SteelMaterial[]).some(
